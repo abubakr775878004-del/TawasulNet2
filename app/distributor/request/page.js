@@ -1,0 +1,95 @@
+'use client';
+import { useEffect, useState } from 'react';
+import Sidebar from '../../../components/Sidebar';
+import { useProfile } from '../../../lib/useProfile';
+import { supabase } from '../../../lib/supabase';
+
+export default function RequestCardsPage() {
+  const { profile, loading } = useProfile('distributor');
+  const [packages, setPackages] = useState([]);
+  const [packageId, setPackageId] = useState('');
+  const [quantity, setQuantity] = useState(10);
+  const [myRequests, setMyRequests] = useState([]);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  async function loadData() {
+    const [{ data: pkgs }, { data: reqs }] = await Promise.all([
+      supabase.from('packages').select('*'),
+      supabase.from('card_requests').select('*, packages(name)').eq('distributor_id', profile.id).order('created_at', { ascending: false }),
+    ]);
+    setPackages(pkgs || []);
+    setMyRequests(reqs || []);
+  }
+
+  useEffect(() => { if (profile) loadData(); }, [profile]);
+
+  const selectedPkg = packages.find((p) => p.id === packageId);
+  const total = selectedPkg ? (selectedPkg.price * quantity).toFixed(2) : 0;
+
+  async function submitRequest(e) {
+    e.preventDefault();
+    setError(''); setDone(false);
+    if (!packageId || quantity < 1) return;
+    const { error: insertError } = await supabase.from('card_requests').insert({
+      distributor_id: profile.id, package_id: packageId, quantity,
+    });
+    if (insertError) { setError(insertError.message); return; }
+    setDone(true);
+    setQuantity(10);
+    loadData();
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="app">
+      <Sidebar role="distributor" active="/distributor/request" name={profile.full_name} />
+      <div className="main">
+        <h1>طلب كروت جديد</h1>
+        <p className="greet" style={{ marginBottom: 20 }}>يُخصم المبلغ من رصيدك تلقائيًا فور موافقة المدير</p>
+
+        <div className="panel">
+          {error && <div className="error-note">{error}</div>}
+          {done && <div className="pending-note">✅ تم إرسال طلبك، بانتظار موافقة المدير</div>}
+          <form onSubmit={submitRequest} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
+              <label>الباقة</label>
+              <select value={packageId} onChange={(e) => setPackageId(e.target.value)}>
+                <option value="">اختر باقة</option>
+                {packages.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.price} ريال/كرت</option>)}
+              </select>
+            </div>
+            <div className="field" style={{ marginBottom: 0, width: 140 }}>
+              <label>الكمية</label>
+              <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value || 0))} />
+            </div>
+            <button className="btn-primary" style={{ width: 160 }} type="submit">
+              إرسال الطلب {selectedPkg ? `(${total} ريال)` : ''}
+            </button>
+          </form>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head"><h3>طلباتي السابقة</h3><span className="muted">{myRequests.length}</span></div>
+          <table>
+            <thead><tr><th>الباقة</th><th>الكمية</th><th>الحالة</th></tr></thead>
+            <tbody>
+              {myRequests.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.packages?.name}</td>
+                  <td>{r.quantity}</td>
+                  <td>
+                    <span className={`pill ${r.status === 'fulfilled' ? 'green' : r.status === 'rejected' ? 'red' : 'amber'}`}>
+                      {r.status === 'fulfilled' ? 'تم التنفيذ' : r.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
