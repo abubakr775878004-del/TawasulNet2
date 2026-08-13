@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
-import pdf from 'pdf-parse';
+
+export const runtime = 'nodejs';
 
 export async function POST(req) {
   try {
+    // نستورد المكتبة من مسارها الداخلي مباشرة (lib/pdf-parse.js) بدل index.js
+    // لأن index.js فيه كود اختباري يحاول يفتح ملف تجريبي وقت البناء ويفشل النشر
+    const pdf = (await import('pdf-parse/lib/pdf-parse.js')).default;
+
     const formData = await req.formData();
     const file = formData.get('file');
     if (!file) return NextResponse.json({ error: 'لم يتم إرفاق ملف' }, { status: 400 });
