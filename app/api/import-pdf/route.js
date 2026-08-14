@@ -4,23 +4,35 @@ export const runtime = 'nodejs';
 
 export async function POST(req) {
   try {
-    // نستورد المكتبة من مسارها الداخلي مباشرة (lib/pdf-parse.js) بدل index.js
-    // لأن index.js فيه كود اختباري يحاول يفتح ملف تجريبي وقت البناء ويفشل النشر
-    const pdf = (await import('pdf-parse/lib/pdf-parse.js')).default;
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
     const formData = await req.formData();
     const file = formData.get('file');
     if (!file) return NextResponse.json({ error: 'لم يتم إرفاق ملف' }, { status: 400 });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const parsed = await pdf(buffer);
+    const uint8 = new Uint8Array(buffer);
 
-    // يلتقط أي رقم متتالي مكوّن من 10 إلى 16 خانة (أرقام الكروت التسلسلية بدون فواصل)
-    const matches = parsed.text.match(/\b\d{10,16}\b/g) || [];
+    const loadingTask = pdfjsLib.getDocument({ data: uint8 });
+    const pdfDoc = await loadingTask.promise;
+
+    let fullText = '';
+    for (let i = 1; i <= pdfDoc.numPages; i++) {
+      const page = await pdfDoc.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => item.str).join(' ');
+      fullText += pageText + '\n';
+    }
+
+    const matches = fullText.match(/\b\d{5,16}\b/g) || [];
     const uniqueCodes = [...new Set(matches)];
+
+    if (uniqueCodes.length === 0) {
+      return NextResponse.json({ error: 'لم يتم العثور على أي أرقام كروت داخل الملف. تأكد أن الملف يحتوي على نص وليس صورًا ممسوحة ضوئيًا فقط' }, { status: 422 });
+    }
 
     return NextResponse.json({ codes: uniqueCodes });
   } catch (err) {
-    return NextResponse.json({ error: 'تعذّرت قراءة الملف. تأكد أنه PDF يحتوي على نص وليس صورًا فقط' }, { status: 500 });
+    return NextResponse.json({ error: 'تعذّرت قراءة الملف. تأكد أنه ملف PDF سليم' }, { status: 500 });
   }
 }
