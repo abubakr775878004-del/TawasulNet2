@@ -35,6 +35,12 @@ export default function RequestsPage() {
     loadRequests();
   }
 
+  async function clearHistory() {
+    if (!window.confirm('سيتم حذف كل سجل الطلبات المنتهية (المنفذة والمرفوضة) نهائيًا. متابعة؟')) return;
+    await supabase.from('card_requests').delete().in('status', ['fulfilled', 'rejected']);
+    loadRequests();
+  }
+
   if (loading) return null;
   const pending = requests.filter((r) => r.status === 'pending');
   const history = requests.filter((r) => r.status !== 'pending');
@@ -71,7 +77,17 @@ export default function RequestsPage() {
         </div>
 
         <div className="panel">
-          <div className="panel-head"><h3>سجل الطلبات</h3><span className="muted">{history.length}</span></div>
+          <div className="panel-head">
+            <h3>سجل الطلبات</h3>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span className="muted">{history.length}</span>
+              {history.length > 0 && (
+                <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={clearHistory}>
+                  حذف السجل القديم
+                </button>
+              )}
+            </div>
+          </div>
           <table>
             <thead><tr><th>الموزع</th><th>الباقة</th><th>الكمية</th><th>الحالة</th></tr></thead>
             <tbody>
