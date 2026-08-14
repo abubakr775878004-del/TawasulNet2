@@ -17,6 +17,11 @@ export default function CardsPage() {
   const [packageId, setPackageId] = useState('');
   const [error, setError] = useState('');
 
+  const [bulkText, setBulkText] = useState('');
+  const [bulkPackageId, setBulkPackageId] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [bulkDone, setBulkDone] = useState('');
+
   async function loadAll() {
     const [{ data: pkgs }, { data: crds }] = await Promise.all([
       supabase.from('packages').select('*'),
@@ -35,6 +40,28 @@ export default function CardsPage() {
     const { error: insertError } = await supabase.from('cards').insert({ code, package_id: packageId });
     if (insertError) { setError('تعذّرت إضافة الكرت — تأكد أن الرقم غير مكرر'); return; }
     setCode('');
+    loadAll();
+  }
+
+  async function addBulkCards(e) {
+    e.preventDefault();
+    setBulkError(''); setBulkDone('');
+    if (!bulkPackageId) { setBulkError('اختر الباقة أولًا'); return; }
+
+    const codes = [...new Set(
+      bulkText.split(/\r?\n/).map((line) => line.trim().replace(/\D/g, '')).filter((c) => c.length >= 5)
+    )];
+    if (codes.length === 0) { setBulkError('لم يتم العثور على أي أرقام كروت صالحة'); return; }
+
+    const rows = codes.map((c) => ({ code: c, package_id: bulkPackageId }));
+    const { error: insertError, data } = await supabase.from('cards').insert(rows).select();
+
+    if (insertError) {
+      setBulkError('تعذّرت إضافة بعض الكروت — على الأغلب أرقام مكررة موجودة مسبقًا. جرّب حذف الأرقام المكررة والمحاولة مرة أخرى.');
+      return;
+    }
+    setBulkDone(`تمت إضافة ${data.length} كرت بنجاح`);
+    setBulkText('');
     loadAll();
   }
 
@@ -84,6 +111,38 @@ export default function CardsPage() {
               </select>
             </div>
             <button className="btn-primary" style={{ width: 140 }} type="submit">إضافة</button>
+          </form>
+        </div>
+
+        <div className="panel">
+          <div className="panel-head">
+            <h3>إضافة مجموعة كروت دفعة واحدة</h3>
+            <span className="muted">الصق الأرقام، كل رقم في سطر منفصل</span>
+          </div>
+          {bulkError && <div className="error-note">{bulkError}</div>}
+          {bulkDone && <div className="pending-note">✅ {bulkDone}</div>}
+          <form onSubmit={addBulkCards}>
+            <div className="field">
+              <label>أرقام الكروت (رقم في كل سطر)</label>
+              <textarea
+                className="mono"
+                rows={6}
+                value={bulkText}
+                onChange={(e) => setBulkText(e.target.value)}
+                placeholder={'72419038221501\n72419038221502\n72419038221503'}
+                style={{ width: '100%', padding: 12, borderRadius: 12, border: '1.5px solid var(--line)', fontFamily: 'monospace', resize: 'vertical' }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="field" style={{ marginBottom: 0, width: 200 }}>
+                <label>الباقة</label>
+                <select value={bulkPackageId} onChange={(e) => setBulkPackageId(e.target.value)}>
+                  <option value="">اختر باقة</option>
+                  {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <button className="btn-primary" style={{ width: 200 }} type="submit">إضافة الكل</button>
+            </div>
           </form>
         </div>
 
