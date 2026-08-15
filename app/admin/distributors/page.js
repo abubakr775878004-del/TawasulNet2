@@ -80,7 +80,7 @@ export default function DistributorsPage() {
                   {busyId === d.id ? '...' : 'قبول'}
                 </button>
                 <button className="btn-sm btn-reject" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'rejected')}>رفض</button>
-                <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
+                <button className="btn-sm" style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
               </div>
             </div>
           ))}
@@ -115,7 +115,7 @@ export default function DistributorsPage() {
                     </div>
                   </td>
                   <td>
-                    <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
+                    <button className="btn-sm" style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
                   </td>
                 </tr>
               ))}
