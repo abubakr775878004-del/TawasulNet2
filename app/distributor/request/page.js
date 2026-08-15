@@ -12,6 +12,7 @@ export default function RequestCardsPage() {
   const [myRequests, setMyRequests] = useState([]);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+  const [busyId, setBusyId] = useState(null);
 
   async function loadData() {
     const [{ data: pkgs }, { data: reqs }] = await Promise.all([
@@ -37,6 +38,13 @@ export default function RequestCardsPage() {
     if (insertError) { setError(insertError.message); return; }
     setDone(true);
     setQuantity(10);
+    loadData();
+  }
+
+  async function deleteRequest(id) {
+    setBusyId(id);
+    await supabase.from('card_requests').delete().eq('id', id);
+    setBusyId(null);
     loadData();
   }
 
@@ -73,7 +81,7 @@ export default function RequestCardsPage() {
         <div className="panel">
           <div className="panel-head"><h3>طلباتي السابقة</h3><span className="muted">{myRequests.length}</span></div>
           <table>
-            <thead><tr><th>الباقة</th><th>الكمية</th><th>الحالة</th></tr></thead>
+            <thead><tr><th>الباقة</th><th>الكمية</th><th>الحالة</th><th></th></tr></thead>
             <tbody>
               {myRequests.map((r) => (
                 <tr key={r.id}>
@@ -83,6 +91,16 @@ export default function RequestCardsPage() {
                     <span className={`pill ${r.status === 'fulfilled' ? 'green' : r.status === 'rejected' ? 'red' : 'amber'}`}>
                       {r.status === 'fulfilled' ? 'تم التنفيذ' : r.status === 'rejected' ? 'مرفوض' : 'قيد الانتظار'}
                     </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-sm"
+                      style={{ background: 'var(--red)', color: '#fff' }}
+                      disabled={busyId === r.id}
+                      onClick={() => deleteRequest(r.id)}
+                    >
+                      حذف
+                    </button>
                   </td>
                 </tr>
               ))}
