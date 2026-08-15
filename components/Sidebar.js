@@ -32,49 +32,34 @@ export default function Sidebar({ role, active, name }) {
 
   return (
     <>
-      {/* زر الثلاث خطوط في الجهة اليمنى العليا للشاشات الصغيرة */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        style={{
-          position: 'fixed',
-          top: 15,
-          right: 15,
-          zIndex: 1100,
-          background: '#2D1B4E',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 10,
-          width: 42,
-          height: 42,
-          fontSize: 22,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        }}
-        className="mobile-menu-btn"
-      >
-        {isOpen ? '✕' : '☰'}
-      </button>
+      {/* شريط علوي احترافي ومستقل للهواتف فقط لكي لا يتداخل مع أي نص أو عنوان */}
+      <div className="mobile-top-bar">
+        <div className="mobile-brand-title">تواصل</div>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="mobile-menu-btn-pro"
+          aria-label="القائمة"
+        >
+          {isOpen ? '✕' : '☰'}
+        </button>
+      </div>
 
-      {/* خلفية معتمة عند فتح القائمة */}
+      {/* خلفية معتمة خفيفة عند فتح القائمة */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.5)',
+            background: 'rgba(28, 21, 51, 0.4)',
+            backdropFilter: 'blur(3px)',
             zIndex: 998,
           }}
         />
       )}
 
-      {/* القائمة الجانبية (تفتح من جهة اليمين) */}
-      <div
-        className={`sidebar ${isOpen ? 'open' : ''}`}
-      >
+      {/* القائمة الجانبية */}
+      <div className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="brand">تواصل</div>
         <div style={{ fontSize: 12, color: '#9186B8', marginBottom: 26 }}>
           {role === 'admin' ? 'لوحة المدير' : 'لوحة الموزع'}
@@ -97,29 +82,66 @@ export default function Sidebar({ role, active, name }) {
         </div>
       </div>
 
-      {/* تنسيقات الجوال لتفتح القائمة من جهة اليمين */}
+      {/* التنسيقات البرمجية لضمان عدم التداخل نهائياً في الجوال */}
       <style jsx global>{`
+        .mobile-top-bar {
+          display: none;
+        }
+
         @media (max-width: 768px) {
+          /* إظهار الشريط العلوي المستقل في الجوال */
+          .mobile-top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #ffffff;
+            padding: 12px 20px;
+            position: sticky;
+            top: 0;
+            z-index: 997;
+            border-bottom: 1px solid var(--line, #E6E0F7);
+            box-shadow: 0 4px 12px rgba(28, 21, 51, 0.04);
+          }
+
+          .mobile-brand-title {
+            font-weight: 900;
+            font-size: 18px;
+            color: var(--grape, #5B21B6);
+          }
+
+          .mobile-menu-btn-pro {
+            background: var(--grape, #5B21B6);
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            width: 40px;
+            height: 40px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(91, 33, 182, 0.2);
+          }
+
+          /* تخصيص القائمة الجانبية لتفتح بسلاسة من اليمين في الجوال وتأخذ عرضها الكامل دون ضغط */
           .sidebar {
             position: fixed !important;
             right: 0 !important;
             left: auto !important;
-            top: 0;
-            bottom: 0;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 270px !important;
             transform: translateX(100%);
-            transition: transform 0.3s ease-in-out;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 999;
           }
+          
           .sidebar.open {
             transform: translateX(0) !important;
           }
         }
-        @media (min-width: 769px) {
-          .mobile-menu-btn {
-            display: none !important;
-          }
-        }
-      `}</style>
+      `}}^{\x7d</style>
     </>
   );
 }
