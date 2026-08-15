@@ -23,6 +23,12 @@ export default function CardsPage() {
   const [bulkDone, setBulkDone] = useState('');
 
   async function loadAll() {
+    // 1. حذف تلقائي للكروت المباعة التي مر عليها أكثر من 3 أيام
+    const threeDaysAgo = new Date();
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    await supabase.from('cards').delete().eq('status', 'sold').lt('sold_at', threeDaysAgo.toISOString());
+
+    // 2. تحميل البيانات
     const [{ data: pkgs }, { data: crds }] = await Promise.all([
       supabase.from('packages').select('*'),
       supabase.from('cards').select('*, packages(name)').order('created_at', { ascending: false }).limit(200),
@@ -72,14 +78,14 @@ export default function CardsPage() {
   }
 
   async function deleteSelected() {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || !confirm('هل أنت متأكد من حذف الكروت المحددة نهائياً؟')) return;
     await supabase.from('cards').delete().in('id', Array.from(selected));
     setSelected(new Set());
     loadAll();
   }
 
   async function deleteByDate() {
-    if (!filterDate) return;
+    if (!filterDate || !confirm(`هل أنت متأكد من حذف كل الكروت المتاحة بتاريخ ${filterDate}؟`)) return;
     const start = `${filterDate}T00:00:00`;
     const end = `${filterDate}T23:59:59`;
     await supabase.from('cards').delete().gte('created_at', start).lte('created_at', end).eq('status', 'available');
@@ -93,7 +99,7 @@ export default function CardsPage() {
       <Sidebar role="admin" active="/admin/cards" name={profile.full_name} />
       <div className="main">
         <h1>المخزون والكروت</h1>
-        <p className="greet" style={{ marginBottom: 20 }}>إضافة الكروت يدويًا وإدارة الحذف</p>
+        <p className="greet" style={{ marginBottom: 20 }}>إضافة الكروت يدويًا وإدارة الحذف (يتم حذف الكروت المباعة تلقائياً بعد 3 أيام)</p>
 
         <div className="panel">
           <div className="panel-head"><h3>إضافة كرت يدويًا</h3></div>
@@ -156,7 +162,7 @@ export default function CardsPage() {
               <label>التاريخ</label>
               <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)} />
             </div>
-            <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff', padding: '12px 18px' }} onClick={deleteByDate}>
+            <button style={{ background: '#EF4444', color: '#fff', padding: '12px 18px', borderRadius: 10, border: 'none', fontWeight: 'bold', cursor: 'pointer' }} onClick={deleteByDate}>
               حذف كل كروت هذا التاريخ
             </button>
           </div>
@@ -185,9 +191,9 @@ export default function CardsPage() {
             </tbody>
           </table>
           {selected.size > 0 && (
-            <div className="del-bar">
-              <span>تم تحديد {selected.size} كرت</span>
-              <button onClick={deleteSelected}>حذف المحدد</button>
+            <div className="del-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FEE2E2', padding: 15, borderRadius: 12, marginTop: 15, border: '1px solid #FCA5A5' }}>
+              <span style={{ color: '#991B1B', fontWeight: 'bold' }}>تم تحديد {selected.size} كرت</span>
+              <button onClick={deleteSelected} style={{ background: '#DC2626', color: 'white', borderRadius: 8, border: 'none', padding: '10px 20px', fontWeight: 'bold', cursor: 'pointer' }}>حذف المحدد نهائياً</button>
             </div>
           )}
         </div>
