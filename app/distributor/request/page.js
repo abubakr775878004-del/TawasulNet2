@@ -25,15 +25,16 @@ export default function RequestCardsPage() {
 
   useEffect(() => { if (profile) loadData(); }, [profile]);
 
+  const parsedQty = parseInt(quantity, 10) || 0;
   const selectedPkg = packages.find((p) => p.id === packageId);
-  const total = selectedPkg ? (selectedPkg.price * quantity).toFixed(2) : 0;
+  const total = selectedPkg ? (selectedPkg.price * parsedQty).toFixed(2) : 0;
 
   async function submitRequest(e) {
     e.preventDefault();
     setError(''); setDone(false);
-    if (!packageId || quantity < 1) return;
+    if (!packageId || parsedQty < 1) return;
     const { error: insertError } = await supabase.from('card_requests').insert({
-      distributor_id: profile.id, package_id: packageId, quantity,
+      distributor_id: profile.id, package_id: packageId, quantity: parsedQty,
     });
     if (insertError) { setError(insertError.message); return; }
     setDone(true);
@@ -70,10 +71,16 @@ export default function RequestCardsPage() {
             </div>
             <div className="field" style={{ marginBottom: 0, width: 140 }}>
               <label>الكمية</label>
-              <input type="number" min="1" value={quantity} onChange={(e) => setQuantity(parseInt(e.target.value || 0))} />
+              <input
+                type="number"
+                min="1"
+                placeholder="10"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value === '' ? '' : e.target.value)}
+              />
             </div>
             <button className="btn-primary" style={{ width: 160 }} type="submit">
-              إرسال الطلب {selectedPkg ? `(${total} ريال)` : ''}
+              إرسال الطلب {selectedPkg && parsedQty > 0 ? `(${total} ريال)` : ''}
             </button>
           </form>
         </div>
