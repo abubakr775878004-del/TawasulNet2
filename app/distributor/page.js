@@ -10,6 +10,8 @@ export default function DistributorPage() {
   const { profile, loading } = useProfile('distributor');
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
+
+  const [pendingPackage, setPendingPackage] = useState(null);
   const [revealedCard, setRevealedCard] = useState(null);
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
@@ -37,24 +39,37 @@ export default function DistributorPage() {
 
   useEffect(() => { load(); }, [profile]);
 
-  async function revealCard(pkgId, pkgName) {
+  function askReveal(pkgId, pkgName) {
     setRevealError('');
+    setPendingPackage({ id: pkgId, name: pkgName });
+  }
+
+  async function confirmReveal() {
+    if (!pendingPackage) return;
+    setRevealBusy(true);
     const { data, error } = await supabase
       .from('cards')
       .select('id, code')
       .eq('assigned_to', profile.id)
-      .eq('package_id', pkgId)
+      .eq('package_id', pendingPackage.id)
       .eq('status', 'with_distributor')
       .order('created_at', { ascending: true })
       .limit(1);
+    setRevealBusy(false);
 
     if (error || !data || data.length === 0) {
       setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
+      setPendingPackage(null);
       return;
     }
-    setRevealedCard({ id: data[0].id, code: data[0].code, packageName: pkgName });
+    setRevealedCard({ id: data[0].id, code: data[0].code, packageName: pendingPackage.name });
+    setPendingPackage(null);
     setConfirmingClose(false);
     setCopied(false);
+  }
+
+  function cancelReveal() {
+    setPendingPackage(null);
   }
 
   function closeModal() {
@@ -137,7 +152,7 @@ export default function DistributorPage() {
                 <button
                   className="btn-primary"
                   style={{ marginTop: 14, width: '100%' }}
-                  onClick={() => revealCard(info.packageId, name)}
+                  onClick={() => askReveal(info.packageId, name)}
                 >
                   إظهار كرت
                 </button>
@@ -147,6 +162,50 @@ export default function DistributorPage() {
         </div>
       </div>
 
+      {/* الخطوة الأولى: تأكيد قبل إظهار الكرت */}
+      {pendingPackage && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: 22, padding: 26, maxWidth: 340, width: '100%',
+            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+          }}>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: '#3A1D66', marginBottom: 6 }}>
+              إظهار كرت من "{pendingPackage.name}"؟
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 20 }}>
+              سيظهر لك كود كرت واحد جاهز لإعطائه للزبون
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={cancelReveal}
+                disabled={revealBusy}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid var(--line)',
+                  background: '#fff', color: 'var(--ink-soft)', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                لا
+              </button>
+              <button
+                onClick={confirmReveal}
+                disabled={revealBusy}
+                style={{
+                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
+                  background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff',
+                  fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                }}
+              >
+                {revealBusy ? '...' : 'نعم'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* الخطوة الثانية: عرض الكرت بعد التأكيد */}
       {revealedCard && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
@@ -158,7 +217,6 @@ export default function DistributorPage() {
             textAlign: 'center', position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
             overflow: 'hidden',
           }}>
-            {/* شريط علوي ملوّن بألوان الهوية */}
             <div style={{
               background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
               padding: '18px 20px', position: 'relative',
