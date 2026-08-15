@@ -11,7 +11,6 @@ export default function DistributorPage() {
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
   const [revealedCard, setRevealedCard] = useState(null);
-  const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
 
   async function load() {
@@ -50,16 +49,15 @@ export default function DistributorPage() {
       setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
       return;
     }
-    setRevealedCard({ id: data[0].id, code: data[0].code, packageName: pkgName });
-  }
 
-  async function confirmGiven() {
-    if (!revealedCard) return;
-    setRevealBusy(true);
-    await supabase.rpc('sell_card', { c_id: revealedCard.id });
-    setRevealBusy(false);
-    setRevealedCard(null);
-    load();
+    const cardId = data[0].id;
+    const cardCode = data[0].code;
+
+    // خصم الكرت وتسجيله كمبيع فور إظهاره
+    await supabase.rpc('sell_card', { c_id: cardId });
+
+    setRevealedCard({ id: cardId, code: cardCode, packageName: pkgName });
+    load(); // تحديث القوائم والمبيعات فورياً خلف الكواليس
   }
 
   if (loading) return null;
@@ -130,16 +128,15 @@ export default function DistributorPage() {
             textAlign: 'center', position: 'relative', boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
             border: '1px solid rgba(139, 92, 246, 0.15)',
           }}>
-            {/* زر الإغلاق وتأكيد البيع */}
+            {/* زر الإغلاق العادي */}
             <button
-              onClick={confirmGiven}
-              disabled={revealBusy}
+              onClick={() => setRevealedCard(null)}
               style={{
                 position: 'absolute', top: 16, left: 16, width: 36, height: 36, borderRadius: 12,
                 border: 'none', background: '#FEF2F2', color: '#EF4444', fontSize: 16, fontWeight: 900, cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
               }}
-              title="تأكيد وإغلاق"
+              title="إغلاق النافذة"
             >
               ✕
             </button>
@@ -220,8 +217,8 @@ export default function DistributorPage() {
               </button>
             </div>
 
-            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 16 }}>
-              ملاحظة: الضغط على زر ✕ بالأعلى سيخصم الكرت ويسجله كمبيع.
+            <div style={{ fontSize: 11, color: '#22C55E', fontWeight: 700, marginTop: 16 }}>
+              ✓ تم تسجيل بيع الكرت واحتسابه تلقائياً.
             </div>
           </div>
         </div>
