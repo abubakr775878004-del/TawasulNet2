@@ -76,7 +76,7 @@ export default function PackagesPage() {
                   <td>
                     <button
                       className="btn-sm"
-                      style={{ background: 'var(--red)', color: '#fff' }}
+                      style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }}
                       disabled={busyId === p.id}
                       onClick={() => deletePackage(p.id, p.name)}
                     >
