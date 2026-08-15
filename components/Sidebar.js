@@ -32,13 +32,13 @@ export default function Sidebar({ role, active, name }) {
 
   return (
     <>
-      {/* زر الثلاث خطوط يظهر فقط في الشاشات الصغيرة (الجوال) */}
+      {/* زر الثلاث خطوط في الجهة اليمنى العليا للشاشات الصغيرة */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
           position: 'fixed',
           top: 15,
-          left: 15,
+          right: 15,
           zIndex: 1100,
           background: '#2D1B4E',
           color: '#fff',
@@ -58,7 +58,7 @@ export default function Sidebar({ role, active, name }) {
         {isOpen ? '✕' : '☰'}
       </button>
 
-      {/* خلفية معتمة عند فتح القائمة في الجوال */}
+      {/* خلفية معتمة عند فتح القائمة */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
@@ -71,12 +71,9 @@ export default function Sidebar({ role, active, name }) {
         />
       )}
 
-      {/* القائمة الجانبية */}
+      {/* القائمة الجانبية (تفتح من جهة اليمين) */}
       <div
         className={`sidebar ${isOpen ? 'open' : ''}`}
-        style={{
-          transform: isOpen ? 'translateX(0)' : undefined,
-        }}
       >
         <div className="brand">تواصل</div>
         <div style={{ fontSize: 12, color: '#9186B8', marginBottom: 26 }}>
@@ -100,12 +97,13 @@ export default function Sidebar({ role, active, name }) {
         </div>
       </div>
 
-      {/* تنسيقات بسيطة للاستجابة مع الجوال */}
+      {/* تنسيقات الجوال لتفتح القائمة من جهة اليمين */}
       <style jsx global>{`
         @media (max-width: 768px) {
           .sidebar {
             position: fixed !important;
-            right: 0;
+            right: 0 !important;
+            left: auto !important;
             top: 0;
             bottom: 0;
             transform: translateX(100%);
