@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&family=IBM+Plex+Mono:wght@500;600&display=swap');
 
 :root{
-  --bg:#F6F4FC; --surface:rgba(255,255,255,0.86); --ink:#1C1533; --ink-soft:#6E6690;
-  --line:#E6E0F7; --grape:#5B21B6; --grape-2:#7C3AED; --magenta:#DB2777; --cyan:#06B6D4;
-  --grad-cta: linear-gradient(120deg, var(--grape-2), var(--magenta));
-  --grad-hero: linear-gradient(150deg, #2E1065 0%, #5B21B6 45%, #DB2777 100%);
-  --radius:18px; --shadow:0 14px 34px -14px rgba(91,33,182,0.22);
+  --bg:#F4F7FB; --surface:rgba(255,255,255,0.88); --ink:#14213D; --ink-soft:#64748B;
+  --line:#E2E8F0; --grape:#2563EB; --grape-2:#4F46E5; --magenta:#7C3AED; --cyan:#06B6D4;
+  --grad-cta: linear-gradient(120deg, var(--grape-2), var(--cyan));
+  --grad-hero: linear-gradient(150deg, #0F172A 0%, #1D4ED8 48%, #4F46E5 100%);
+  --radius:18px; --shadow:0 14px 34px -14px rgba(37,99,235,0.20);
 }
 *{ box-sizing:border-box; }
 body{ margin:0; font-family:'Tajawal', sans-serif; background:var(--bg); color:var(--ink); }
@@ -26,8 +26,8 @@ body{ margin:0; font-family:'Tajawal', sans-serif; background:var(--bg); color:v
   width:100%; padding:14px; border:none; border-radius:12px; cursor:pointer;
   background:var(--grad-cta); color:#fff; font-family:'Tajawal'; font-weight:800; font-size:14.5px;
 }
-.error-note{ background:#FEE6EA; color:#B0243A; border:1px solid #F9C3CD; padding:10px 14px; border-radius:12px; font-size:12.5px; margin-bottom:14px; }
-.pending-note{ background:#FEF3DD; color:#8A5B0A; border:1px solid #F5DCA0; padding:12px 14px; border-radius:13px; font-size:12.5px; margin-top:18px; line-height:1.8; }
+.error-note{ background:#FEF2F2; color:#B91C1C; border:1px solid #FECACA; padding:10px 14px; border-radius:12px; font-size:12.5px; margin-bottom:14px; }
+.pending-note{ background:#FFF7ED; color:#9A5B13; border:1px solid #FED7AA; padding:12px 14px; border-radius:13px; font-size:12.5px; margin-top:18px; line-height:1.8; }
 
 /* تحسين تخطيط الشاشة لتملأ المساحة بشكل مرن ومريح */
 .app{ display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
@@ -35,7 +35,7 @@ body{ margin:0; font-family:'Tajawal', sans-serif; background:var(--bg); color:v
   .app{ display:block; }
 }
 
-.sidebar{ background:#1C1533; color:#fff; padding:26px 18px; }
+.sidebar{ background:#0F172A; color:#fff; padding:26px 18px; }
 .sidebar .brand{ font-weight:900; font-size:17px; margin-bottom:6px; }
 
 /* تحسين مساحات العرض والهوامش للشاشات لتكون منسقة وغير ضيقة */
@@ -49,14 +49,14 @@ table{ width:100%; border-collapse:collapse; }
 th{ text-align:right; font-size:11.5px; color:var(--ink-soft); padding:0 12px 12px; }
 td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
 .pill{ padding:4px 11px; border-radius:999px; font-size:11px; font-weight:800; }
-.pill.green{ background:#E1F8F0; color:#10B981; }
-.pill.amber{ background:#FEF3DD; color:#8A5B0A; }
-.pill.red{ background:#FEE6EA; color:#F43F5E; }
+.pill.green{ background:#DCFCE7; color:#16A34A; }
+.pill.amber{ background:#FEF3C7; color:#B45309; }
+.pill.red{ background:#FEE2E2; color:#DC2626; }
 
-.navitem{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:#C9BFEA; font-weight:700; font-size:13.5px; text-decoration:none; margin-bottom:3px; }
-.navitem.on{ background:linear-gradient(120deg, rgba(124,58,237,0.35), rgba(219,39,119,0.28)); color:#fff; }
+.navitem{ display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; color:#AFC0D9; font-weight:700; font-size:13.5px; text-decoration:none; margin-bottom:3px; }
+.navitem.on{ background:linear-gradient(120deg, rgba(37,99,235,0.38), rgba(79,70,229,0.34)); color:#fff; }
 .sidebar{ display:flex; flex-direction:column; }
-.btn-logout{ width:100%; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:transparent; color:#C9BFEA; font-family:'Tajawal'; font-weight:700; font-size:12.5px; cursor:pointer; }
+.btn-logout{ width:100%; padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:transparent; color:#AFC0D9; font-family:'Tajawal'; font-weight:700; font-size:12.5px; cursor:pointer; }
 .btn-logout:hover{ background:rgba(255,255,255,0.08); color:#fff; }
 
 .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:26px; flex-wrap:wrap; gap:14px; }
@@ -74,18 +74,18 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
 .panel-head h3{ font-size:15.5px; font-weight:800; }
 .muted{ font-size:12px; color:var(--ink-soft); }
 
-.req-row{ display:flex; align-items:center; justify-content:space-between; padding:14px; border-radius:14px; background:#FEF3DD; border:1px solid #F5DCA0; margin-bottom:10px; flex-wrap:wrap; gap:10px; }
+.req-row{ display:flex; align-items:center; justify-content:space-between; padding:14px; border-radius:14px; background:#FFF7ED; border:1px solid #FED7AA; margin-bottom:10px; flex-wrap:wrap; gap:10px; }
 .req-user{ display:flex; align-items:center; gap:12px; }
-.req-user .ini{ width:38px; height:38px; border-radius:11px; background:#fff; color:#8A5B0A; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:13px; }
+.req-user .ini{ width:38px; height:38px; border-radius:11px; background:#fff; color:#9A5B13; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:13px; }
 .req-user .nm{ font-weight:800; font-size:13.5px; }
-.req-user .em{ font-size:11.5px; color:#8A5B0A; opacity:.85; }
+.req-user .em{ font-size:11.5px; color:#9A5B13; opacity:.85; }
 .req-actions{ display:flex; gap:8px; }
 .btn-sm{ padding:8px 15px; border-radius:10px; border:none; font-family:'Tajawal'; font-weight:800; font-size:12.5px; cursor:pointer; }
-.btn-approve{ background:#10B981; color:#fff; }
-.btn-reject{ background:transparent; color:#F43F5E; border:1.5px solid #F9C3CD; }
+.btn-approve{ background:#16A34A; color:#fff; }
+.btn-reject{ background:transparent; color:#DC2626; border:1.5px solid #FECACA; }
 
-.del-bar{ display:flex; align-items:center; justify-content:space-between; background:#FEE6EA; border:1px solid #F9C3CD; padding:12px 16px; border-radius:13px; margin-top:14px; font-size:12.5px; color:#B0243A; font-weight:700; flex-wrap:wrap; gap:10px; }
-.del-bar button{ background:#F43F5E; color:#fff; border:none; padding:8px 16px; border-radius:10px; font-family:'Tajawal'; font-weight:800; font-size:12px; cursor:pointer; }
+.del-bar{ display:flex; align-items:center; justify-content:space-between; background:#FEF2F2; border:1px solid #FECACA; padding:12px 16px; border-radius:13px; margin-top:14px; font-size:12.5px; color:#B91C1C; font-weight:700; flex-wrap:wrap; gap:10px; }
+.del-bar button{ background:#DC2626; color:#fff; border:none; padding:8px 16px; border-radius:10px; font-family:'Tajawal'; font-weight:800; font-size:12px; cursor:pointer; }
 
 /* ترتيب شبكة الباقات بشكل متناسق */
 .pkg-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:18px; }
@@ -95,15 +95,15 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
 .pkg-card .pcount span{ font-size:11.5px; color:var(--ink-soft); font-weight:600; }
 
 .balance-card{ background:var(--grad-hero); border-radius:22px; padding:26px; color:#fff; position:relative; overflow:hidden; margin-bottom:20px; box-shadow:var(--shadow); }
-.balance-card .lbl{ font-size:12.5px; color:#E3D6FF; font-weight:700; }
+.balance-card .lbl{ font-size:12.5px; color:#D7E3FF; font-weight:700; }
 .balance-card .amt{ font-size:32px; font-weight:900; margin-top:8px; }
-.balance-card .amt span{ font-size:14px; color:#E3D6FF; font-weight:600; }
+.balance-card .amt span{ font-size:14px; color:#D7E3FF; font-weight:600; }
 .balance-card .foot{ display:flex; justify-content:space-between; align-items:flex-end; margin-top:22px; flex-wrap:wrap; gap:10px; }
 .req-btn{ background:#fff; color:var(--grape); border:none; padding:11px 20px; border-radius:12px; font-family:'Tajawal'; font-weight:800; font-size:13px; cursor:pointer; }
 
-.timer-row{ display:flex; align-items:center; justify-content:space-between; padding:13px; border-radius:13px; background:#F3F0FB; margin-bottom:8px; }
+.timer-row{ display:flex; align-items:center; justify-content:space-between; padding:13px; border-radius:13px; background:#EFF6FF; margin-bottom:8px; }
 .timer-row .tcode{ font-weight:700; font-size:13.5px; }
-.timer-row .tleft{ font-size:11px; color:var(--magenta); font-weight:800; }
+.timer-row .tleft{ font-size:11px; color:#7C3AED; font-weight:800; }
 .timer-row .tpkg{ font-size:11px; color:var(--ink-soft); }
 
 /* --- تخصيص الخانة الخاصة برأس الصفحة للزر في الموبايل حصراً لعدم التداخل --- */
@@ -118,7 +118,7 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
     position: sticky;
     top: 0;
     z-index: 996;
-    box-shadow: 0 2px 8px rgba(28, 21, 51, 0.04);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
     width: 100%;
   }
 }
