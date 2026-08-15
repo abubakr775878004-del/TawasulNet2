@@ -31,6 +31,15 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  async function deleteDistributor(id, name) {
+    if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. ملاحظة: بريده وكلمة سره في نظام تسجيل الدخول تبقى موجودة إلا إذا حذفتها يدويًا من Supabase. متابعة؟`)) return;
+    setError(''); setBusyId(id);
+    const { error: deleteError } = await supabase.from('profiles').delete().eq('id', id);
+    setBusyId(null);
+    if (deleteError) { setError('تعذّر حذف الحساب: ' + deleteError.message); return; }
+    loadList();
+  }
+
   async function addBalance(id) {
     const amount = parseFloat(topUps[id]);
     if (!amount || amount <= 0) return;
@@ -71,6 +80,7 @@ export default function DistributorsPage() {
                   {busyId === d.id ? '...' : 'قبول'}
                 </button>
                 <button className="btn-sm btn-reject" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'rejected')}>رفض</button>
+                <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
               </div>
             </div>
           ))}
@@ -79,7 +89,7 @@ export default function DistributorsPage() {
         <div className="panel">
           <div className="panel-head"><h3>كل الموزعين</h3><span className="muted">{others.length}</span></div>
           <table>
-            <thead><tr><th>الاسم</th><th>البريد</th><th>الرصيد</th><th>الحالة</th><th>إضافة رصيد (ريال يمني)</th></tr></thead>
+            <thead><tr><th>الاسم</th><th>البريد</th><th>الرصيد</th><th>الحالة</th><th>إضافة رصيد (ريال يمني)</th><th></th></tr></thead>
             <tbody>
               {others.map((d) => (
                 <tr key={d.id}>
@@ -101,14 +111,11 @@ export default function DistributorsPage() {
                         onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
                         style={{ width: 110, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
                       />
-                      <button
-                        className="btn-sm btn-approve"
-                        disabled={busyId === d.id || !topUps[d.id]}
-                        onClick={() => addBalance(d.id)}
-                      >
-                        إضافة
-                      </button>
+                      <button className="btn-sm btn-approve" disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>إضافة</button>
                     </div>
+                  </td>
+                  <td>
+                    <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
                   </td>
                 </tr>
               ))}
