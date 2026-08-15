@@ -15,14 +15,13 @@ export default function DistributorPage() {
   const [revealedCard, setRevealedCard] = useState(null);
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
-  const [confirmingClose, setConfirmingClose] = useState(false);
   const [copied, setCopied] = useState(false);
 
   async function load() {
     if (!profile) return;
     const { data } = await supabase
       .from('cards')
-      .select('*, packages(name)')
+      .select('*, packages(name, price)')
       .eq('assigned_to', profile.id)
       .eq('status', 'with_distributor');
     setMyCards(data || []);
@@ -44,9 +43,14 @@ export default function DistributorPage() {
     setPendingPackage({ id: pkgId, name: pkgName });
   }
 
+  function cancelReveal() {
+    setPendingPackage(null);
+  }
+
   async function confirmReveal() {
     if (!pendingPackage) return;
     setRevealBusy(true);
+
     const { data, error } = await supabase
       .from('cards')
       .select('id, code')
@@ -55,26 +59,26 @@ export default function DistributorPage() {
       .eq('status', 'with_distributor')
       .order('created_at', { ascending: true })
       .limit(1);
-    setRevealBusy(false);
 
     if (error || !data || data.length === 0) {
+      setRevealBusy(false);
       setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
       setPendingPackage(null);
       return;
     }
-    setRevealedCard({ id: data[0].id, code: data[0].code, packageName: pendingPackage.name });
-    setPendingPackage(null);
-    setConfirmingClose(false);
-    setCopied(false);
-  }
 
-  function cancelReveal() {
+    const card = data[0];
+    await supabase.rpc('sell_card', { c_id: card.id });
+
+    setRevealBusy(false);
+    setRevealedCard({ code: card.code, packageName: pendingPackage.name });
     setPendingPackage(null);
+    setCopied(false);
+    load();
   }
 
   function closeModal() {
     setRevealedCard(null);
-    setConfirmingClose(false);
     setCopied(false);
   }
 
@@ -95,23 +99,18 @@ export default function DistributorPage() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
 
-  async function finalizeSold() {
-    if (!revealedCard) return;
-    setRevealBusy(true);
-    await supabase.rpc('sell_card', { c_id: revealedCard.id });
-    setRevealBusy(false);
-    closeModal();
-    load();
-  }
-
   if (loading) return null;
 
   const byPackage = {};
   myCards.forEach((c) => {
     const key = c.packages?.name || 'غير محدد';
-    if (!byPackage[key]) byPackage[key] = { count: 0, packageId: c.package_id };
+    if (!byPackage[key]) {
+      byPackage[key] = { count: 0, packageId: c.package_id, price: c.packages?.price || 0 };
+    }
     byPackage[key].count += 1;
   });
+
+  const totalValue = Object.values(byPackage).reduce((sum, p) => sum + p.count * p.price, 0);
 
   return (
     <div className="app">
@@ -132,9 +131,13 @@ export default function DistributorPage() {
           </div>
         </div>
 
-        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
+        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
           <div className="stat"><div className="label">كروت متاحة عندي</div><div className="value">{myCards.length}</div></div>
           <div className="stat"><div className="label">مبيعات اليوم</div><div className="value">{soldToday}</div></div>
+          <div className="stat">
+            <div className="label">القيمة الإجمالية لكروتك</div>
+            <div className="value" style={{ fontSize: 20 }}>{totalValue.toLocaleString('en-US')} <span style={{ fontSize: 12, fontWeight: 700 }}>ريال</span></div>
+          </div>
         </div>
 
         <div className="panel">
@@ -149,6 +152,9 @@ export default function DistributorPage() {
               <div className="pkg-card" key={name}>
                 <div className="pname">{name}</div>
                 <div className="pcount">{info.count} <span>كرت لديك</span></div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', fontWeight: 700, marginTop: 4 }}>
+                  القيمة: {(info.count * info.price).toLocaleString('en-US')} ريال
+                </div>
                 <button
                   className="btn-primary"
                   style={{ marginTop: 14, width: '100%' }}
@@ -162,50 +168,61 @@ export default function DistributorPage() {
         </div>
       </div>
 
-      {/* الخطوة الأولى: تأكيد قبل إظهار الكرت */}
+      {/* الخانة الأولى: اسم الباقة واضح وكبير وملوّن + تأكيد نعم/لا */}
       {pendingPackage && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
         }}>
           <div style={{
-            background: '#fff', borderRadius: 22, padding: 26, maxWidth: 340, width: '100%',
-            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            background: '#fff', borderRadius: 22, padding: 0, maxWidth: 340, width: '100%',
+            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', overflow: 'hidden',
           }}>
-            <div style={{ fontSize: 14.5, fontWeight: 800, color: '#3A1D66', marginBottom: 6 }}>
-              إظهار كرت من "{pendingPackage.name}"؟
+            <div style={{
+              background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+              padding: '26px 20px 22px',
+            }}>
+              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: 700, marginBottom: 6 }}>
+                إظهار كرت من باقة
+              </div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1.2 }}>
+                {pendingPackage.name}
+              </div>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 20 }}>
-              سيظهر لك كود كرت واحد جاهز لإعطائه للزبون
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={cancelReveal}
-                disabled={revealBusy}
-                style={{
-                  flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid var(--line)',
-                  background: '#fff', color: 'var(--ink-soft)', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                }}
-              >
-                لا
-              </button>
-              <button
-                onClick={confirmReveal}
-                disabled={revealBusy}
-                style={{
-                  flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
-                  background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff',
-                  fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                }}
-              >
-                {revealBusy ? '...' : 'نعم'}
-              </button>
+
+            <div style={{ padding: '20px 24px 24px' }}>
+              <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 20 }}>
+                سيتم تسليم كرت واحد وتسجيله كمباع مباشرة
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={cancelReveal}
+                  disabled={revealBusy}
+                  style={{
+                    flex: 1, padding: '13px 0', borderRadius: 12, border: '1.5px solid var(--line)',
+                    background: '#fff', color: 'var(--ink-soft)', fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                  }}
+                >
+                  لا
+                </button>
+                <button
+                  onClick={confirmReveal}
+                  disabled={revealBusy}
+                  style={{
+                    flex: 1, padding: '13px 0', borderRadius: 12, border: 'none',
+                    background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff',
+                    fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                  }}
+                >
+                  {revealBusy ? '...' : 'نعم'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* الخطوة الثانية: عرض الكرت بعد التأكيد */}
+      {/* الخانة الثانية: الكرت جاهز ومُحتسب مباع بالفعل */}
       {revealedCard && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
@@ -223,7 +240,6 @@ export default function DistributorPage() {
             }}>
               <button
                 onClick={closeModal}
-                disabled={revealBusy}
                 style={{
                   position: 'absolute', top: 12, left: 12, width: 30, height: 30, borderRadius: 10,
                   border: 'none', background: 'rgba(255,255,255,0.25)', color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
@@ -233,85 +249,47 @@ export default function DistributorPage() {
                 ✕
               </button>
               <div style={{ fontSize: 12.5, color: '#E3D6FF', fontWeight: 700 }}>{revealedCard.packageName}</div>
-              <div style={{ fontSize: 12, color: '#fff', fontWeight: 900, marginTop: 2 }}>تواصل — كرت جاهز للتسليم</div>
+              <div style={{ fontSize: 12, color: '#fff', fontWeight: 900, marginTop: 2 }}>✓ تم البيع بنجاح</div>
             </div>
 
             <div style={{ padding: 26 }}>
-              {!confirmingClose && (
-                <>
-                  <div className="mono" style={{
-                    fontSize: 28, fontWeight: 900, margin: '4px 0 18px', letterSpacing: 1, direction: 'ltr',
-                    color: '#3A1D66',
-                  }}>
-                    {revealedCard.code}
-                  </div>
+              <div className="mono" style={{
+                fontSize: 28, fontWeight: 900, margin: '4px 0 18px', letterSpacing: 1, direction: 'ltr',
+                color: '#3A1D66',
+              }}>
+                {revealedCard.code}
+              </div>
 
-                  <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-                    <button
-                      onClick={copyCode}
-                      style={{
-                        flex: 1, padding: '11px 0', borderRadius: 12, border: '1.5px solid #DDD3F5',
-                        background: '#F3F0FB', color: '#5B21B6', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                      }}
-                    >
-                      {copied ? '✓ تم النسخ' : '📋 نسخ الكود'}
-                    </button>
-                    <button
-                      onClick={shareWhatsapp}
-                      style={{
-                        flex: 1, padding: '11px 0', borderRadius: 12, border: 'none',
-                        background: '#25D366', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                      }}
-                    >
-                      واتساب
-                    </button>
-                  </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+                <button
+                  onClick={copyCode}
+                  style={{
+                    flex: 1, padding: '11px 0', borderRadius: 12, border: '1.5px solid #DDD3F5',
+                    background: '#F3F0FB', color: '#5B21B6', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                  }}
+                >
+                  {copied ? '✓ تم النسخ' : '📋 نسخ الكود'}
+                </button>
+                <button
+                  onClick={shareWhatsapp}
+                  style={{
+                    flex: 1, padding: '11px 0', borderRadius: 12, border: 'none',
+                    background: '#25D366', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                  }}
+                >
+                  واتساب
+                </button>
+              </div>
 
-                  <button
-                    onClick={() => setConfirmingClose(true)}
-                    style={{
-                      width: '100%', padding: '13px 0', borderRadius: 14, border: 'none',
-                      background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff',
-                      fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
-                    }}
-                  >
-                    تم تسليم الكرت للزبون
-                  </button>
-                </>
-              )}
-
-              {confirmingClose && (
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 800, color: '#3A1D66', marginBottom: 4 }}>
-                    هل تأكدت أنك أعطيت الكرت للزبون؟
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 18 }}>
-                    بعد التأكيد سيُسجَّل الكرت كمباع ولا يمكن التراجع
-                  </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <button
-                      onClick={() => setConfirmingClose(false)}
-                      disabled={revealBusy}
-                      style={{
-                        flex: 1, padding: '12px 0', borderRadius: 12, border: '1.5px solid var(--line)',
-                        background: '#fff', color: 'var(--ink-soft)', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                      }}
-                    >
-                      لا، رجوع
-                    </button>
-                    <button
-                      onClick={finalizeSold}
-                      disabled={revealBusy}
-                      style={{
-                        flex: 1, padding: '12px 0', borderRadius: 12, border: 'none',
-                        background: '#10B981', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer',
-                      }}
-                    >
-                      {revealBusy ? '...' : 'نعم، تم البيع'}
-                    </button>
-                  </div>
-                </div>
-              )}
+              <button
+                onClick={closeModal}
+                style={{
+                  width: '100%', padding: '13px 0', borderRadius: 14, border: 'none',
+                  background: '#F3F0FB', color: '#5B21B6', fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                }}
+              >
+                إغلاق
+              </button>
             </div>
           </div>
         </div>
