@@ -82,7 +82,11 @@ export default function RequestsPage() {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span className="muted">{history.length}</span>
               {history.length > 0 && (
-                <button className="btn-sm" style={{ background: 'var(--red)', color: '#fff' }} onClick={clearHistory}>
+                <button
+                  className="btn-sm"
+                  style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }}
+                  onClick={clearHistory}
+                >
                   حذف السجل القديم
                 </button>
               )}
