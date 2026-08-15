@@ -122,29 +122,107 @@ export default function DistributorPage() {
 
       {revealedCard && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.55)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
+          position: 'fixed', inset: 0, background: 'rgba(15, 10, 30, 0.65)',
+          backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
         }}>
           <div style={{
-            background: '#fff', borderRadius: 22, padding: 28, maxWidth: 360, width: '100%',
-            textAlign: 'center', position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            background: '#ffffff', borderRadius: 28, padding: 32, maxWidth: 380, width: '100%',
+            textAlign: 'center', position: 'relative', boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+            border: '1px solid rgba(139, 92, 246, 0.15)',
           }}>
+            {/* زر الإغلاق وتأكيد البيع */}
             <button
               onClick={confirmGiven}
               disabled={revealBusy}
               style={{
-                position: 'absolute', top: 14, left: 14, width: 34, height: 34, borderRadius: 12,
-                border: 'none', background: '#FEE6EA', color: '#F43F5E', fontSize: 18, fontWeight: 900, cursor: 'pointer',
+                position: 'absolute', top: 16, left: 16, width: 36, height: 36, borderRadius: 12,
+                border: 'none', background: '#FEF2F2', color: '#EF4444', fontSize: 16, fontWeight: 900, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
               }}
-              title="أعطيت الكرت للزبون — إغلاق"
+              title="تأكيد وإغلاق"
             >
               ✕
             </button>
-            <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', fontWeight: 700, marginTop: 10 }}>{revealedCard.packageName}</div>
-            <div className="mono" style={{ fontSize: 30, fontWeight: 900, margin: '18px 0', letterSpacing: 1, direction: 'ltr' }}>
+
+            <div style={{ fontSize: 13, color: '#7C3AED', fontWeight: 800, marginBottom: 4, background: '#F3E8FF', display: 'inline-block', padding: '4px 12px', borderRadius: 20 }}>
+              {revealedCard.packageName}
+            </div>
+            <h3 style={{ fontSize: 18, fontWeight: 900, color: '#1F2937', margin: '8px 0 16px 0' }}>رمز الكرت المتاح</h3>
+
+            {/* صندوق الكود */}
+            <div 
+              onClick={() => {
+                navigator.clipboard.writeText(revealedCard.code);
+                alert("تم نسخ رمز الكرت بنجاح!");
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)',
+                border: '2px dashed #C4B5FD',
+                color: '#6D28D9',
+                fontFamily: 'monospace',
+                fontSize: 32,
+                fontWeight: 900,
+                padding: '16px 10px',
+                borderRadius: 20,
+                cursor: 'pointer',
+                letterSpacing: '2px',
+                marginBottom: 12,
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)',
+                direction: 'ltr',
+              }}
+            >
               {revealedCard.code}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>اعطِ هذا الكود للزبون، ثم اضغط ✕ لتأكيد البيع</div>
+            <div style={{ fontSize: 11.5, color: '#9CA3AF', marginBottom: 20 }}>اضغط على الرقم للنسخ السريع</div>
+
+            {/* الأزرار (واتساب ونسخ) */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(`مرحباً، إليك رمز كرت الإنترنت الخاص بك:\n${revealedCard.code}\nالباقة: ${revealedCard.packageName}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  flex: 1,
+                  background: '#22C55E',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: 14,
+                  padding: '12px 16px',
+                  borderRadius: 14,
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  boxShadow: '0 8px 20px rgba(34, 197, 94, 0.3)',
+                }}
+              >
+                <span>إرسال واتساب</span>
+              </a>
+
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(revealedCard.code);
+                  alert("تم النسخ بنجاح!");
+                }}
+                style={{
+                  background: '#F3F4F6',
+                  color: '#374151',
+                  fontWeight: 800,
+                  fontSize: 14,
+                  padding: '12px 18px',
+                  borderRadius: 14,
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                نسخ
+              </button>
+            </div>
+
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 16 }}>
+              ملاحظة: الضغط على زر ✕ بالأعلى سيخصم الكرت ويسجله كمبيع.
+            </div>
           </div>
         </div>
       )}
