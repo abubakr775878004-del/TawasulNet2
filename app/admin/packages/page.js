@@ -10,6 +10,7 @@ export default function PackagesPage() {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
 
   async function loadPackages() {
     const { data } = await supabase.from('packages').select('*').order('created_at', { ascending: false });
@@ -25,6 +26,15 @@ export default function PackagesPage() {
     const { error: insertError } = await supabase.from('packages').insert({ name, price: parseFloat(price) });
     if (insertError) { setError(insertError.message); return; }
     setName(''); setPrice('');
+    loadPackages();
+  }
+
+  async function deletePackage(id, name) {
+    if (!window.confirm(`سيتم حذف باقة "${name}" نهائيًا. لا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا. متابعة؟`)) return;
+    setError(''); setBusyId(id);
+    const { error: deleteError } = await supabase.from('packages').delete().eq('id', id);
+    setBusyId(null);
+    if (deleteError) { setError('تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا'); return; }
     loadPackages();
   }
 
@@ -56,13 +66,23 @@ export default function PackagesPage() {
         <div className="panel">
           <div className="panel-head"><h3>الباقات الحالية</h3><span className="muted">{packages.length}</span></div>
           <table>
-            <thead><tr><th>الاسم</th><th>السعر</th><th>تاريخ الإنشاء</th></tr></thead>
+            <thead><tr><th>الاسم</th><th>السعر</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
             <tbody>
               {packages.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
                   <td>{p.price} ريال</td>
                   <td>{new Date(p.created_at).toLocaleDateString('ar')}</td>
+                  <td>
+                    <button
+                      className="btn-sm"
+                      style={{ background: 'var(--red)', color: '#fff' }}
+                      disabled={busyId === p.id}
+                      onClick={() => deletePackage(p.id, p.name)}
+                    >
+                      حذف
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
