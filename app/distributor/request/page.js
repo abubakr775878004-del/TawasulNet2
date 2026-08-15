@@ -8,7 +8,7 @@ export default function RequestCardsPage() {
   const { profile, loading } = useProfile('distributor');
   const [packages, setPackages] = useState([]);
   const [packageId, setPackageId] = useState('');
-  const [quantity, setQuantity] = useState(10);
+  const [quantity, setQuantity] = useState('');
   const [myRequests, setMyRequests] = useState([]);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -38,7 +38,7 @@ export default function RequestCardsPage() {
     });
     if (insertError) { setError(insertError.message); return; }
     setDone(true);
-    setQuantity(10);
+    setQuantity('');
     loadData();
   }
 
@@ -74,7 +74,6 @@ export default function RequestCardsPage() {
               <input
                 type="number"
                 min="1"
-                placeholder="10"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value === '' ? '' : e.target.value)}
               />
