@@ -105,3 +105,26 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
 .timer-row .tcode{ font-weight:700; font-size:13.5px; }
 .timer-row .tleft{ font-size:11px; color:var(--magenta); font-weight:800; }
 .timer-row .tpkg{ font-size:11px; color:var(--ink-soft); }
+
+/* --- تخصيص الخانة الخاصة برأس الصفحة للزر في الموبايل حصراً لعدم التداخل --- */
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 996;
+    box-shadow: 0 2px 8px rgba(28, 21, 51, 0.04);
+    width: 100%;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-header {
+    display: none !important;
+  }
+}
