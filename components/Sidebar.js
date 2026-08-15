@@ -32,7 +32,7 @@ export default function Sidebar({ role, active, name }) {
 
   return (
     <>
-      {/* شريط علوي احترافي ومستقل للهواتف فقط لكي لا يتداخل مع أي نص أو عنوان */}
+      {/* شريط علوي مرتب للهواتف فقط لكي لا يتداخل مع أي نص أو عنوان */}
       <div className="mobile-top-bar">
         <div className="mobile-brand-title">تواصل</div>
         <button
@@ -44,7 +44,7 @@ export default function Sidebar({ role, active, name }) {
         </button>
       </div>
 
-      {/* خلفية معتمة خفيفة عند فتح القائمة */}
+      {/* خلفية معتمة عند فتح القائمة */}
       {isOpen && (
         <div
           onClick={() => setIsOpen(false)}
@@ -82,14 +82,12 @@ export default function Sidebar({ role, active, name }) {
         </div>
       </div>
 
-      {/* التنسيقات البرمجية لضمان عدم التداخل نهائياً في الجوال */}
       <style jsx global>{`
         .mobile-top-bar {
           display: none;
         }
 
         @media (max-width: 768px) {
-          /* إظهار الشريط العلوي المستقل في الجوال */
           .mobile-top-bar {
             display: flex;
             align-items: center;
@@ -99,18 +97,18 @@ export default function Sidebar({ role, active, name }) {
             position: sticky;
             top: 0;
             z-index: 997;
-            border-bottom: 1px solid var(--line, #E6E0F7);
+            border-bottom: 1px solid #E6E0F7;
             box-shadow: 0 4px 12px rgba(28, 21, 51, 0.04);
           }
 
           .mobile-brand-title {
             font-weight: 900;
             font-size: 18px;
-            color: var(--grape, #5B21B6);
+            color: #5B21B6;
           }
 
           .mobile-menu-btn-pro {
-            background: var(--grape, #5B21B6);
+            background: #5B21B6;
             color: #fff;
             border: none;
             border-radius: 10px;
@@ -124,7 +122,6 @@ export default function Sidebar({ role, active, name }) {
             box-shadow: 0 4px 10px rgba(91, 33, 182, 0.2);
           }
 
-          /* تخصيص القائمة الجانبية لتفتح بسلاسة من اليمين في الجوال وتأخذ عرضها الكامل دون ضغط */
           .sidebar {
             position: fixed !important;
             right: 0 !important;
@@ -141,7 +138,7 @@ export default function Sidebar({ role, active, name }) {
             transform: translateX(0) !important;
           }
         }
-      `}}^{\x7d</style>
+      `}</style>
     </>
   );
 }
