@@ -124,18 +124,17 @@ export default function Sidebar({ role, active, name }) {
 
           .sidebar {
             position: fixed !important;
-            right: 0 !important;
+            right: -270px !important;
             left: auto !important;
             top: 0 !important;
             bottom: 0 !important;
             width: 270px !important;
-            transform: translateX(100%);
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 999;
           }
           
           .sidebar.open {
-            transform: translateX(0) !important;
+            right: 0 !important;
           }
         }
       `}</style>
