@@ -29,7 +29,7 @@ body{ margin:0; font-family:'Tajawal', sans-serif; background:var(--bg); color:v
 .error-note{ background:#FFF1F2; color:#BE123C; border:1px solid #FECDD3; padding:10px 14px; border-radius:12px; font-size:12.5px; margin-bottom:14px; }
 .pending-note{ background:#FFFBEB; color:#A16207; border:1px solid #FDE68A; padding:12px 14px; border-radius:13px; font-size:12.5px; margin-top:18px; line-height:1.8; }
 
-.app{ display:grid; grid-template-columns:260px 1fr; min-height:100vh; width: 100vw; }
+.app{ display:grid; grid-template-columns:260px 1fr; min-height:100vh; }
 
 .sidebar{ background:#062E2B; color:#fff; padding:26px 18px; display:flex; flex-direction:column; }
 .sidebar .brand{ font-weight:900; font-size:17px; margin-bottom:6px; }
@@ -95,37 +95,27 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
 .timer-row .tleft{ font-size:11px; color:#0F766E; font-weight:800; }
 .timer-row .tpkg{ font-size:11px; color:var(--ink-soft); }
 
-/* تعديلات الموبايل الخاصة بالقائمة الجانبية وحل التقطيع نهائياً */
 @media (max-width: 768px) {
   .app {
     display: block !important;
-    width: 100% !important;
   }
   
-  .main {
-    padding: 16px !important;
-    width: 100% !important;
-  }
-
   .sidebar {
     position: fixed !important;
     top: 0 !important;
-    right: -280px !important;
+    right: -270px !important;
     left: auto !important;
     bottom: 0 !important;
     width: 270px !important;
     height: 100vh !important;
-    z-index: 9999 !important;
-    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    box-shadow: -5px 0 25px rgba(0,0,0,0.3) !important;
+    z-index: 99999 !important;
+    transition: right 0.3s ease-in-out !important;
   }
   
   .sidebar.open {
     right: 0 !important;
   }
-}
 
-@media (max-width: 768px) {
   .mobile-header {
     display: flex !important;
     justify-content: space-between;
