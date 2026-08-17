@@ -121,6 +121,25 @@ td{ padding:13px 12px; font-size:13px; border-top:1px solid var(--line); }
     box-shadow: 0 2px 8px rgba(6, 46, 43, 0.05);
     width: 100%;
   }
+
+  /* حل مشكلة تقطيع شاشة الموزعين والقائمة الجانبية في الجوال */
+  .app {
+    display: block !important;
+  }
+  
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    right: -280px !important;
+    bottom: 0 !important;
+    width: 270px !important;
+    z-index: 1000 !important;
+    transition: right 0.3s ease-in-out !important;
+  }
+
+  .sidebar.open {
+    right: 0 !important;
+  }
 }
 
 @media (min-width: 769px) {
