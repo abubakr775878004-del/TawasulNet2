@@ -119,20 +119,35 @@ export default function DistributorPage() {
     setNoteBusy(true);
     setNoteMessage('');
 
+    // 1. حفظ الملاحظة في قاعدة البيانات
     const { error } = await supabase.from('distributor_notes').insert({
       distributor_id: profile.id,
       distributor_name: profile.full_name,
       content: noteContent.trim()
     });
 
-    setNoteBusy(false);
     if (!error) {
+      // 2. إرسال تنبيه فوري إلى تيليجرام عبر الـ API
+      try {
+        await fetch('/api/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            distributor_name: profile.full_name,
+            content: noteContent.trim()
+          })
+        });
+      } catch (err) {
+        console.error('Telegram notification error:', err);
+      }
+
       setNoteContent('');
       setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
       setTimeout(() => setNoteMessage(''), 3000);
     } else {
       setNoteMessage('❌ تعذّر إرسال الرسالة، حاول مرة أخرى');
     }
+    setNoteBusy(false);
   }
 
   if (loading) return null;
@@ -372,6 +387,7 @@ export default function DistributorPage() {
               </div>
 
               <button
+                onClick[closeModal]
                 onClick={closeModal}
                 style={{
                   width: '100%', padding: '13px 0', borderRadius: 14, border: 'none',
