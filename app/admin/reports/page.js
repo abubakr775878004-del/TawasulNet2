@@ -59,7 +59,7 @@ export default function ReportsPage() {
       map[s.distributor_id].salesCount += 1;
       map[s.distributor_id].salesValue += Number(s.price);
 
-      // تجميع الإجمالي العام للشبكة (داخل الـ forEach ليعمل بدقة صحيحة)
+      // تجميع الإجمالي العام للشبكة داخل حلقة التكرار بدقة
       netSalesCount += 1;
       netSalesValue += Number(s.price);
     });
@@ -172,23 +172,32 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* تخصيص الطباعة لإخفاء العناصر الغير ضرورية وإخراج PDF مرتب */}
+      {/* تخصيص الطباعة لمنع الشاشة البيضاء وإخراج PDF مرتب ونظيف */}
       <style jsx global>{`
         @media print {
+          body {
+            background: #fff !important;
+            color: #000 !important;
+          }
           .no-print, .sidebar {
             display: none !important;
           }
-          .app {
+          .app, .main {
             display: block !important;
-          }
-          .main {
+            width: 100% !important;
             padding: 0 !important;
             margin: 0 !important;
-            width: 100% !important;
           }
           .panel, .stat {
+            background: #fff !important;
+            color: #000 !important;
             box-shadow: none !important;
-            border: 1px solid #DCEAE6 !important;
+            border: 1px solid #ccc !important;
+            margin-bottom: 15px !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
         }
       `}</style>
