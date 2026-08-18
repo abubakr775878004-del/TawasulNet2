@@ -14,6 +14,7 @@ export default function Sidebar({ role, active, name }) {
     { href: '/admin/cards/import', label: 'استيراد PDF' },
     { href: '/admin/packages', label: 'الباقات' },
     { href: '/admin/requests', label: 'طلبات الموزعين' },
+    { href: '/admin/messages', label: 'رسائل الموزعين' },
     { href: '/admin/distributors', label: 'الموزعون' },
     { href: '/admin/reports', label: 'التقارير' },
   ];
