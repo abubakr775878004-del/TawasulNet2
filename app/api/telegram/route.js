@@ -1,33 +1,30 @@
 import { NextResponse } from 'next/server';
 
-// إعداد لضمان عدم تخزين الطلبات في الكاش
 export const dynamic = 'force-dynamic';
 
 export async function POST(req) {
   try {
-    const { distributor_name, content } = await req.json();
+    const body = await req.json();
+    const { distributor_name, content } = body;
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
 
     if (!botToken || !chatId) {
-      console.error('Missing Telegram Environment Variables');
-      return NextResponse.json({ error: 'Telegram credentials missing' }, { status: 500 });
+      console.error('CRITICAL: Telegram environment variables are missing!');
+      return NextResponse.json({ error: 'Telegram credentials missing in environment variables' }, { status: 500 });
     }
 
-    // تصميم الرسالة لتكون بارزة وتصل في كل مرة
-    const message = `✉️ *إشعار جديد من نظام TawasulNet*\n\n` +
+    const message = `🚨 *طلب جديد من موزع*\n\n` +
                     `👤 *الموزع:* ${distributor_name}\n` +
-                    `💬 *الرسالة:* ${content}`;
+                    `💬 *الرسالة:* ${content}\n\n` +
+                    `⚡ *نظام إدارة شبكة تواصل*`;
 
     const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
     const response = await fetch(telegramUrl, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache' // ضمان عدم وجود كاش
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
         text: message,
@@ -38,13 +35,13 @@ export async function POST(req) {
     const data = await response.json();
 
     if (!data.ok) {
-      console.error('Telegram API Error:', data);
-      return NextResponse.json({ error: data.description }, { status: 400 });
+      console.error('Telegram Server rejected message:', data);
+      return NextResponse.json({ error: data.description || 'Telegram rejection' }, { status: 400 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Route Error:', error);
+    console.error('API Route Catch Error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
