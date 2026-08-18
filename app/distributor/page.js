@@ -16,6 +16,9 @@ export default function DistributorPage() {
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
   const [copied, setCopied] = useState(false);
+  
+  // حالة خاصة لنسخ الكرت الشخصي
+  const [personalCopied, setPersonalCopied] = useState(false);
 
   async function load() {
     if (!profile) return;
@@ -88,9 +91,15 @@ export default function DistributorPage() {
       await navigator.clipboard.writeText(revealedCard.code);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (e) {
-      // تجاهل الخطأ إذا فشل النسخ
-    }
+    } catch (e) {}
+  }
+
+  async function copyPersonalCode(codeText) {
+    try {
+      await navigator.clipboard.writeText(codeText);
+      setPersonalCopied(true);
+      setTimeout(() => setPersonalCopied(false), 2000);
+    } catch (e) {}
   }
 
   function shareWhatsapp() {
@@ -121,6 +130,31 @@ export default function DistributorPage() {
         </div>
 
         <AdSlotBar />
+
+        {/* خانة الكرت الشخصي الثابت للموزع (يتم تعديلها من لوحة المدير وتظهر هنا دائماً) */}
+        {profile.personal_card && (
+          <div style={{
+            background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
+            borderRadius: 20, padding: '20px 24px', color: '#fff', marginBottom: 20,
+            boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 15
+          }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: 700, marginBottom: 4 }}>⭐ كرتك الشخصي (ثابت ومميز)</div>
+              <div className="mono" style={{ fontSize: 24, fontWeight: 900, letterSpacing: 1.5 }}>
+                {profile.personal_card}
+              </div>
+            </div>
+            <button
+              onClick={() => copyPersonalCode(profile.personal_card)}
+              style={{
+                background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)',
+                color: '#fff', padding: '10px 18px', borderRadius: 12, fontWeight: 800, fontSize: 13, cursor: 'pointer',
+              }}
+            >
+              {personalCopied ? '✓ تم النسخ' : '📋 نسخ الكرت الشخصي'}
+            </button>
+          </div>
+        )}
 
         <div className="balance-card">
           <div className="lbl">رصيدك الحالي</div>
@@ -168,7 +202,7 @@ export default function DistributorPage() {
         </div>
       </div>
 
-      {/* الخانة الأولى: اسم الباقة واضح وكبير وملوّن + تأكيد نعم/لا */}
+      {/* نافذة تأكيد إظهار الكرت */}
       {pendingPackage && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
@@ -222,7 +256,7 @@ export default function DistributorPage() {
         </div>
       )}
 
-      {/* الخانة الثانية: الكرت جاهز ومُحتسب مباع بالفعل */}
+      {/* نافذة عرض الكرت بعد البيع */}
       {revealedCard && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
