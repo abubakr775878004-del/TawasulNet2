@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
@@ -8,6 +9,7 @@ import { supabase } from '../../lib/supabase';
 
 export default function DistributorPage() {
   const { profile, loading } = useProfile('distributor');
+
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
 
@@ -16,7 +18,7 @@ export default function DistributorPage() {
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
   const [copied, setCopied] = useState(false);
-  
+
   const [personalCopied, setPersonalCopied] = useState(false);
 
   const [noteContent, setNoteContent] = useState('');
@@ -25,62 +27,94 @@ export default function DistributorPage() {
 
   async function load() {
     if (!profile) return;
+
     const { data } = await supabase
       .from('cards')
       .select('*, packages(name, price)')
       .eq('assigned_to', profile.id)
       .eq('status', 'with_distributor');
+
     setMyCards(data || []);
 
-    const since = new Date(); since.setHours(0, 0, 0, 0);
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+
     const { count } = await supabase
       .from('cards')
       .select('*', { count: 'exact', head: true })
       .eq('assigned_to', profile.id)
       .eq('status', 'sold')
       .gte('sold_at', since.toISOString());
+
     setSoldToday(count || 0);
   }
 
-  useEffect(() => { load(); }, [profile]);
+  useEffect(() => {
+    load();
+  }, [profile]);
 
   function askReveal(pkgId, pkgName) {
     setRevealError('');
-    setPendingPackage({ id: pkgId, name: pkgName });
+    setPendingPackage({
+      id: pkgId,
+      name: pkgName,
+    });
   }
 
   function cancelReveal() {
+    if (revealBusy) return;
     setPendingPackage(null);
   }
 
   async function confirmReveal() {
-    if (!pendingPackage) return;
+    if (!pendingPackage || !profile || revealBusy) return;
+
     setRevealBusy(true);
+    setRevealError('');
 
-    const { data, error } = await supabase
-      .from('cards')
-      .select('id, code')
-      .eq('assigned_to', profile.id)
-      .eq('package_id', pendingPackage.id)
-      .eq('status', 'with_distributor')
-      .order('created_at', { ascending: true })
-      .limit(1);
+    try {
+      const { data, error } = await supabase
+        .from('cards')
+        .select('id, code')
+        .eq('assigned_to', profile.id)
+        .eq('package_id', pendingPackage.id)
+        .eq('status', 'with_distributor')
+        .order('created_at', { ascending: true })
+        .limit(1);
 
-    if (error || !data || data.length === 0) {
-      setRevealBusy(false);
-      setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
+      if (error || !data || data.length === 0) {
+        setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
+        setPendingPackage(null);
+        return;
+      }
+
+      const card = data[0];
+
+      const { error: sellError } = await supabase.rpc('sell_card', {
+        c_id: card.id,
+      });
+
+      if (sellError) {
+        console.error('Sell card error:', sellError);
+        setRevealError('تعذّر تسجيل الكرت كمباع، حاول مرة أخرى');
+        return;
+      }
+
+      setRevealedCard({
+        code: card.code,
+        packageName: pendingPackage.name,
+      });
+
       setPendingPackage(null);
-      return;
+      setCopied(false);
+
+      await load();
+    } catch (error) {
+      console.error('Confirm reveal error:', error);
+      setRevealError('حدث خطأ غير متوقع، حاول مرة أخرى');
+    } finally {
+      setRevealBusy(false);
     }
-
-    const card = data[0];
-    await supabase.rpc('sell_card', { c_id: card.id });
-
-    setRevealBusy(false);
-    setRevealedCard({ code: card.code, packageName: pendingPackage.name });
-    setPendingPackage(null);
-    setCopied(false);
-    load();
   }
 
   function closeModal() {
@@ -90,229 +124,703 @@ export default function DistributorPage() {
 
   async function copyCode() {
     if (!revealedCard) return;
+
     try {
       await navigator.clipboard.writeText(revealedCard.code);
+
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (e) {}
+
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Copy code error:', error);
+    }
   }
 
   async function copyPersonalCode(codeText) {
+    if (!codeText) return;
+
     try {
       await navigator.clipboard.writeText(codeText);
+
       setPersonalCopied(true);
-      setTimeout(() => setPersonalCopied(false), 2000);
-    } catch (e) {}
+
+      setTimeout(() => {
+        setPersonalCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Copy personal card error:', error);
+    }
   }
 
   function shareWhatsapp() {
     if (!revealedCard) return;
+
     const text = `كود الكرت: ${revealedCard.code} — ${revealedCard.packageName}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      '_blank'
+    );
   }
 
+  /*
+   * ============================================================
+   * إرسال ملاحظة للمدير + إشعار Telegram
+   * ============================================================
+   *
+   * التسلسل:
+   *
+   * 1. التحقق من البيانات.
+   * 2. حفظ الملاحظة في Supabase.
+   * 3. بعد نجاح الحفظ يتم إرسال Telegram.
+   * 4. فشل Telegram لا يحذف الملاحظة من قاعدة البيانات.
+   * 5. يتم فحص response.ok و success من API.
+   *
+   * هذا يسمح بإرسال رسائل متعددة ومتتالية بدون الاعتماد
+   * على نجاح Telegram في عملية حفظ الرسالة.
+   */
   async function sendNoteToAdmin(e) {
     e.preventDefault();
-    if (!noteContent.trim()) return;
+
+    if (!profile || noteBusy) {
+      return;
+    }
+
+    const content = noteContent.trim();
+
+    if (!content) {
+      setNoteMessage('⚠️ اكتب الرسالة أولًا');
+      return;
+    }
+
     setNoteBusy(true);
     setNoteMessage('');
 
-    const { error } = await supabase.from('distributor_notes').insert({
-      distributor_id: profile.id,
-      distributor_name: profile.full_name,
-      content: noteContent.trim()
-    });
+    try {
+      /*
+       * ========================================================
+       * المرحلة الأولى: حفظ الرسالة في قاعدة البيانات
+       * ========================================================
+       */
 
-    if (!error) {
-      try {
-        await fetch('/api/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            distributor_name: profile.full_name,
-            content: noteContent.trim()
-          })
+      const { error: dbError } = await supabase
+        .from('distributor_notes')
+        .insert({
+          distributor_id: profile.id,
+          distributor_name: profile.full_name,
+          content: content,
         });
-      } catch (err) {
-        console.error('Telegram notification error:', err);
+
+      /*
+       * إذا فشل الحفظ، نتوقف هنا.
+       * لا نرسل Telegram لأن الرسالة لم تُحفظ.
+       */
+
+      if (dbError) {
+        console.error(
+          'Distributor note database error:',
+          dbError
+        );
+
+        setNoteMessage(
+          '❌ تعذّر حفظ الرسالة، حاول مرة أخرى'
+        );
+
+        return;
       }
 
+      /*
+       * ========================================================
+       * المرحلة الثانية: إرسال الإشعار إلى Telegram
+       * ========================================================
+       */
+
+      let telegramSuccess = false;
+
+      try {
+        const telegramResponse = await fetch('/api/telegram', {
+          method: 'POST',
+
+          headers: {
+            'Content-Type': 'application/json',
+          },
+
+          body: JSON.stringify({
+            distributor_name: profile.full_name,
+            content: content,
+          }),
+
+          cache: 'no-store',
+        });
+
+        let telegramResult = null;
+
+        try {
+          telegramResult = await telegramResponse.json();
+        } catch (jsonError) {
+          console.error(
+            'Telegram response JSON error:',
+            jsonError
+          );
+        }
+
+        /*
+         * النجاح الحقيقي يجب أن يكون:
+         *
+         * HTTP 2xx
+         * +
+         * success === true
+         */
+
+        if (
+          telegramResponse.ok &&
+          telegramResult?.success === true
+        ) {
+          telegramSuccess = true;
+        } else {
+          console.error(
+            'Telegram notification failed:',
+            telegramResult
+          );
+        }
+      } catch (telegramError) {
+        /*
+         * Telegram فشل، لكن الملاحظة محفوظة بالفعل.
+         * لذلك لا نعتبر عملية حفظ الرسالة فاشلة.
+         */
+
+        console.error(
+          'Telegram connection error:',
+          telegramError
+        );
+      }
+
+      /*
+       * ========================================================
+       * المرحلة الثالثة: النتيجة للموزع
+       * ========================================================
+       */
+
       setNoteContent('');
-      setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
-      setTimeout(() => setNoteMessage(''), 3000);
-    } else {
-      setNoteMessage('❌ تعذّر إرسال الرسالة، حاول مرة أخرى');
+
+      if (telegramSuccess) {
+        setNoteMessage(
+          '✓ تم إرسال رسالتك للمدير بنجاح'
+        );
+      } else {
+        setNoteMessage(
+          '✓ تم حفظ رسالتك، لكن تعذر إرسال إشعار تيليجرام'
+        );
+      }
+
+      setTimeout(() => {
+        setNoteMessage('');
+      }, 4000);
+
+    } catch (error) {
+      console.error(
+        'Send distributor note error:',
+        error
+      );
+
+      setNoteMessage(
+        '❌ حدث خطأ غير متوقع، حاول مرة أخرى'
+      );
+    } finally {
+      setNoteBusy(false);
     }
-    setNoteBusy(false);
   }
 
-  if (loading) return null;
+  if (loading) {
+    return null;
+  }
+
+  if (!profile) {
+    return null;
+  }
 
   const byPackage = {};
+
   myCards.forEach((c) => {
     const key = c.packages?.name || 'غير محدد';
+
     if (!byPackage[key]) {
-      byPackage[key] = { count: 0, packageId: c.package_id, price: c.packages?.price || 0 };
+      byPackage[key] = {
+        count: 0,
+        packageId: c.package_id,
+        price: c.packages?.price || 0,
+      };
     }
+
     byPackage[key].count += 1;
   });
 
-  const totalValue = Object.values(byPackage).reduce((sum, p) => sum + p.count * p.price, 0);
+  const totalValue = Object.values(byPackage).reduce(
+    (sum, p) => sum + p.count * p.price,
+    0
+  );
 
   return (
     <div className="app">
-      <Sidebar role="distributor" active="/distributor" name={profile.full_name} />
+      <Sidebar
+        role="distributor"
+        active="/distributor"
+        name={profile.full_name}
+      />
+
       <div className="main">
         <div className="topbar">
-          <div><h1>مرحبًا، {profile.full_name} 👋</h1><div className="greet">إليك ملخص حسابك اليوم</div></div>
+          <div>
+            <h1>
+              مرحبًا، {profile.full_name} 👋
+            </h1>
+
+            <div className="greet">
+              إليك ملخص حسابك اليوم
+            </div>
+          </div>
         </div>
 
         <AdSlotBar />
 
         {profile.personal_card && (
-          <div style={{
-            background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
-            borderRadius: 20, padding: '20px 24px', color: '#fff', marginBottom: 20,
-            boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 15
-          }}>
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
+              borderRadius: 20,
+              padding: '20px 24px',
+              color: '#fff',
+              marginBottom: 20,
+              boxShadow:
+                '0 10px 25px rgba(124, 58, 237, 0.25)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 15,
+            }}
+          >
             <div>
-              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: 700, marginBottom: 4 }}>⭐ كرتك الشخصي (ثابت ومميز)</div>
-              <div className="mono" style={{ fontSize: 24, fontWeight: 900, letterSpacing: 1.5 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                  marginBottom: 4,
+                }}
+              >
+                ⭐ كرتك الشخصي (ثابت ومميز)
+              </div>
+
+              <div
+                className="mono"
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  letterSpacing: 1.5,
+                }}
+              >
                 {profile.personal_card}
               </div>
             </div>
+
             <button
-              onClick={() => copyPersonalCode(profile.personal_card)}
+              onClick={() =>
+                copyPersonalCode(profile.personal_card)
+              }
               style={{
-                background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)',
-                color: '#fff', padding: '10px 18px', borderRadius: 12, fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                background:
+                  'rgba(255,255,255,0.2)',
+                border:
+                  '1px solid rgba(255,255,255,0.4)',
+                color: '#fff',
+                padding: '10px 18px',
+                borderRadius: 12,
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
               }}
             >
-              {personalCopied ? '✓ تم النسخ' : '📋 نسخ الكرت الشخصي'}
+              {personalCopied
+                ? '✓ تم النسخ'
+                : '📋 نسخ الكرت الشخصي'}
             </button>
           </div>
         )}
 
         <div className="balance-card">
-          <div className="lbl">رصيدك الحالي</div>
-          <div className="amt">{Number(profile.balance).toLocaleString('en-US')} <span>ريال</span></div>
+          <div className="lbl">
+            رصيدك الحالي
+          </div>
+
+          <div className="amt">
+            {Number(profile.balance).toLocaleString(
+              'en-US'
+            )}{' '}
+            <span>ريال</span>
+          </div>
+
           <div className="foot">
-            <div style={{ fontSize: 11.5, color: '#E3D6FF' }}>كروت لديك الآن: {myCards.length}</div>
-            <Link href="/distributor/request"><button className="req-btn">طلب كروت جديد</button></Link>
+            <div
+              style={{
+                fontSize: 11.5,
+                color: '#E3D6FF',
+              }}
+            >
+              كروت لديك الآن: {myCards.length}
+            </div>
+
+            <Link href="/distributor/request">
+              <button className="req-btn">
+                طلب كروت جديد
+              </button>
+            </Link>
           </div>
         </div>
 
-        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-          <div className="stat"><div className="label">كروت متاحة عندي</div><div className="value">{myCards.length}</div></div>
-          <div className="stat"><div className="label">مبيعات اليوم</div><div className="value">{soldToday}</div></div>
+        <div
+          className="grid-stats"
+          style={{
+            gridTemplateColumns:
+              'repeat(3,1fr)',
+          }}
+        >
           <div className="stat">
-            <div className="label">القيمة الإجمالية لكروتك</div>
-            <div className="value" style={{ fontSize: 20 }}>{totalValue.toLocaleString('en-US')} <span style={{ fontSize: 12, fontWeight: 700 }}>ريال</span></div>
+            <div className="label">
+              كروت متاحة عندي
+            </div>
+
+            <div className="value">
+              {myCards.length}
+            </div>
+          </div>
+
+          <div className="stat">
+            <div className="label">
+              مبيعات اليوم
+            </div>
+
+            <div className="value">
+              {soldToday}
+            </div>
+          </div>
+
+          <div className="stat">
+            <div className="label">
+              القيمة الإجمالية لكروتك
+            </div>
+
+            <div
+              className="value"
+              style={{
+                fontSize: 20,
+              }}
+            >
+              {totalValue.toLocaleString(
+                'en-US'
+              )}{' '}
+
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                ريال
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="panel">
           <div className="panel-head">
             <h3>باقاتي المتاحة</h3>
-            <span className="muted">اضغط "إظهار كرت" عند وجود زبون</span>
+
+            <span className="muted">
+              اضغط "إظهار كرت" عند وجود زبون
+            </span>
           </div>
-          {revealError && <div className="error-note">{revealError}</div>}
-          {Object.keys(byPackage).length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا توجد كروت لديك حاليًا</div>}
+
+          {revealError && (
+            <div className="error-note">
+              {revealError}
+            </div>
+          )}
+
+          {Object.keys(byPackage).length === 0 && (
+            <div
+              style={{
+                color: 'var(--ink-soft)',
+                fontSize: 13,
+              }}
+            >
+              لا توجد كروت لديك حاليًا
+            </div>
+          )}
+
           <div className="pkg-grid">
-            {Object.entries(byPackage).map(([name, info]) => (
-              <div className="pkg-card" key={name}>
-                <div className="pname">{name}</div>
-                <div className="pcount">{info.count} <span>كرت لديك</span></div>
-                <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', fontWeight: 700, marginTop: 4 }}>
-                  القيمة: {(info.count * info.price).toLocaleString('en-US')} ريال
-                </div>
-                <button
-                  className="btn-primary"
-                  style={{ marginTop: 14, width: '100%' }}
-                  onClick={() => askReveal(info.packageId, name)}
+            {Object.entries(byPackage).map(
+              ([name, info]) => (
+                <div
+                  className="pkg-card"
+                  key={name}
                 >
-                  إظهار كرت
-                </button>
-              </div>
-            ))}
+                  <div className="pname">
+                    {name}
+                  </div>
+
+                  <div className="pcount">
+                    {info.count}{' '}
+                    <span>كرت لديك</span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: 'var(--ink-soft)',
+                      fontWeight: 700,
+                      marginTop: 4,
+                    }}
+                  >
+                    القيمة:{' '}
+                    {(
+                      info.count *
+                      info.price
+                    ).toLocaleString(
+                      'en-US'
+                    )}{' '}
+                    ريال
+                  </div>
+
+                  <button
+                    className="btn-primary"
+                    style={{
+                      marginTop: 14,
+                      width: '100%',
+                    }}
+                    onClick={() =>
+                      askReveal(
+                        info.packageId,
+                        name
+                      )
+                    }
+                  >
+                    إظهار كرت
+                  </button>
+                </div>
+              )
+            )}
           </div>
         </div>
 
-        <div className="panel" style={{ marginTop: 20 }}>
+        <div
+          className="panel"
+          style={{
+            marginTop: 20,
+          }}
+        >
           <div className="panel-head">
-            <h3>إرسال ملاحظة أو طلب للمدير</h3>
+            <h3>
+              إرسال ملاحظة أو طلب للمدير
+            </h3>
           </div>
+
           <form onSubmit={sendNoteToAdmin}>
             <textarea
               rows={3}
               value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
+              onChange={(e) =>
+                setNoteContent(
+                  e.target.value
+                )
+              }
+              disabled={noteBusy}
               placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
-              style={{ width: '100%', padding: 12, borderRadius: 10, border: '1.5px solid var(--line)', marginBottom: 10, fontSize: 13.5 }}
+              style={{
+                width: '100%',
+                padding: 12,
+                borderRadius: 10,
+                border:
+                  '1.5px solid var(--line)',
+                marginBottom: 10,
+                fontSize: 13.5,
+                resize: 'vertical',
+                opacity: noteBusy ? 0.7 : 1,
+              }}
             />
+
             {noteMessage && (
-              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10, color: noteMessage.startsWith('✓') ? '#10B981' : '#DC2626' }}>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  marginBottom: 10,
+                  color:
+                    noteMessage.startsWith('✓')
+                      ? '#10B981'
+                      : noteMessage.startsWith(
+                          '⚠️'
+                        )
+                      ? '#D97706'
+                      : '#DC2626',
+                }}
+              >
                 {noteMessage}
               </div>
             )}
+
             <button
               type="submit"
-              disabled={noteBusy}
+              disabled={
+                noteBusy ||
+                !noteContent.trim()
+              }
               className="btn-primary"
-              style={{ width: 'auto', padding: '10px 20px' }}
+              style={{
+                width: 'auto',
+                padding: '10px 20px',
+                opacity:
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 0.65
+                    : 1,
+                cursor:
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
             >
-              {noteBusy ? 'جاري الإرسال...' : 'إرسال للمدير'}
+              {noteBusy
+                ? 'جاري الإرسال...'
+                : 'إرسال للمدير'}
             </button>
           </form>
         </div>
       </div>
 
       {pendingPackage && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
-        }}>
-          <div style={{
-            background: '#fff', borderRadius: 22, padding: 0, maxWidth: 340, width: '100%',
-            textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.35)', overflow: 'hidden',
-          }}>
-            <div style={{
-              background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
-              padding: '26px 20px 22px',
-            }}>
-              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: 700, marginBottom: 6 }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(20,10,40,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 22,
+              padding: 0,
+              maxWidth: 340,
+              width: '100%',
+              textAlign: 'center',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                padding:
+                  '26px 20px 22px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                  marginBottom: 6,
+                }}
+              >
                 إظهار كرت من باقة
               </div>
-              <div style={{ fontSize: 26, fontWeight: 900, color: '#fff', lineHeight: 1.2 }}>
+
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 900,
+                  color: '#fff',
+                  lineHeight: 1.2,
+                }}
+              >
                 {pendingPackage.name}
               </div>
             </div>
 
-            <div style={{ padding: '20px 24px 24px' }}>
-              <div style={{ fontSize: 12.5, color: 'var(--ink-soft)', marginBottom: 20 }}>
-                سيتم تسليم كرت واحد وتسجيله كمباع مباشرة
+            <div
+              style={{
+                padding: '20px 24px 24px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: 'var(--ink-soft)',
+                  marginBottom: 20,
+                }}
+              >
+                سيتم تسليم كرت واحد
+                وتسجيله كمباع مباشرة
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                }}
+              >
                 <button
                   onClick={cancelReveal}
                   disabled={revealBusy}
                   style={{
-                    flex: 1, padding: '13px 0', borderRadius: 12, border: '1.5px solid var(--line)',
-                    background: '#fff', color: 'var(--ink-soft)', fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                    flex: 1,
+                    padding: '13px 0',
+                    borderRadius: 12,
+                    border:
+                      '1.5px solid var(--line)',
+                    background: '#fff',
+                    color:
+                      'var(--ink-soft)',
+                    fontWeight: 800,
+                    fontSize: 13.5,
+                    cursor: 'pointer',
                   }}
                 >
                   لا
                 </button>
+
                 <button
                   onClick={confirmReveal}
                   disabled={revealBusy}
                   style={{
-                    flex: 1, padding: '13px 0', borderRadius: 12, border: 'none',
-                    background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff',
-                    fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                    flex: 1,
+                    padding: '13px 0',
+                    borderRadius: 12,
+                    border: 'none',
+                    background:
+                      'linear-gradient(120deg, #7C3AED, #DB2777)',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: 13.5,
+                    cursor: 'pointer',
                   }}
                 >
-                  {revealBusy ? '...' : 'نعم'}
+                  {revealBusy
+                    ? '...'
+                    : 'نعم'}
                 </button>
               </div>
             </div>
@@ -321,57 +829,144 @@ export default function DistributorPage() {
       )}
 
       {revealedCard && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20,
-        }}>
-          <div style={{
-            background: 'linear-gradient(160deg, #ffffff 0%, #ffffff 60%, #F3F0FB 100%)',
-            borderRadius: 24, padding: 0, maxWidth: 380, width: '100%',
-            textAlign: 'center', position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
-              padding: '18px 20px', position: 'relative',
-            }}>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(20,10,40,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background:
+                'linear-gradient(160deg, #ffffff 0%, #ffffff 60%, #F3F0FB 100%)',
+              borderRadius: 24,
+              padding: 0,
+              maxWidth: 380,
+              width: '100%',
+              textAlign: 'center',
+              position: 'relative',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                padding: '18px 20px',
+                position: 'relative',
+              }}
+            >
               <button
                 onClick={closeModal}
                 style={{
-                  position: 'absolute', top: 12, left: 12, width: 30, height: 30, borderRadius: 10,
-                  border: 'none', background: 'rgba(255,255,255,0.25)', color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
+                  position: 'absolute',
+                  top: 12,
+                  left: 12,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 10,
+                  border: 'none',
+                  background:
+                    'rgba(255,255,255,0.25)',
+                  color: '#fff',
+                  fontSize: 15,
+                  fontWeight: 900,
+                  cursor: 'pointer',
                 }}
                 title="إغلاق"
               >
                 ✕
               </button>
-              <div style={{ fontSize: 12.5, color: '#E3D6FF', fontWeight: 700 }}>{revealedCard.packageName}</div>
-              <div style={{ fontSize: 12, color: '#fff', fontWeight: 900, marginTop: 2 }}>✓ تم البيع بنجاح</div>
+
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                }}
+              >
+                {revealedCard.packageName}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#fff',
+                  fontWeight: 900,
+                  marginTop: 2,
+                }}
+              >
+                ✓ تم البيع بنجاح
+              </div>
             </div>
 
-            <div style={{ padding: 26 }}>
-              <div className="mono" style={{
-                fontSize: 28, fontWeight: 900, margin: '4px 0 18px', letterSpacing: 1, direction: 'ltr',
-                color: '#3A1D66',
-              }}>
+            <div
+              style={{
+                padding: 26,
+              }}
+            >
+              <div
+                className="mono"
+                style={{
+                  fontSize: 28,
+                  fontWeight: 900,
+                  margin: '4px 0 18px',
+                  letterSpacing: 1,
+                  direction: 'ltr',
+                  color: '#3A1D66',
+                }}
+              >
                 {revealedCard.code}
               </div>
 
-              <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  marginBottom: 18,
+                }}
+              >
                 <button
                   onClick={copyCode}
                   style={{
-                    flex: 1, padding: '11px 0', borderRadius: 12, border: '1.5px solid #DDD3F5',
-                    background: '#F3F0FB', color: '#5B21B6', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: 12,
+                    border:
+                      '1.5px solid #DDD3F5',
+                    background: '#F3F0FB',
+                    color: '#5B21B6',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
                   }}
                 >
-                  {copied ? '✓ تم النسخ' : '📋 نسخ الكود'}
+                  {copied
+                    ? '✓ تم النسخ'
+                    : '📋 نسخ الكود'}
                 </button>
+
                 <button
                   onClick={shareWhatsapp}
                   style={{
-                    flex: 1, padding: '11px 0', borderRadius: 12, border: 'none',
-                    background: '#25D366', color: '#fff', fontWeight: 800, fontSize: 13, cursor: 'pointer',
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: '#25D366',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
                   }}
                 >
                   واتساب
@@ -381,8 +976,15 @@ export default function DistributorPage() {
               <button
                 onClick={closeModal}
                 style={{
-                  width: '100%', padding: '13px 0', borderRadius: 14, border: 'none',
-                  background: '#F3F0FB', color: '#5B21B6', fontWeight: 800, fontSize: 13.5, cursor: 'pointer',
+                  width: '100%',
+                  padding: '13px 0',
+                  borderRadius: 14,
+                  border: 'none',
+                  background: '#F3F0FB',
+                  color: '#5B21B6',
+                  fontWeight: 800,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
                 }}
               >
                 إغلاق
