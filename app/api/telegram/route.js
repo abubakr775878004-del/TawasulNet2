@@ -14,6 +14,14 @@ function escapeHtml(value = '') {
 
 export async function POST(req) {
   try {
+    // === سطر الفحص المؤقت لمعرفة حالة المتغيرات في Vercel Logs ===
+    const rawToken = process.env.TELEGRAM_BOT_TOKEN;
+    const rawChatId = process.env.TELEGRAM_CHAT_ID;
+
+    console.log("CHECK_ENV -> TOKEN:", rawToken ? "EXISTS (" + rawToken.length + " chars)" : "MISSING");
+    console.log("CHECK_ENV -> CHAT_ID:", rawChatId ? "EXISTS (" + rawChatId + ")" : "MISSING");
+    // ===============================================================
+
     // قراءة البيانات
     const body = await req.json();
 
@@ -41,9 +49,9 @@ export async function POST(req) {
       );
     }
 
-    // قراءة متغيرات البيئة
-    const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
-    const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+    // تنظيف متغيرات البيئة
+    const botToken = rawToken?.trim();
+    const chatId = rawChatId?.trim();
 
     if (!botToken || !chatId) {
       console.error('Telegram environment variables are missing');
@@ -73,8 +81,7 @@ export async function POST(req) {
       '⚡ <b>نظام إدارة شبكة تواصل</b>',
     ].join('\n');
 
-    const telegramUrl =
-      `https://api.telegram.org/bot${botToken}/sendMessage`;
+    const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
     // مهلة 15 ثانية
     const controller = new AbortController();
