@@ -15,6 +15,7 @@ export default function Sidebar({ role, active, name }) {
     { href: '/admin/packages', label: 'الباقات' },
     { href: '/admin/requests', label: 'طلبات الموزعين' },
     { href: '/admin/distributors', label: 'الموزعون' },
+    { href: '/admin/reports', label: 'التقارير' },
   ];
 
   const distLinks = [
