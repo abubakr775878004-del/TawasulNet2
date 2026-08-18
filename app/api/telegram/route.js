@@ -1,32 +1,42 @@
 import { NextResponse } from 'next/server';
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const body = await request.json();
-    const { distributor_name, content } = body;
+    const { distributor_name, content } = await req.json();
 
-    const token = '8819290545:AAE2fRCIhKhHTyvtIvAirsKMeXyMFCPKlAA';
-    const chatId = '529585421';
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
 
-    const telegramMessage = `📩 تنبيه جديد من نظام TawasulNet\n\n👤 الموزع: ${distributor_name}\n💬 الرسالة: ${content}`;
+    if (!botToken || !chatId) {
+      return NextResponse.json({ error: 'Telegram credentials missing' }, { status: 500 });
+    }
 
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    // تصميم الرسالة بشكل جذاب مع شعار وتنسيق خاص بالموزعين
+    const message = `🔔 *طلب / ملاحظة جديدة من موزع*\n\n` +
+                    `👤 *الموزع:* ${distributor_name}\n` +
+                    `💬 *الرسالة:* ${content}\n\n` +
+                    `⚡ *نظام إدارة شبكة تواصل*`;
+
+    const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    const response = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: chatId,
-        text: telegramMessage,
+        text: message,
+        parse_mode: 'Markdown'
       }),
     });
 
-    const data = await res.json();
+    const data = await response.json();
 
     if (!data.ok) {
-      throw new Error('فشل إرسال الرسالة إلى تيليجرام');
+      return NextResponse.json({ error: data.description }, { status: 400 });
     }
 
-    return NextResponse.json({ success: true, message: 'تم إرسال الإشعار بنجاح' });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
