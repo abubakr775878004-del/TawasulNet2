@@ -17,10 +17,8 @@ export default function DistributorPage() {
   const [revealError, setRevealError] = useState('');
   const [copied, setCopied] = useState(false);
   
-  // حالة خاصة لنسخ الكرت الشخصي
   const [personalCopied, setPersonalCopied] = useState(false);
 
-  // حالة خاصة لإرسال الملاحظة للمدير
   const [noteContent, setNoteContent] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
@@ -119,7 +117,6 @@ export default function DistributorPage() {
     setNoteBusy(true);
     setNoteMessage('');
 
-    // 1. حفظ الملاحظة في قاعدة البيانات
     const { error } = await supabase.from('distributor_notes').insert({
       distributor_id: profile.id,
       distributor_name: profile.full_name,
@@ -127,7 +124,6 @@ export default function DistributorPage() {
     });
 
     if (!error) {
-      // 2. إرسال تنبيه فوري إلى تيليجرام عبر الـ API
       try {
         await fetch('/api/telegram', {
           method: 'POST',
@@ -173,7 +169,6 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* خانة الكرت الشخصي الثابت للموزع */}
         {profile.personal_card && (
           <div style={{
             background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
@@ -243,7 +238,6 @@ export default function DistributorPage() {
           </div>
         </div>
 
-        {/* خانة إرسال رسالة أو ملاحظة للمدير */}
         <div className="panel" style={{ marginTop: 20 }}>
           <div className="panel-head">
             <h3>إرسال ملاحظة أو طلب للمدير</h3>
@@ -273,7 +267,6 @@ export default function DistributorPage() {
         </div>
       </div>
 
-      {/* نافذة تأكيد إظهار الكرت */}
       {pendingPackage && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
@@ -327,7 +320,6 @@ export default function DistributorPage() {
         </div>
       )}
 
-      {/* نافذة عرض الكرت بعد البيع */}
       {revealedCard && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)',
@@ -387,7 +379,6 @@ export default function DistributorPage() {
               </div>
 
               <button
-                onClick[closeModal]
                 onClick={closeModal}
                 style={{
                   width: '100%', padding: '13px 0', borderRadius: 14, border: 'none',
