@@ -33,12 +33,43 @@ export default function RequestCardsPage() {
     e.preventDefault();
     setError(''); setDone(false);
     if (!packageId || parsedQty < 1) return;
+
+    // 1) حفظ طلب الكروت في قاعدة البيانات أولاً
     const { error: insertError } = await supabase.from('card_requests').insert({
-      distributor_id: profile.id, package_id: packageId, quantity: parsedQty,
+      distributor_id: profile.id, 
+      package_id: packageId, 
+      quantity: parsedQty,
     });
-    if (insertError) { setError(insertError.message); return; }
+
+    if (insertError) { 
+      setError(insertError.message); 
+      return; 
+    }
+
     setDone(true);
+
+    // 2) إرسال إشعار إلى تليجرام تلقائياً
+    try {
+      const packageName = selectedPkg ? selectedPkg.name : 'باقة غير معروفةة';
+      const telegramContent = `طلب كروت جديد:\n📦 الباقة: ${packageName}\n🔢 الكمية: ${parsedQty}\n💰 الإجمالي: ${total} ريال`;
+
+      await fetch('/api/telegram', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          distributor_name: profile.full_name,
+          content: telegramContent,
+        }),
+        cache: 'no-store',
+      });
+    } catch (telegramError) {
+      console.error('Telegram notification error for card request:', telegramError);
+    }
+
     setQuantity('');
+    setPackageId('');
     loadData();
   }
 
@@ -60,7 +91,7 @@ export default function RequestCardsPage() {
 
         <div className="panel">
           {error && <div className="error-note">{error}</div>}
-          {done && <div className="pending-note">✅ تم إرسال طلبك، بانتظار موافقة المدير</div>}
+          {done && <div className="pending-note">✅ تم إرسال طلبك وحفظه، وتم إشعار المدير بنجاح</div>}
           <form onSubmit={submitRequest} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 200 }}>
               <label>الباقة</label>
