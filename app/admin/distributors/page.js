@@ -10,6 +10,7 @@ export default function DistributorsPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [topUps, setTopUps] = useState({});
+  const [personalCards, setPersonalCards] = useState({});
 
   async function loadList() {
     const { data, error: loadError } = await supabase
@@ -19,6 +20,9 @@ export default function DistributorsPage() {
       .order('created_at', { ascending: false });
     if (loadError) { setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); return; }
     setList(data || []);
+    const initial = {};
+    (data || []).forEach((d) => { initial[d.id] = d.personal_card || ''; });
+    setPersonalCards(initial);
   }
 
   useEffect(() => { if (profile) loadList(); }, [profile]);
@@ -53,6 +57,22 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  async function savePersonalCard(id) {
+    setError(''); setBusyId(id);
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ personal_card: personalCards[id] || null })
+      .eq('id', id);
+    setBusyId(null);
+    if (updateError) { setError('تعذّر حفظ الكرت الشخصي: ' + updateError.message); return; }
+    loadList();
+  }
+
+  const deleteBtnStyle = {
+    backgroundColor: '#dc2626', color: '#ffffff', opacity: 1,
+    padding: '7px 16px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+  };
+
   if (loading) return null;
   const pending = list.filter((d) => d.status === 'pending');
   const others = list.filter((d) => d.status !== 'pending');
@@ -80,7 +100,7 @@ export default function DistributorsPage() {
                   {busyId === d.id ? '...' : 'قبول'}
                 </button>
                 <button className="btn-sm btn-reject" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'rejected')}>رفض</button>
-                <button className="btn-sm" style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
+                <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
               </div>
             </div>
           ))}
@@ -88,39 +108,68 @@ export default function DistributorsPage() {
 
         <div className="panel">
           <div className="panel-head"><h3>كل الموزعين</h3><span className="muted">{others.length}</span></div>
-          <table>
-            <thead><tr><th>الاسم</th><th>البريد</th><th>الرصيد</th><th>الحالة</th><th>إضافة رصيد (ريال يمني)</th><th></th></tr></thead>
-            <tbody>
-              {others.map((d) => (
-                <tr key={d.id}>
-                  <td>{d.full_name}</td>
-                  <td>{d.email}</td>
-                  <td className="mono">{Number(d.balance).toLocaleString('en-US')} ريال</td>
-                  <td>
-                    <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`}>
-                      {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="مثلاً 50000"
-                        value={topUps[d.id] || ''}
-                        onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
-                        style={{ width: 110, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
-                      />
-                      <button className="btn-sm btn-approve" disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>إضافة</button>
-                    </div>
-                  </td>
-                  <td>
-                    <button className="btn-sm" style={{ backgroundColor: '#dc2626', color: '#ffffff', opacity: 1, padding: '6px 14px', borderRadius: '6px', border: 'none' }} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>حذف</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {others.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا يوجد موزعون بعد</div>}
+          {others.map((d) => (
+            <div
+              key={d.id}
+              style={{
+                borderTop: '1px solid var(--line)', padding: '14px 4px',
+                display: 'flex', flexDirection: 'column', gap: 10,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>{d.full_name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{d.email}</div>
+                </div>
+                <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+                  حذف الحساب
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>
+                    {Number(d.balance).toLocaleString('en-US')} ريال
+                  </span>
+                  <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`}>
+                    {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="مثلاً 50000"
+                    value={topUps[d.id] || ''}
+                    onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
+                    style={{ width: 110, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
+                  />
+                  <button className="btn-sm btn-approve" disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>
+                    إضافة رصيد
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#F3F0FB', padding: 10, borderRadius: 12 }}>
+                <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 700, whiteSpace: 'nowrap' }}>كرته الشخصي:</span>
+                <input
+                  type="text"
+                  placeholder="اكتب كود الكرت هنا"
+                  value={personalCards[d.id] ?? ''}
+                  onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
+                  style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
+                />
+                <button
+                  className="btn-sm btn-approve"
+                  disabled={busyId === d.id}
+                  onClick={() => savePersonalCard(d.id)}
+                >
+                  حفظ
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
