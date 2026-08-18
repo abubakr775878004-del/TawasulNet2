@@ -20,6 +20,11 @@ export default function DistributorPage() {
   // حالة خاصة لنسخ الكرت الشخصي
   const [personalCopied, setPersonalCopied] = useState(false);
 
+  // حالة خاصة لإرسال الملاحظة للمدير
+  const [noteContent, setNoteContent] = useState('');
+  const [noteBusy, setNoteBusy] = useState(false);
+  const [noteMessage, setNoteMessage] = useState('');
+
   async function load() {
     if (!profile) return;
     const { data } = await supabase
@@ -108,6 +113,28 @@ export default function DistributorPage() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   }
 
+  async function sendNoteToAdmin(e) {
+    e.preventDefault();
+    if (!noteContent.trim()) return;
+    setNoteBusy(true);
+    setNoteMessage('');
+
+    const { error } = await supabase.from('distributor_notes').insert({
+      distributor_id: profile.id,
+      distributor_name: profile.full_name,
+      content: noteContent.trim()
+    });
+
+    setNoteBusy(false);
+    if (!error) {
+      setNoteContent('');
+      setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
+      setTimeout(() => setNoteMessage(''), 3000);
+    } else {
+      setNoteMessage('❌ تعذّر إرسال الرسالة، حاول مرة أخرى');
+    }
+  }
+
   if (loading) return null;
 
   const byPackage = {};
@@ -131,7 +158,7 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* خانة الكرت الشخصي الثابت للموزع (يتم تعديلها من لوحة المدير وتظهر هنا دائماً) */}
+        {/* خانة الكرت الشخصي الثابت للموزع */}
         {profile.personal_card && (
           <div style={{
             background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
@@ -199,6 +226,35 @@ export default function DistributorPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* خانة إرسال رسالة أو ملاحظة للمدير */}
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-head">
+            <h3>إرسال ملاحظة أو طلب للمدير</h3>
+          </div>
+          <form onSubmit={sendNoteToAdmin}>
+            <textarea
+              rows={3}
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
+              style={{ width: '100%', padding: 12, borderRadius: 10, border: '1.5px solid var(--line)', marginBottom: 10, fontSize: 13.5 }}
+            />
+            {noteMessage && (
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10, color: noteMessage.startsWith('✓') ? '#10B981' : '#DC2626' }}>
+                {noteMessage}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={noteBusy}
+              className="btn-primary"
+              style={{ width: 'auto', padding: '10px 20px' }}
+            >
+              {noteBusy ? 'جاري الإرسال...' : 'إرسال للمدير'}
+            </button>
+          </form>
         </div>
       </div>
 
