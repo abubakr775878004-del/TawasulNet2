@@ -42,9 +42,8 @@ export default function CardsPage() {
     return (c.created_at ? c.created_at.split('T')[0] : '') === previewDate;
   });
 
-  // منطق تحديد الكل وإلغاء التحديد
   function toggleAll() {
-    if (selected.size === filteredCards.length) {
+    if (selected.size === filteredCards.length && filteredCards.length > 0) {
       setSelected(new Set());
     } else {
       setSelected(new Set(filteredCards.map(c => c.id)));
@@ -95,25 +94,63 @@ export default function CardsPage() {
         <h1>المخزون والكروت</h1>
         <p className="greet" style={{ marginBottom: 20 }}>إدارة الكروت (تحذف المباعة تلقائياً بعد 24 ساعة)</p>
 
-        {/* [نفس أقسام الإضافة السابقة] */}
+        {/* إضافة فردية */}
         <div className="panel">
-           <h3>إضافة كرت</h3>
-           <form onSubmit={addCard} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-             <input value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="رقم الكرت" style={{ padding: 8, borderRadius: 8, border: '1px solid var(--line)' }}/>
-             <select value={packageId} onChange={(e) => setPackageId(e.target.value)} style={{ padding: 8, borderRadius: 8 }}>
-               <option value="">الباقة</option>
-               {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-             </select>
-             <button type="submit" className="btn-primary">إضافة</button>
+           <div className="panel-head"><h3>إضافة كرت يدويًا</h3></div>
+           {error && <div className="error-note">{error}</div>}
+           <form onSubmit={addCard} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+             <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 150 }}>
+               <label>رقم الكرت</label>
+               <input className="mono" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="72419038221501" />
+             </div>
+             <div className="field" style={{ marginBottom: 0, width: 150 }}>
+               <label>الباقة</label>
+               <select value={packageId} onChange={(e) => setPackageId(e.target.value)}>
+                 <option value="">اختر باقة</option>
+                 {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+               </select>
+             </div>
+             <button className="btn-primary" type="submit">إضافة</button>
            </form>
         </div>
 
-        <div className="panel" style={{ padding: '16px' }}>
-          <h3>معاينة الكروت حسب التاريخ</h3>
-          <input type="date" value={previewDate} onChange={(e) => setPreviewDate(e.target.value)} style={{ padding: 8, borderRadius: 8 }} />
+        {/* إضافة جماعية */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>إضافة مجموعة كروت دفعة واحدة</h3>
+            <span className="muted">الصق الأرقام (رقم في كل سطر)</span>
+          </div>
+          {bulkError && <div className="error-note">{bulkError}</div>}
+          {bulkDone && <div className="pending-note">✅ {bulkDone}</div>}
+          <form onSubmit={addBulkCards}>
+            <textarea className="mono" rows={4} value={bulkText} onChange={(e) => setBulkText(e.target.value)} placeholder="72419038221501&#10;72419038221502" style={{ width: '100%', padding: 10, borderRadius: 10, border: '1.5px solid var(--line)', marginBottom: 10 }} />
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+               <div className="field" style={{ marginBottom: 0, width: 180 }}>
+                 <label>الباقة</label>
+                 <select value={bulkPackageId} onChange={(e) => setBulkPackageId(e.target.value)}>
+                   <option value="">اختر باقة</option>
+                   {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                 </select>
+               </div>
+               <button className="btn-primary" type="submit">إضافة الكل</button>
+            </div>
+          </form>
         </div>
 
+        {/* معاينة الحذف */}
+        <div className="panel" style={{ padding: '16px' }}>
+          <div className="panel-head"><h3 style={{ fontSize: '14px' }}>معاينة الكروت حسب التاريخ</h3></div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <input type="date" value={previewDate} onChange={(e) => setPreviewDate(e.target.value)} style={{ padding: 8, borderRadius: 8, border: '1px solid var(--line)' }} />
+            <button onClick={() => setPreviewDate('')} style={{ background: '#e5e7eb', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: '12px', cursor: 'pointer' }}>إلغاء التصفية</button>
+          </div>
+        </div>
+
+        {/* الجدول */}
         <div className="panel">
+          <div className="panel-head">
+            <h3>قائمة الكروت ({filteredCards.length})</h3>
+          </div>
           <table>
             <thead>
               <tr>
@@ -137,7 +174,7 @@ export default function CardsPage() {
           {selected.size > 0 && (
             <div style={{ marginTop: 15, background: '#FEE2E2', padding: 12, borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontWeight: 'bold' }}>تم تحديد {selected.size} كرت</span>
-              <button onClick={deleteSelected} style={{ background: '#DC2626', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none' }}>حذف المحدد</button>
+              <button onClick={deleteSelected} style={{ background: '#DC2626', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>حذف المحدد نهائياً</button>
             </div>
           )}
         </div>
