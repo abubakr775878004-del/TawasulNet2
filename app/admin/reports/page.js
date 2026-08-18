@@ -59,7 +59,7 @@ export default function ReportsPage() {
       map[s.distributor_id].salesCount += 1;
       map[s.distributor_id].salesValue += Number(s.price);
 
-      // تجميع الإجمالي العام للشبكة
+      // تجميع الإجمالي العام للشبكة (داخل الـ forEach ليعمل بدقة صحيحة)
       netSalesCount += 1;
       netSalesValue += Number(s.price);
     });
@@ -84,7 +84,7 @@ export default function ReportsPage() {
 
   return (
     <div className="app">
-      <Sidebar role="admin" active="/admin/reports" name={profile.full_name} />
+      <Sidebar role="admin" active="/admin/reports" name={profile?.full_name} />
       <div className="main">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
           <div>
@@ -122,14 +122,14 @@ export default function ReportsPage() {
         </div>
 
         {/* البطاقات العلوية الإجمالية للمبيعات */}
-        <div className="grid-stats" style={{ marginBottom: 20 }}>
-          <div className="stat">
-            <div className="label">إجمالي الكروت المباعة ({filterLabel[filter]})</div>
-            <div className="value" style={{ color: '#0F766E' }}>{totalNetworkSalesCount} كرت</div>
+        <div className="grid-stats" style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+          <div className="stat" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
+            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>إجمالي الكروت المباعة ({filterLabel[filter]})</div>
+            <div className="value" style={{ fontSize: '20px', fontWeight: 900, color: '#0F766E', marginTop: '6px' }}>{totalNetworkSalesCount} كرت</div>
           </div>
-          <div className="stat">
-            <div className="label">إجمالي المبلغ المحقق ({filterLabel[filter]})</div>
-            <div className="value mono" style={{ color: '#10B981' }}>{totalNetworkSalesValue.toLocaleString('en-US')} ريال</div>
+          <div className="stat" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
+            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>إجمالي المبلغ المحقق ({filterLabel[filter]})</div>
+            <div className="value mono" style={{ fontSize: '20px', fontWeight: 900, color: '#10B981', marginTop: '6px' }}>{totalNetworkSalesValue.toLocaleString('en-US')} ريال</div>
           </div>
         </div>
 
