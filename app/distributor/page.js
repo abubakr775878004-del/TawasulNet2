@@ -405,6 +405,31 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
+        {/* بطاقة الذمم والديون المالية للموزع (مضافة حديثاً) */}
+        <div style={{ 
+          background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
+          border: Number(profile?.debt_balance || 0) > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          padding: '16px', 
+          borderRadius: '16px', 
+          marginBottom: '20px' 
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '13px', color: Number(profile?.debt_balance || 0) > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
+                {Number(profile?.debt_balance || 0) > 0 ? 'المبلغ المطلوب سداده للإدارة (عهدة):' : 'حساب العهدة والديون:'}
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: Number(profile?.debt_balance || 0) > 0 ? '#DC2626' : '#059669' }}>
+                {Number(profile?.debt_balance || 0).toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ريال</span>
+              </div>
+            </div>
+            {Number(profile?.debt_balance || 0) > 0 && (
+              <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                عليكم مبالغ معلقة
+              </div>
+            )}
+          </div>
+        </div>
+
         {profile.personal_card && (
           <div
             style={{
