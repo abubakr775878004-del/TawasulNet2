@@ -12,6 +12,7 @@ export default function DistributorPage() {
 
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
+  const [isOnline, setIsOnline] = useState(true); // مؤشر الاتصال الجديد
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [revealedCard, setRevealedCard] = useState(null);
@@ -50,7 +51,18 @@ export default function DistributorPage() {
   }
 
   useEffect(() => {
-    load();
+    if (profile) {
+      load();
+    }
+    // تفعيل مراقبة الاتصال بالإنترنت/السيرفر
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [profile]);
 
   function askReveal(pkgId, pkgName) {
@@ -362,7 +374,7 @@ export default function DistributorPage() {
       />
 
       <div className="main">
-        <div className="topbar">
+        <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1>
               مرحبًا، {profile.full_name} 👋
@@ -371,6 +383,23 @@ export default function DistributorPage() {
             <div className="greet">
               إليك ملخص حسابك اليوم
             </div>
+          </div>
+
+          {/* مؤشر الاتصال الجديد (نشط / خامل) */}
+          <div style={{ 
+            display: 'flex', alignItems: 'center', gap: 6, 
+            background: isOnline ? '#ECFDF5' : '#FEF2F2', 
+            color: isOnline ? '#059669' : '#DC2626', 
+            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
+          }}>
+            <span style={{ 
+              width: 7, height: 7, borderRadius: '50%', 
+              background: isOnline ? '#10B981' : '#EF4444',
+              display: 'inline-block',
+              boxShadow: isOnline ? '0 0 6px #10B981' : 'none'
+            }}></span>
+            {isOnline ? 'نشط' : 'خامل'}
           </div>
         </div>
 
