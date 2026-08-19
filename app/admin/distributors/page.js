@@ -11,6 +11,7 @@ export default function DistributorsPage() {
   const [busyId, setBusyId] = useState(null);
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
+  const [debts, setDebts] = useState({}); // حالة خاصة لمبالغ الديون والعهدة
 
   async function loadList() {
     const { data, error: loadError } = await supabase
@@ -20,9 +21,14 @@ export default function DistributorsPage() {
       .order('created_at', { ascending: false });
     if (loadError) { setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); return; }
     setList(data || []);
-    const initial = {};
-    (data || []).forEach((d) => { initial[d.id] = d.personal_card || ''; });
-    setPersonalCards(initial);
+    const initialCards = {};
+    const initialDebts = {};
+    (data || []).forEach((d) => { 
+      initialCards[d.id] = d.personal_card || ''; 
+      initialDebts[d.id] = '';
+    });
+    setPersonalCards(initialCards);
+    setDebts(initialDebts);
   }
 
   useEffect(() => { if (profile) loadList(); }, [profile]);
@@ -57,6 +63,30 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  // دالة تحديث وعمليات الدين / العهدة أو السداد
+  async function updateDebt(id, actionType) {
+    const amount = parseFloat(debts[id]);
+    if (!amount || amount <= 0) return;
+    setError(''); setBusyId(id);
+    
+    const current = list.find((d) => d.id === id);
+    const currentDebt = Number(current?.debt_balance || 0);
+    
+    // إذا كانت العملية أخذ عهدة جديدة يزاد الدين، وإذا كانت سداد يخصم من الدين
+    const newDebt = actionType === 'add' ? currentDebt + amount : Math.max(0, currentDebt - amount);
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ debt_balance: newDebt })
+      .eq('id', id);
+
+    setBusyId(null);
+    if (updateError) { setError('تعذّر تحديث حساب العهدة: ' + updateError.message); return; }
+    
+    setDebts({ ...debts, [id]: '' });
+    loadList();
+  }
+
   async function savePersonalCard(id) {
     setError(''); setBusyId(id);
     const { error: updateError } = await supabase
@@ -82,7 +112,7 @@ export default function DistributorsPage() {
       <Sidebar role="admin" active="/admin/distributors" name={profile.full_name} />
       <div className="main">
         <h1>الموزعون</h1>
-        <p className="greet" style={{ marginBottom: 20 }}>إدارة طلبات التسجيل والحسابات الحالية وإضافة الرصيد</p>
+        <p className="greet" style={{ marginBottom: 20 }}>إدارة طلبات التسجيل والحسابات الحالية وإضافة الرصيد والذمم المالية</p>
 
         {error && <div className="error-note">{error}</div>}
 
@@ -127,6 +157,7 @@ export default function DistributorsPage() {
                 </button>
               </div>
 
+              {/* قسم الرصيد وحالة الحساب */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>
@@ -151,6 +182,41 @@ export default function DistributorsPage() {
                 </div>
               </div>
 
+              {/* قسم إدارة الذمم والديون (العهدة) الجديد */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: '#FEF2F2', padding: 10, borderRadius: 12, border: '1px solid #FEE2E2' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12, color: '#991B1B', fontWeight: 800 }}>العهدَة / الدين:</span>
+                  <span className="mono" style={{ fontWeight: 900, fontSize: 13.5, color: '#DC2626' }}>
+                    {Number(d.debt_balance || 0).toLocaleString('en-US')} ريال
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="المبلغ"
+                    value={debts[d.id] || ''}
+                    onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
+                    style={{ width: 90, padding: '6px 8px', borderRadius: 8, border: '1.5px solid #FCA5A5', fontFamily: 'monospace', fontSize: 12 }}
+                  />
+                  <button 
+                    disabled={busyId === d.id || !debts[d.id]} 
+                    onClick={() => updateDebt(d.id, 'add')}
+                    style={{ background: '#3B82F6', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    تسجيل عهدة
+                  </button>
+                  <button 
+                    disabled={busyId === d.id || !debts[d.id]} 
+                    onClick={() => updateDebt(d.id, 'pay')}
+                    style={{ background: '#10B981', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    سداد
+                  </button>
+                </div>
+              </div>
+
+              {/* قسم الكرت الشخصي */}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#F3F0FB', padding: 10, borderRadius: 12 }}>
                 <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 700, whiteSpace: 'nowrap' }}>كرته الشخصي:</span>
                 <input
