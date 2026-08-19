@@ -12,7 +12,9 @@ export default function DistributorPage() {
 
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
+  const [recentSales, setRecentSales] = useState([]); // سجل أحدث المبيعات
   const [isOnline, setIsOnline] = useState(true); // مؤشر الاتصال الجديد
+  const [isRefreshing, setIsRefreshing] = useState(false); // حالة زر التحديث اليدوي
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [revealedCard, setRevealedCard] = useState(null);
@@ -28,26 +30,45 @@ export default function DistributorPage() {
 
   async function load() {
     if (!profile) return;
+    setIsRefreshing(true);
 
-    const { data } = await supabase
-      .from('cards')
-      .select('*, packages(name, price)')
-      .eq('assigned_to', profile.id)
-      .eq('status', 'with_distributor');
+    try {
+      const { data } = await supabase
+        .from('cards')
+        .select('*, packages(name, price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'with_distributor');
 
-    setMyCards(data || []);
+      setMyCards(data || []);
 
-    const since = new Date();
-    since.setHours(0, 0, 0, 0);
+      const since = new Date();
+      since.setHours(0, 0, 0, 0);
 
-    const { count } = await supabase
-      .from('cards')
-      .select('*', { count: 'exact', head: true })
-      .eq('assigned_to', profile.id)
-      .eq('status', 'sold')
-      .gte('sold_at', since.toISOString());
+      const { count } = await supabase
+        .from('cards')
+        .select('*', { count: 'exact', head: true })
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte('sold_at', since.toISOString());
 
-    setSoldToday(count || 0);
+      setSoldToday(count || 0);
+
+      // جلب سجل آخر المبيعات اليومية
+      const { data: salesData } = await supabase
+        .from('cards')
+        .select('id, code, sold_at, packages(name, price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte('sold_at', since.toISOString())
+        .order('sold_at', { ascending: false })
+        .limit(10);
+
+      setRecentSales(salesData || []);
+    } catch (err) {
+      console.error('Error loading distributor data:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -405,7 +426,7 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* بطاقة الذمم والديون المالية للموزع (مضافة حديثاً) */}
+        {/* بطاقة الذمم والديون المالية للموزع */}
         <div style={{ 
           background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
           border: Number(profile?.debt_balance || 0) > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
@@ -581,12 +602,28 @@ export default function DistributorPage() {
         </div>
 
         <div className="panel">
-          <div className="panel-head">
-            <h3>باقاتي المتاحة</h3>
+          <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <h3>باقاتي المتاحة</h3>
 
-            <span className="muted">
-              اضغط "إظهار كرت" عند وجود زبون
-            </span>
+              <span className="muted">
+                اضغط "إظهار كرت" عند وجود زبون
+              </span>
+            </div>
+
+            {/* زر التحديث اليدوي */}
+            <button 
+              onClick={load} 
+              disabled={isRefreshing}
+              style={{
+                background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
+                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
+              }}
+            >
+              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
+              {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
+            </button>
           </div>
 
           {revealError && (
@@ -659,6 +696,46 @@ export default function DistributorPage() {
               )
             )}
           </div>
+        </div>
+
+        {/* سجل أحدث المبيعات اليومية */}
+        <div className="panel" style={{ marginTop: 20 }}>
+          <div className="panel-head">
+            <h3>سجل مبيعات اليوم الأخيرة</h3>
+            <span className="muted">آخر الكروت التي قمت ببيعها اليوم</span>
+          </div>
+
+          {recentSales.length === 0 ? (
+            <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
+              لم تقم ببيع أي كرت حتى الآن اليوم.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+              {recentSales.map((sale) => (
+                <div key={sale.id} style={{ 
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' 
+                }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
+                      {sale.packages?.name || 'باقة'}
+                    </div>
+                    <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
+                      {sale.code}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#059669' }}>
+                      {sale.packages?.price || 0} ريال
+                    </div>
+                    <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
+                      {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div
