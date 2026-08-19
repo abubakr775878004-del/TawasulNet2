@@ -22,7 +22,7 @@ export default function Sidebar({ role, active, name }) {
   const distLinks = [
     { href: '/distributor', label: 'الرئيسية' },
     { href: '/distributor/request', label: 'طلب كروت جديد' },
-    { href: '/distributor/sales', label: 'مبيعاتي (٢٤ ساعة)' },
+    { href: '/distributor/sales', label: 'مبيعاتي والتقارير' },
   ];
 
   const links = role === 'admin' ? adminLinks : distLinks;
