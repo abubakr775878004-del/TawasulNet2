@@ -157,39 +157,53 @@ export default function DistributorPage() {
   function shareWhatsapp() {
     if (!revealedCard) return;
 
-    const footerMessages = [
-      "🤍 *تذكير:* اتق الله حيثما كنت، وأتبع السيئة الحسنة تمحها.",
-      "صلى الله وسلم وبارك على نبينا محمد وعلى آله وصحبه أجمعين ",
-      "🌿 *حكمة:* من تقوى الله عز وجل أن يراها حيث أمرك ويخافك حيث نهاك.",
-      "صلّ على الحبيب المصطفى ﷺ ليزداد قلبك طمأنينة وسروراً.",
-      "✨ *ذكر:* استغفر الله العظيم واتوب إليه، ألا بذكر الله تطمئن القلوب.",
-      "صلّ الله عليه وسلم — خير الأيام يوم الجمعة وخير الذكر الصلاة على النبي."
+    const dailyReminders = [
+      'أكثروا من الصلاة على النبي ﷺ 🤍',
+      'سبحان الله وبحمده، سبحان الله العظيم 🌿',
+      'لا تنسَ ذكر الله، فبذكره تطمئن القلوب 🤍',
+      'اللهم صل وسلم وبارك على نبينا محمد ﷺ 🌸',
+      'استغفر الله وأكثر من ذكره 🌿',
+      'الحمد لله على كل نعمة 🤍',
+      'اتقِ الله واجعل الخير طريقك دائمًا ✨',
+      'اللهم اجعل يومكم خيرًا وبركة 🙏',
+      'من توكل على الله كفاه 🤍'
     ];
 
-    const randomFooter = footerMessages[Math.floor(Math.random() * footerMessages.length)];
+    const dailyReminder =
+      dailyReminders[
+        Math.floor(Math.random() * dailyReminders.length)
+      ];
 
     const now = new Date();
-    const saleDate = now.toLocaleDateString('ar-YE');
-    const saleTime = now.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
 
-    const whatsappText = `╔═══════════════════╗
-   ✨ *شبكة تواصل - كرت انترنت* ✨
-╚═══════════════════╝
+    const saleDate = now.toLocaleDateString('ar-YE', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
 
-📦 *نوع الباقة:* ${revealedCard.packageName}
+    const saleTime = now.toLocaleTimeString('ar-YE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const text = `📶 *شبكة تواصل*
+
+🎫 *كرت الإنترنت*
+
 🔑 *رقم الكرت:*
-\`\`\`${revealedCard.code}\`\`\`
 
-📅 *تاريخ البيع:* ${saleDate} | ${saleTime}
+\`${revealedCard.code}\`
 
-─────────────────────
-${randomFooter}
-─────────────────────
+📦 *الباقة:* ${revealedCard.packageName}
+📅 ${saleDate} | 🕐 ${saleTime}
 
-🙏 _شكراً لثقتكم بنا، نتمنى لكم وقتاً ممتعاً!_`;
+🤍 ${dailyReminder}
+
+🙏 *شكرًا لاختياركم شبكة تواصل*`;
 
     window.open(
-      `https://wa.me/?text=${encodeURIComponent(whatsappText)}`,
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
       '_blank'
     );
   }
