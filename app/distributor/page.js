@@ -157,30 +157,43 @@ export default function DistributorPage() {
   function shareWhatsapp() {
     if (!revealedCard) return;
 
-    const text = `كود الكرت: ${revealedCard.code} — ${revealedCard.packageName}`;
+    const footerMessages = [
+      "🤍 *تذكير:* اتق الله حيثما كنت، وأتبع السيئة الحسنة تمحها.",
+      "صلى الله وسلم وبارك على نبينا محمد وعلى آله وصحبه أجمعين ",
+      "🌿 *حكمة:* من تقوى الله عز وجل أن يراها حيث أمرك ويخافك حيث نهاك.",
+      "صلّ على الحبيب المصطفى ﷺ ليزداد قلبك طمأنينة وسروراً.",
+      "✨ *ذكر:* استغفر الله العظيم واتوب إليه، ألا بذكر الله تطمئن القلوب.",
+      "صلّ الله عليه وسلم — خير الأيام يوم الجمعة وخير الذكر الصلاة على النبي."
+    ];
+
+    const randomFooter = footerMessages[Math.floor(Math.random() * footerMessages.length)];
+
+    const now = new Date();
+    const saleDate = now.toLocaleDateString('ar-YE');
+    const saleTime = now.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+
+    const whatsappText = `╔═══════════════════╗
+   ✨ *شبكة تواصل - كرت انترنت* ✨
+╚═══════════════════╝
+
+📦 *نوع الباقة:* ${revealedCard.packageName}
+🔑 *رقم الكرت:*
+\`\`\`${revealedCard.code}\`\`\`
+
+📅 *تاريخ البيع:* ${saleDate} | ${saleTime}
+
+─────────────────────
+${randomFooter}
+─────────────────────
+
+🙏 _شكراً لثقتكم بنا، نتمنى لكم وقتاً ممتعاً!_`;
 
     window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      `https://wa.me/?text=${encodeURIComponent(whatsappText)}`,
       '_blank'
     );
   }
 
-  /*
-   * ============================================================
-   * إرسال ملاحظة للمدير + إشعار Telegram
-   * ============================================================
-   *
-   * التسلسل:
-   *
-   * 1. التحقق من البيانات.
-   * 2. حفظ الملاحظة في Supabase.
-   * 3. بعد نجاح الحفظ يتم إرسال Telegram.
-   * 4. فشل Telegram لا يحذف الملاحظة من قاعدة البيانات.
-   * 5. يتم فحص response.ok و success من API.
-   *
-   * هذا يسمح بإرسال رسائل متعددة ومتتالية بدون الاعتماد
-   * على نجاح Telegram في عملية حفظ الرسالة.
-   */
   async function sendNoteToAdmin(e) {
     e.preventDefault();
 
@@ -199,12 +212,6 @@ export default function DistributorPage() {
     setNoteMessage('');
 
     try {
-      /*
-       * ========================================================
-       * المرحلة الأولى: حفظ الرسالة في قاعدة البيانات
-       * ========================================================
-       */
-
       const { error: dbError } = await supabase
         .from('distributor_notes')
         .insert({
@@ -212,11 +219,6 @@ export default function DistributorPage() {
           distributor_name: profile.full_name,
           content: content,
         });
-
-      /*
-       * إذا فشل الحفظ، نتوقف هنا.
-       * لا نرسل Telegram لأن الرسالة لم تُحفظ.
-       */
 
       if (dbError) {
         console.error(
@@ -230,12 +232,6 @@ export default function DistributorPage() {
 
         return;
       }
-
-      /*
-       * ========================================================
-       * المرحلة الثانية: إرسال الإشعار إلى Telegram
-       * ========================================================
-       */
 
       let telegramSuccess = false;
 
@@ -266,14 +262,6 @@ export default function DistributorPage() {
           );
         }
 
-        /*
-         * النجاح الحقيقي يجب أن يكون:
-         *
-         * HTTP 2xx
-         * +
-         * success === true
-         */
-
         if (
           telegramResponse.ok &&
           telegramResult?.success === true
@@ -286,22 +274,11 @@ export default function DistributorPage() {
           );
         }
       } catch (telegramError) {
-        /*
-         * Telegram فشل، لكن الملاحظة محفوظة بالفعل.
-         * لذلك لا نعتبر عملية حفظ الرسالة فاشلة.
-         */
-
         console.error(
           'Telegram connection error:',
           telegramError
         );
       }
-
-      /*
-       * ========================================================
-       * المرحلة الثالثة: النتيجة للموزع
-       * ========================================================
-       */
 
       setNoteContent('');
 
