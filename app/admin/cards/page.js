@@ -12,6 +12,7 @@ export default function CardsPage() {
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [previewDate, setPreviewDate] = useState('');
+  const [previewPackageId, setPreviewPackageId] = useState(''); // الحالة الإضافية المخصصة لاختيار الباقة في التصفية
 
   const [code, setCode] = useState('');
   const [packageId, setPackageId] = useState('');
@@ -37,9 +38,16 @@ export default function CardsPage() {
 
   useEffect(() => { if (profile) loadAll(); }, [profile]);
 
+  // التصفية المزدوجة (حسب التاريخ وحسب الباقة في نفس الوقت)
   const filteredCards = cards.filter(c => {
-    if (!previewDate) return true;
-    return (c.created_at ? c.created_at.split('T')[0] : '') === previewDate;
+    // فلترة التاريخ
+    const cardDate = c.created_at ? c.created_at.split('T')[0] : '';
+    const matchDate = !previewDate || cardDate === previewDate;
+
+    // فلترة الباقة
+    const matchPackage = !previewPackageId || c.package_id === previewPackageId;
+
+    return matchDate && matchPackage;
   });
 
   function toggleAll() {
@@ -137,12 +145,20 @@ export default function CardsPage() {
           </form>
         </div>
 
-        {/* معاينة الحذف */}
+        {/* معاينة وتصفية الكروت حسب الباقة والتاريخ معاً */}
         <div className="panel" style={{ padding: '16px' }}>
-          <div className="panel-head"><h3 style={{ fontSize: '14px' }}>معاينة الكروت حسب التاريخ</h3></div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="panel-head"><h3 style={{ fontSize: '14px' }}>معاينة وتصفية الكروت حسب الباقة والتاريخ</h3></div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select 
+              value={previewPackageId} 
+              onChange={(e) => setPreviewPackageId(e.target.value)} 
+              style={{ padding: 8, borderRadius: 8, border: '1px solid var(--line)', minWidth: 150 }}
+            >
+              <option value="">كل الباقات</option>
+              {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
             <input type="date" value={previewDate} onChange={(e) => setPreviewDate(e.target.value)} style={{ padding: 8, borderRadius: 8, border: '1px solid var(--line)' }} />
-            <button onClick={() => setPreviewDate('')} style={{ background: '#e5e7eb', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: '12px', cursor: 'pointer' }}>إلغاء التصفية</button>
+            <button onClick={() => { setPreviewDate(''); setPreviewPackageId(''); }} style={{ background: '#e5e7eb', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: '12px', cursor: 'pointer' }}>إلغاء التصفية</button>
           </div>
         </div>
 
