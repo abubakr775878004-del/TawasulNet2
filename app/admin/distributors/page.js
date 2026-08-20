@@ -50,35 +50,39 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  // تم تحديثها لتستخدم RPC لضمان الذرية ومنع تضارب الأرصدة
   async function addBalance(id) {
     const amount = parseFloat(topUps[id]);
     if (!amount || amount <= 0) return;
     setError(''); setBusyId(id);
-    const current = list.find((d) => d.id === id);
-    const newBalance = (current?.balance || 0) + amount;
-    const { error: updateError } = await supabase.from('profiles').update({ balance: newBalance }).eq('id', id);
+    
+    const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+      target_id: id,
+      amount: amount,
+      is_debt: false,
+      is_add: true
+    });
+
     setBusyId(null);
     if (updateError) { setError('تعذّرت إضافة الرصيد: ' + updateError.message); return; }
     setTopUps({ ...topUps, [id]: '' });
     loadList();
   }
 
-  // دالة تحديث وعمليات الدين / العهدة أو السداد
+  // تم تحديثها لتستخدم RPC لضمان الذرية ومنع تضارب الديون والعهد
   async function updateDebt(id, actionType) {
     const amount = parseFloat(debts[id]);
     if (!amount || amount <= 0) return;
     setError(''); setBusyId(id);
     
-    const current = list.find((d) => d.id === id);
-    const currentDebt = Number(current?.debt_balance || 0);
-    
-    // إذا كانت العملية أخذ عهدة جديدة يزاد الدين، وإذا كانت سداد يخصم من الدين
-    const newDebt = actionType === 'add' ? currentDebt + amount : Math.max(0, currentDebt - amount);
+    const isAdd = actionType === 'add';
 
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ debt_balance: newDebt })
-      .eq('id', id);
+    const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+      target_id: id,
+      amount: amount,
+      is_debt: true,
+      is_add: isAdd
+    });
 
     setBusyId(null);
     if (updateError) { setError('تعذّر تحديث حساب العهدة: ' + updateError.message); return; }
@@ -182,7 +186,7 @@ export default function DistributorsPage() {
                 </div>
               </div>
 
-              {/* قسم إدارة الذمم والديون (العهدة) الجديد */}
+              {/* قسم إدارة الذمم والديون (العهدة) */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: '#FEF2F2', padding: 10, borderRadius: 12, border: '1px solid #FEE2E2' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12, color: '#991B1B', fontWeight: 800 }}>العهدَة / الدين:</span>
