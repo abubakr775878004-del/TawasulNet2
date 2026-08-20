@@ -262,7 +262,11 @@ export default function ImportPdfPage() {
                 <label>أضف الكل إلى الباقة</label>
                 <select value={packageId} onChange={(e) => setPackageId(e.target.value)}>
                   <option value="">اختر باقة</option>
-                  {packages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {packages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — {p.price} ريال
+                    </option>
+                  ))}
                 </select>
               </div>
               <button className="btn-primary" style={{ width: 200 }} disabled={!packageId || busy} onClick={confirmImport}>
