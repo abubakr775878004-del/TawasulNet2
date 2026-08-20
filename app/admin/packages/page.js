@@ -13,8 +13,21 @@ export default function PackagesPage() {
   const [busyId, setBusyId] = useState(null);
 
   async function loadPackages() {
-    const { data } = await supabase.from('packages').select('*').order('created_at', { ascending: false });
-    setPackages(data || []);
+    // جلب الباقات مع حساب عدد الكروت المرتبطة بكل باقة
+    const { data, error: fetchError } = await supabase
+      .from('packages')
+      .select('*, cards(id)')
+      .order('created_at', { ascending: false });
+
+    if (!fetchError && data) {
+      const formatted = data.map((pkg) => ({
+        ...pkg,
+        cardsCount: pkg.cards ? pkg.cards.length : 0
+      }));
+      setPackages(formatted);
+    } else {
+      setPackages([]);
+    }
   }
 
   useEffect(() => { if (profile) loadPackages(); }, [profile]);
@@ -66,12 +79,25 @@ export default function PackagesPage() {
         <div className="panel">
           <div className="panel-head"><h3>الباقات الحالية</h3><span className="muted">{packages.length}</span></div>
           <table>
-            <thead><tr><th>الاسم</th><th>السعر</th><th>تاريخ الإنشاء</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>السعر</th>
+                <th>عدد الكروت</th>
+                <th>تاريخ الإنشاء</th>
+                <th></th>
+              </tr>
+            </thead>
             <tbody>
               {packages.map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
                   <td>{p.price} ريال</td>
+                  <td>
+                    <span style={{ fontWeight: '800', color: '#5B21B6' }}>
+                      {p.cardsCount} كرت
+                    </span>
+                  </td>
                   <td>{new Date(p.created_at).toLocaleDateString('ar')}</td>
                   <td>
                     <button
