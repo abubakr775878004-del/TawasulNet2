@@ -224,8 +224,6 @@ export default function DistributorPage() {
 
 🎫 *كرت الإنترنت*
 
-🔑 *رقم الكرت:*
-
 \`${revealedCard.code}\`
 
 📦 *الباقة:* ${revealedCard.packageName}
