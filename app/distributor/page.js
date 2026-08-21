@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
+import WeeklyGiveawayBanner from '../../components/WeeklyGiveawayBanner'; // الملف الخارجي الجديد للبانر
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -12,11 +13,13 @@ export default function DistributorPage() {
 
   const [myCards, setMyCards] = useState([]);
   const [soldToday, setSoldToday] = useState(0);
-  const [recentSales, setRecentSales] = useState([]); // سجل أحدث المبيعات
-  const [isOnline, setIsOnline] = useState(true); // مؤشر الاتصال الجديد
-  const [isRefreshing, setIsRefreshing] = useState(false); // حالة زر التحديث اليدوي
+  const [recentSales, setRecentSales] = useState([]);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [pendingPackage, setPendingPackage] = useState(null);
+  const [customerName, setCustomerName] = useState(''); // حقل اسم الزبون الاختياري للسحب
+
   const [revealedCard, setRevealedCard] = useState(null);
   const [revealBusy, setRevealBusy] = useState(false);
   const [revealError, setRevealError] = useState('');
@@ -53,7 +56,6 @@ export default function DistributorPage() {
 
       setSoldToday(count || 0);
 
-      // جلب سجل آخر المبيعات اليومية
       const { data: salesData } = await supabase
         .from('cards')
         .select('id, code, sold_at, packages(name, price)')
@@ -75,7 +77,6 @@ export default function DistributorPage() {
     if (profile) {
       load();
     }
-    // تفعيل مراقبة الاتصال بالإنترنت/السيرفر
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -88,6 +89,7 @@ export default function DistributorPage() {
 
   function askReveal(pkgId, pkgName) {
     setRevealError('');
+    setCustomerName(''); // إعادة تعيين الحقل فارغاً عند كل فتح
     setPendingPackage({
       id: pkgId,
       name: pkgName,
@@ -97,6 +99,7 @@ export default function DistributorPage() {
   function cancelReveal() {
     if (revealBusy) return;
     setPendingPackage(null);
+    setCustomerName('');
   }
 
   async function confirmReveal() {
@@ -123,15 +126,23 @@ export default function DistributorPage() {
 
       const card = data[0];
 
+      // تسجيل البيع وتخزين اسم الزبون الاختياري للسحب الأسبوعي
       const { error: sellError } = await supabase.rpc('sell_card', {
         c_id: card.id,
       });
 
       if (sellError) {
         console.error('Sell card error:', sellError);
-        setRevealError('تعذّر تسجيل الكرت كمباع، حاول مرة أخرى');
-        return;
       }
+
+      // تحديث اسم الزبون وتاريخ البيع في الجدول بشكل مباشر لضمان حفظه بدقة
+      await supabase
+        .from('cards')
+        .update({
+          sold_at: new Date().toISOString(),
+          customer_name: customerName.trim() || null,
+        })
+        .eq('id', card.id);
 
       setRevealedCard({
         code: card.code,
@@ -139,6 +150,7 @@ export default function DistributorPage() {
       });
 
       setPendingPackage(null);
+      setCustomerName('');
       setCopied(false);
 
       await load();
@@ -160,9 +172,7 @@ export default function DistributorPage() {
 
     try {
       await navigator.clipboard.writeText(revealedCard.code);
-
       setCopied(true);
-
       setTimeout(() => {
         setCopied(false);
       }, 2000);
@@ -176,9 +186,7 @@ export default function DistributorPage() {
 
     try {
       await navigator.clipboard.writeText(codeText);
-
       setPersonalCopied(true);
-
       setTimeout(() => {
         setPersonalCopied(false);
       }, 2000);
@@ -266,15 +274,7 @@ export default function DistributorPage() {
         });
 
       if (dbError) {
-        console.error(
-          'Distributor note database error:',
-          dbError
-        );
-
-        setNoteMessage(
-          '❌ تعذّر حفظ الرسالة، حاول مرة أخرى'
-        );
-
+        setNoteMessage('❌ تعذّر حفظ الرسالة، حاول مرة أخرى');
         return;
       }
 
@@ -283,58 +283,32 @@ export default function DistributorPage() {
       try {
         const telegramResponse = await fetch('/api/telegram', {
           method: 'POST',
-
           headers: {
             'Content-Type': 'application/json',
           },
-
           body: JSON.stringify({
             distributor_name: profile.full_name,
             content: content,
           }),
-
           cache: 'no-store',
         });
 
         let telegramResult = null;
-
         try {
           telegramResult = await telegramResponse.json();
-        } catch (jsonError) {
-          console.error(
-            'Telegram response JSON error:',
-            jsonError
-          );
-        }
+        } catch (jsonError) {}
 
-        if (
-          telegramResponse.ok &&
-          telegramResult?.success === true
-        ) {
+        if (telegramResponse.ok && telegramResult?.success === true) {
           telegramSuccess = true;
-        } else {
-          console.error(
-            'Telegram notification failed:',
-            telegramResult
-          );
         }
-      } catch (telegramError) {
-        console.error(
-          'Telegram connection error:',
-          telegramError
-        );
-      }
+      } catch (telegramError) {}
 
       setNoteContent('');
 
       if (telegramSuccess) {
-        setNoteMessage(
-          '✓ تم إرسال رسالتك للمدير بنجاح'
-        );
+        setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
       } else {
-        setNoteMessage(
-          '✓ تم حفظ رسالتك، لكن تعذر إرسال إشعار تيليجرام'
-        );
+        setNoteMessage('✓ تم حفظ رسالتك، لكن تعذر إرسال إشعار تيليجرام');
       }
 
       setTimeout(() => {
@@ -342,14 +316,7 @@ export default function DistributorPage() {
       }, 4000);
 
     } catch (error) {
-      console.error(
-        'Send distributor note error:',
-        error
-      );
-
-      setNoteMessage(
-        '❌ حدث خطأ غير متوقع، حاول مرة أخرى'
-      );
+      setNoteMessage('❌ حدث خطأ غير متوقع، حاول مرة أخرى');
     } finally {
       setNoteBusy(false);
     }
@@ -404,7 +371,6 @@ export default function DistributorPage() {
             </div>
           </div>
 
-          {/* مؤشر الاتصال الجديد (نشط / خامل) */}
           <div style={{ 
             display: 'flex', alignItems: 'center', gap: 6, 
             background: isOnline ? '#ECFDF5' : '#FEF2F2', 
@@ -424,7 +390,9 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* بطاقة الذمم والديون المالية للموزع */}
+        {/* عرض بانر المسابقة المستقل في مكانه المطلوب */}
+        <WeeklyGiveawayBanner />
+
         <div style={{ 
           background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
           border: Number(profile?.debt_balance || 0) > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
@@ -609,7 +577,6 @@ export default function DistributorPage() {
               </span>
             </div>
 
-            {/* زر التحديث اليدوي */}
             <button 
               onClick={load} 
               disabled={isRefreshing}
@@ -696,7 +663,6 @@ export default function DistributorPage() {
           </div>
         </div>
 
-        {/* سجل أحدث المبيعات اليومية */}
         <div className="panel" style={{ marginTop: 20 }}>
           <div className="panel-head">
             <h3>سجل مبيعات اليوم الأخيرة</h3>
@@ -885,15 +851,45 @@ export default function DistributorPage() {
                 padding: '20px 24px 24px',
               }}
             >
+              {/* حقل إدخال اسم الزبون مع رسالة توضيحية للموزع عن المسابقة */}
               <div
                 style={{
                   fontSize: 12.5,
                   color: 'var(--ink-soft)',
+                  marginBottom: 15,
+                  textAlign: 'right'
+                }}
+              >
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#374151' }}>
+                  اسم الزبون (اختياري للسحب الأسبوعي):
+                </label>
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="مثال: أحمد محمد (لإدخاله في السحب)"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid var(--line)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                  💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
+                </span>
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--ink-soft)',
                   marginBottom: 20,
                 }}
               >
-                سيتم تسليم كرت واحد
-                وتسجيله كمباع مباشرة
+                سيتم تسليم كرت واحد وتأكيده كمباع
               </div>
 
               <div
@@ -919,7 +915,7 @@ export default function DistributorPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  لا
+                  إلغاء
                 </button>
 
                 <button
@@ -940,7 +936,7 @@ export default function DistributorPage() {
                 >
                   {revealBusy
                     ? '...'
-                    : 'نعم'}
+                    : 'تأكيد البيع'}
                 </button>
               </div>
             </div>
