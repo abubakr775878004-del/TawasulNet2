@@ -17,7 +17,7 @@ export default function DistributorWeeklyWinner() {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-      // جلب نفس المشاركين لنضمن مطابقة الفائز عند المدير والموزع تماماً
+      // استعلام لجلب المبيعات مع التعامل مع سياسات الأمان
       const { data, error } = await supabase
         .from('cards')
         .select('customer_name, sold_at, profiles:assigned_to(full_name)')
@@ -26,8 +26,12 @@ export default function DistributorWeeklyWinner() {
         .gte('sold_at', oneWeekAgo.toISOString())
         .order('sold_at', { ascending: false });
 
-      if (!error && data && data.length > 0) {
-        // نفس معادلة رقم الأسبوع لضمان تطابق الفائز 100% بين المدير وجميع الموزعين
+      if (error) {
+        console.error('Error fetching winner for distributor:', error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
         const startOfYear = new Date(today.getFullYear(), 0, 1);
         const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
         const weekNumber = Math.floor(days / 7);
@@ -86,7 +90,7 @@ export default function DistributorWeeklyWinner() {
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
-            لا توجد مبيعات مسجلة للسحب هذا الأسبوع.
+            جاري تحميل الفائز أو لا توجد مبيعات كافية...
           </div>
         )
       ) : (
