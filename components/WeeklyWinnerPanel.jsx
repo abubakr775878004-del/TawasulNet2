@@ -3,13 +3,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function WeeklyWinnerPanel() {
-  const [participants, setParticipants] = useState([]);
+export default function DistributorWeeklyWinner() {
   const [selectedWinner, setSelectedWinner] = useState(null);
   const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
 
   useEffect(() => {
-    async function fetchParticipants() {
+    async function fetchWinner() {
       const today = new Date();
       const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
       const isWeekend = (currentDay === 5 || currentDay === 6);
@@ -18,6 +17,7 @@ export default function WeeklyWinnerPanel() {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
+      // جلب نفس المشاركين لنضمن مطابقة الفائز عند المدير والموزع تماماً
       const { data, error } = await supabase
         .from('cards')
         .select('customer_name, sold_at, profiles:assigned_to(full_name)')
@@ -26,108 +26,80 @@ export default function WeeklyWinnerPanel() {
         .gte('sold_at', oneWeekAgo.toISOString())
         .order('sold_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching participants:', error);
+      if (!error && data && data.length > 0) {
+        // نفس معادلة رقم الأسبوع لضمان تطابق الفائز 100% مع صفحة المدير
+        const startOfYear = new Date(today.getFullYear(), 0, 1);
+        const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
+        const weekNumber = Math.floor(days / 7);
+        
+        const weeklySeed = today.getFullYear() * 1000 + weekNumber;
+        const index = weeklySeed % data.length;
+        setSelectedWinner(data[index]);
       } else {
-        const list = data || [];
-        setParticipants(list);
-
-        if (list.length > 0) {
-          // حساب رقم الأسبوع الثابت في السنة لضمان ثبات الفائز تماماً وعدم تغييره عند التحديث
-          const startOfYear = new Date(today.getFullYear(), 0, 1);
-          const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
-          const weekNumber = Math.floor(days / 7);
-          
-          const weeklySeed = today.getFullYear() * 1000 + weekNumber;
-          const index = weeklySeed % list.length;
-          setSelectedWinner(list[index]);
-        } else {
-          setSelectedWinner(null);
-        }
+        setSelectedWinner(null);
       }
     }
-    fetchParticipants();
+    fetchWinner();
   }, []);
 
   return (
-    <div className="panel" style={{ marginTop: 20, background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0' }}>
-      <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-        <div>
-          <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1E293B' }}>🏆 إدارة مسابقة السحب الأسبوعي</h3>
-          <span style={{ fontSize: '12px', color: '#64748B' }}>
-            {isWeekendShowTime ? '🎉 عطلة نهاية الأسبوع - الفائز معتمد هذا الأسبوع' : '⏳ المسابقة جارية - سيظهر الفائز يومي الجمعة والسبت'}
-          </span>
-        </div>
-        <div style={{
-          background: isWeekendShowTime ? 'linear-gradient(120deg, #059669, #10B981)' : 'linear-gradient(120deg, #7C3AED, #DB2777)',
+    <div style={{
+      background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+      borderRadius: '16px',
+      padding: '20px',
+      color: '#fff',
+      boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
+      marginBottom: '20px'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0 }}>🏆 مسابقة السحب الأسبوعي للزبائن</h3>
+        <span style={{
+          background: isWeekendShowTime ? '#10B981' : '#7C3AED',
           color: '#fff',
-          padding: '8px 16px',
-          borderRadius: '10px',
-          fontWeight: '800',
-          fontSize: '12px',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+          padding: '4px 10px',
+          borderRadius: '8px',
+          fontSize: '11px',
+          fontWeight: '700'
         }}>
-          {isWeekendShowTime ? '✨ الفائز معتمد' : '📊 قيد التنافس'}
-        </div>
+          {isWeekendShowTime ? '✨ الفائز معتمد' : '⏳ قتيض التنافس'}
+        </span>
       </div>
 
       {isWeekendShowTime ? (
-        selectedWinner && (
+        selectedWinner ? (
           <div style={{
-            background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-            border: '1.5px solid #34D399',
-            borderRadius: '14px',
-            padding: '16px',
-            marginBottom: '15px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '12px',
+            padding: '14px',
             textAlign: 'center'
           }}>
-            <div style={{ fontSize: '12px', fontWeight: '850', color: '#065F46', marginBottom: '4px' }}>
-              🎉 الفائز الثابت في السحب الأسبوعي لهذا الأسبوع:
+            <div style={{ fontSize: '11px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
+              🎉 الفائز في السحب الأسبوعي لهذا الأسبوع:
             </div>
-            <div style={{ fontSize: '20px', fontWeight: '900', color: '#047857' }}>
+            <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>
               {selectedWinner.customer_name}
             </div>
-            <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px' }}>
-              الموزع المسؤول عن الزبون: <strong>{selectedWinner.profiles?.full_name || 'غير محدد'}</strong>
+            <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '4px' }}>
+              عبر الموزع: <strong>{selectedWinner.profiles?.full_name || 'غير محدد'}</strong>
             </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
+            لا توجد مبيعات مسجلة للسحب هذا الأسبوع.
           </div>
         )
       ) : (
         <div style={{
-          background: '#F8FAFC',
-          border: '1px dashed #CBD5E1',
-          borderRadius: '14px',
-          padding: '16px',
-          marginBottom: '15px',
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px dashed rgba(255, 255, 255, 0.2)',
+          borderRadius: '12px',
+          padding: '12px',
           textAlign: 'center',
-          color: '#475569',
-          fontSize: '13px'
+          fontSize: '12px',
+          color: '#CBD5E1'
         }}>
-          🔒 سيظهر اسم الفائز الأسبوعي الثابت حصرياً يومي <strong>الجمعة والسبت</strong> بناءً على مبيعات الأسبوع.
-        </div>
-      )}
-
-      <div style={{ fontSize: '13.5px', fontWeight: '755', color: '#334155', marginBottom: '8px' }}>
-        قائمة الزبائن المشاركين هذا الأسبوع ({participants.length}):
-      </div>
-
-      {participants.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-          {participants.map((p, index) => (
-            <div key={index} style={{ padding: '10px 14px', background: '#F8FAFC', borderRadius: '10px', border: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: '800', fontSize: '13px', color: '#1E293B' }}>{p.customer_name}</div>
-                <div style={{ fontSize: '11px', color: '#64748B' }}>عبر الموزع: {p.profiles?.full_name || 'موزع'}</div>
-              </div>
-              <div style={{ fontSize: '11px', color: '#94A3B8' }}>
-                {new Date(p.sold_at).toLocaleDateString('ar-YE')}
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div style={{ padding: '15px', textAlign: 'center', color: '#64748B', fontSize: '13px', background: '#F8FAFC', borderRadius: '10px' }}>
-          لا يوجد زبائن مسجلين في السحب خلال الـ 7 أيام الماضية.
+          🔒 سيظهر اسم الفائز الثابت حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
         </div>
       )}
     </div>
