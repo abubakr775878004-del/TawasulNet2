@@ -8,24 +8,13 @@ export default function WeeklyWinnerPanel() {
   const [selectedWinner, setSelectedWinner] = useState(null);
   const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
 
-  // دالة حساب رقم الأسبوع لتثبيت الفائز أسبوعياً
-  function getWeekNumber(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    const dayNum = d.getUTCDay() || 7;
-    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
-  }
-
   useEffect(() => {
     async function fetchParticipants() {
-      // التحقق من اليوم الحالي (5 = الجمعة، 6 = السبت)
       const today = new Date();
-      const currentDay = today.getDay();
+      const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
       const isWeekend = (currentDay === 5 || currentDay === 6);
       setIsWeekendShowTime(isWeekend);
 
-      // حساب تاريخ قبل 7 أيام بالضبط من اللحظة الحالية
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
@@ -34,7 +23,7 @@ export default function WeeklyWinnerPanel() {
         .select('customer_name, sold_at, profiles:assigned_to(full_name)')
         .eq('status', 'sold')
         .not('customer_name', 'is', null)
-        .gte('sold_at', oneWeekAgo.toISOString()) // جلب المبيعات خلال آخر 7 أيام فقط
+        .gte('sold_at', oneWeekAgo.toISOString())
         .order('sold_at', { ascending: false });
 
       if (error) {
@@ -44,12 +33,16 @@ export default function WeeklyWinnerPanel() {
         setParticipants(list);
 
         if (list.length > 0) {
-          // تثبيت فائز واحد تلقائياً طوال الأسبوع بناءً على رقم الأسبوع والسنة
-          const currentYear = today.getFullYear();
-          const currentWeek = getWeekNumber(today);
-          const seed = currentYear * 100 + currentWeek;
+          // حساب رقم الأسبوع الثابت في السنة (من تاريخ 1 يناير) مع السنة لضمان الثبات التام
+          const startOfYear = new Date(today.getFullYear(), 0, 1);
+          const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
+          const weekNumber = Math.floor(days / 7);
           
-          const index = seed % list.length;
+          // مفتاح ثابت تماماً طوال الأسبوع الحالي لا يتغير بتحديث الصفحة
+          const weeklySeed = today.getFullYear() * 1000 + weekNumber;
+          
+          // اختيار ثابت بناءً على الـ Seed الثابت للأسبوع
+          const index = weeklySeed % list.length;
           setSelectedWinner(list[index]);
         } else {
           setSelectedWinner(null);
