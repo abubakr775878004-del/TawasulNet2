@@ -33,15 +33,12 @@ export default function WeeklyWinnerPanel() {
         setParticipants(list);
 
         if (list.length > 0) {
-          // حساب رقم الأسبوع الثابت في السنة (من تاريخ 1 يناير) مع السنة لضمان الثبات التام
+          // حساب رقم الأسبوع الثابت في السنة لضمان ثبات الفائز تماماً وعدم تغييره عند التحديث
           const startOfYear = new Date(today.getFullYear(), 0, 1);
           const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
           const weekNumber = Math.floor(days / 7);
           
-          // مفتاح ثابت تماماً طوال الأسبوع الحالي لا يتغير بتحديث الصفحة
           const weeklySeed = today.getFullYear() * 1000 + weekNumber;
-          
-          // اختيار ثابت بناءً على الـ Seed الثابت للأسبوع
           const index = weeklySeed % list.length;
           setSelectedWinner(list[index]);
         } else {
@@ -85,7 +82,7 @@ export default function WeeklyWinnerPanel() {
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '12px', fontWeight: '850', color: '#065F46', marginBottom: '4px' }}>
-              🎉 الفائز الثابت في السحب الأسبوعي (يومي الجمعة والسبت):
+              🎉 الفائز الثابت في السحب الأسبوعي لهذا الأسبوع:
             </div>
             <div style={{ fontSize: '20px', fontWeight: '900', color: '#047857' }}>
               {selectedWinner.customer_name}
