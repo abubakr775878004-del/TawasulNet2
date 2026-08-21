@@ -14,31 +14,13 @@ export default function DistributorWeeklyWinner() {
       const isWeekend = (currentDay === 5 || currentDay === 6);
       setIsWeekendShowTime(isWeekend);
 
-      const oneWeekAgo = new Date();
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      if (!isWeekend) return;
 
-      // استعلام لجلب المبيعات مع التعامل مع سياسات الأمان
-      const { data, error } = await supabase
-        .from('cards')
-        .select('customer_name, sold_at, profiles:assigned_to(full_name)')
-        .eq('status', 'sold')
-        .not('customer_name', 'is', null)
-        .gte('sold_at', oneWeekAgo.toISOString())
-        .order('sold_at', { ascending: false });
+      // استدعاء الدالة الآمنة التي أنشأناها في Supabase
+      const { data, error } = await supabase.rpc('get_weekly_winner');
 
-      if (error) {
-        console.error('Error fetching winner for distributor:', error.message);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const startOfYear = new Date(today.getFullYear(), 0, 1);
-        const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
-        const weekNumber = Math.floor(days / 7);
-        
-        const weeklySeed = today.getFullYear() * 1000 + weekNumber;
-        const index = weeklySeed % data.length;
-        setSelectedWinner(data[index]);
+      if (!error && data) {
+        setSelectedWinner(data);
       } else {
         setSelectedWinner(null);
       }
@@ -85,12 +67,12 @@ export default function DistributorWeeklyWinner() {
               {selectedWinner.customer_name}
             </div>
             <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '4px' }}>
-              عبر الموزع: <strong>{selectedWinner.profiles?.full_name || 'غير محدد'}</strong>
+              عبر الموزع: <strong>{selectedWinner.distributor_name || 'غير محدد'}</strong>
             </div>
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
-            جاري تحميل الفائز أو لا توجد مبيعات كافية...
+            لا توجد مبيعات مسجلة للسحب هذا الأسبوع.
           </div>
         )
       ) : (
