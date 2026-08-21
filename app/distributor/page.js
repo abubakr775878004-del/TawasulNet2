@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
-import WeeklyGiveawayBanner from '../../components/WeeklyGiveawayBanner'; // الملف الخارجي الجديد للبانر
+import WeeklyGiveawayBanner from '../../components/WeeklyGiveawayBanner';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -18,7 +18,7 @@ export default function DistributorPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [pendingPackage, setPendingPackage] = useState(null);
-  const [customerName, setCustomerName] = useState(''); // حقل اسم الزبون الاختياري للسحب
+  const [customerName, setCustomerName] = useState(''); // حقل اسم الزبون للسحب الأسبوعي
 
   const [revealedCard, setRevealedCard] = useState(null);
   const [revealBusy, setRevealBusy] = useState(false);
@@ -58,7 +58,7 @@ export default function DistributorPage() {
 
       const { data: salesData } = await supabase
         .from('cards')
-        .select('id, code, sold_at, packages(name, price)')
+        .select('id, code, sold_at, customer_name, packages(name, price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
         .gte('sold_at', since.toISOString())
@@ -121,28 +121,29 @@ export default function DistributorPage() {
       if (error || !data || data.length === 0) {
         setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
         setPendingPackage(null);
+        setRevealBusy(false);
         return;
       }
 
       const card = data[0];
+      const trimmedCustomerName = customerName.trim();
 
-      // تسجيل البيع وتخزين اسم الزبون الاختياري للسحب الأسبوعي
-      const { error: sellError } = await supabase.rpc('sell_card', {
-        c_id: card.id,
-      });
-
-      if (sellError) {
-        console.error('Sell card error:', sellError);
-      }
-
-      // تحديث اسم الزبون وتاريخ البيع في الجدول بشكل مباشر لضمان حفظه بدقة
-      await supabase
+      // تحديث حالة الكرت مباشرة كمباع مع حفظ اسم الزبون ووقت البيع لضمان ظهوره في المسابقة
+      const { error: updateError } = await supabase
         .from('cards')
         .update({
+          status: 'sold',
           sold_at: new Date().toISOString(),
-          customer_name: customerName.trim() || null,
+          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
         })
         .eq('id', card.id);
+
+      if (updateError) {
+        console.error('Update card error:', updateError);
+        setRevealError('حدث خطأ أثناء حفظ بيانات البيع');
+        setRevealBusy(false);
+        return;
+      }
 
       setRevealedCard({
         code: card.code,
@@ -322,11 +323,7 @@ export default function DistributorPage() {
     }
   }
 
-  if (loading) {
-    return null;
-  }
-
-  if (!profile) {
+  if (loading || !profile) {
     return null;
   }
 
@@ -390,7 +387,7 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* عرض بانر المسابقة المستقل في مكانه المطلوب */}
+        {/* بانر المسابقة */}
         <WeeklyGiveawayBanner />
 
         <div style={{ 
@@ -592,7 +589,7 @@ export default function DistributorPage() {
           </div>
 
           {revealError && (
-            <div className="error-note">
+            <div className="error-note" style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
               {revealError}
             </div>
           )}
@@ -682,7 +679,7 @@ export default function DistributorPage() {
                 }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
-                      {sale.packages?.name || 'باقة'}
+                      {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
                     </div>
                     <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
                       {sale.code}
@@ -851,7 +848,6 @@ export default function DistributorPage() {
                 padding: '20px 24px 24px',
               }}
             >
-              {/* حقل إدخال اسم الزبون مع رسالة توضيحية للموزع عن المسابقة */}
               <div
                 style={{
                   fontSize: 12.5,
@@ -935,7 +931,7 @@ export default function DistributorPage() {
                   }}
                 >
                   {revealBusy
-                    ? '...'
+                    ? 'جاري التأكيد...'
                     : 'تأكيد البيع'}
                 </button>
               </div>
