@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotAdmin } from '../../components/AdSlot';
+import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel'; // ملف لوحة الفائزين الجديد
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -89,6 +90,9 @@ export default function AdminPage() {
             <div style={{ fontSize: 22, fontWeight: 900, color: '#10B981', marginTop: 5 }}>{salesStats.soldCardsCount}</div>
           </div>
         </div>
+
+        {/* لوحة إدارة مسابقة السحب الأسبوعي للمدير */}
+        <WeeklyWinnerPanel />
 
         {/* تحليل المبيعات حسب الباقات */}
         <div className="panel" style={{ marginBottom: 20 }}>
