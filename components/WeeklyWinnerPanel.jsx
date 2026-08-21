@@ -9,18 +9,23 @@ export default function WeeklyWinnerPanel() {
 
   useEffect(() => {
     async function fetchParticipants() {
+      // حساب تاريخ قبل 7 أيام بالضبط من اللحظة الحالية
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('cards')
         .select('customer_name, sold_at, profiles:assigned_to(full_name)')
         .eq('status', 'sold')
         .not('customer_name', 'is', null)
-        .gte('sold_at', oneWeekAgo.toISOString())
+        .gte('sold_at', oneWeekAgo.toISOString()) // جلب المبيعات خلال آخر 7 أيام فقط
         .order('sold_at', { ascending: false });
 
-      setParticipants(data || []);
+      if (error) {
+        console.error('Error fetching participants:', error);
+      } else {
+        setParticipants(data || []);
+      }
     }
     fetchParticipants();
   }, []);
@@ -77,8 +82,8 @@ export default function WeeklyWinnerPanel() {
         </div>
       )}
 
-      <div style={{ fontSize: '13px', fontWeight: '755', color: '#334155', marginBottom: '8px' }}>
-        قائمة الزبائن المشاركين ({participants.length}):
+      <div style={{ fontSize: '13.5px', fontWeight: '755', color: '#334155', marginBottom: '8px' }}>
+        قائمة الزبائن المشاركين هذا الأسبوع ({participants.length}):
       </div>
 
       {participants.length > 0 ? (
@@ -97,7 +102,7 @@ export default function WeeklyWinnerPanel() {
         </div>
       ) : (
         <div style={{ padding: '15px', textAlign: 'center', color: '#64748B', fontSize: '13px', background: '#F8FAFC', borderRadius: '10px' }}>
-          لا يوجد زبائن مسجلين في السحب هذا الأسبوع حتى الآن.
+          لا يوجد زبائن مسجلين في السحب خلال الـ 7 أيام الماضية.
         </div>
       )}
     </div>
