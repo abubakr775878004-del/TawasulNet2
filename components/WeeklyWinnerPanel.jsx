@@ -27,7 +27,7 @@ export default function DistributorWeeklyWinner() {
         .order('sold_at', { ascending: false });
 
       if (!error && data && data.length > 0) {
-        // نفس معادلة رقم الأسبوع لضمان تطابق الفائز 100% مع صفحة المدير
+        // نفس معادلة رقم الأسبوع لضمان تطابق الفائز 100% بين المدير وجميع الموزعين
         const startOfYear = new Date(today.getFullYear(), 0, 1);
         const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
         const weekNumber = Math.floor(days / 7);
@@ -61,7 +61,7 @@ export default function DistributorWeeklyWinner() {
           fontSize: '11px',
           fontWeight: '700'
         }}>
-          {isWeekendShowTime ? '✨ الفائز معتمد' : '⏳ قتيض التنافس'}
+          {isWeekendShowTime ? '✨ الفائز معتمد' : '⏳ قيد التنافس'}
         </span>
       </div>
 
