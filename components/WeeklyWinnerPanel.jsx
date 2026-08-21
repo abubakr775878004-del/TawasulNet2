@@ -6,9 +6,25 @@ import { supabase } from '../lib/supabase';
 export default function WeeklyWinnerPanel() {
   const [participants, setParticipants] = useState([]);
   const [selectedWinner, setSelectedWinner] = useState(null);
+  const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
+
+  // دالة حساب رقم الأسبوع لتثبيت الفائز أسبوعياً
+  function getWeekNumber(date) {
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    const dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+  }
 
   useEffect(() => {
     async function fetchParticipants() {
+      // التحقق من اليوم الحالي (5 = الجمعة، 6 = السبت)
+      const today = new Date();
+      const currentDay = today.getDay();
+      const isWeekend = (currentDay === 5 || currentDay === 6);
+      setIsWeekendShowTime(isWeekend);
+
       // حساب تاريخ قبل 7 أيام بالضبط من اللحظة الحالية
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
@@ -24,61 +40,80 @@ export default function WeeklyWinnerPanel() {
       if (error) {
         console.error('Error fetching participants:', error);
       } else {
-        setParticipants(data || []);
+        const list = data || [];
+        setParticipants(list);
+
+        if (list.length > 0) {
+          // تثبيت فائز واحد تلقائياً طوال الأسبوع بناءً على رقم الأسبوع والسنة
+          const currentYear = today.getFullYear();
+          const currentWeek = getWeekNumber(today);
+          const seed = currentYear * 100 + currentWeek;
+          
+          const index = seed % list.length;
+          setSelectedWinner(list[index]);
+        } else {
+          setSelectedWinner(null);
+        }
       }
     }
     fetchParticipants();
   }, []);
-
-  const pickRandomWinner = () => {
-    if (participants.length === 0) return;
-    const randomIndex = Math.floor(Math.random() * participants.length);
-    setSelectedWinner(participants[randomIndex]);
-  };
 
   return (
     <div className="panel" style={{ marginTop: 20, background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0' }}>
       <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <div>
           <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#1E293B' }}>🏆 إدارة مسابقة السحب الأسبوعي</h3>
-          <span style={{ fontSize: '12px', color: '#64748B' }}>الزبائن المشاركون في السحب خلال آخر 7 أيام</span>
+          <span style={{ fontSize: '12px', color: '#64748B' }}>
+            {isWeekendShowTime ? '🎉 عطلة نهاية الأسبوع - الفائز معتمد هذا الأسبوع' : '⏳ المسابقة جارية - سيظهر الفائز يومي الجمعة والسبت'}
+          </span>
         </div>
-        <button
-          onClick={pickRandomWinner}
-          style={{
-            background: 'linear-gradient(120deg, #7C3AED, #DB2777)',
-            color: '#fff',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '10px',
-            fontWeight: '800',
-            fontSize: '12.5px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.2)'
-          }}
-        >
-          🎲 إجراء سحب عشوائي
-        </button>
+        <div style={{
+          background: isWeekendShowTime ? 'linear-gradient(120deg, #059669, #10B981)' : 'linear-gradient(120deg, #7C3AED, #DB2777)',
+          color: '#fff',
+          padding: '8px 16px',
+          borderRadius: '10px',
+          fontWeight: '800',
+          fontSize: '12px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+        }}>
+          {isWeekendShowTime ? '✨ الفائز معتمد' : '📊 قيد التنافس'}
+        </div>
       </div>
 
-      {selectedWinner && (
+      {isWeekendShowTime ? (
+        selectedWinner && (
+          <div style={{
+            background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+            border: '1.5px solid #34D399',
+            borderRadius: '14px',
+            padding: '16px',
+            marginBottom: '15px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '12px', fontWeight: '850', color: '#065F46', marginBottom: '4px' }}>
+              🎉 الفائز الثابت في السحب الأسبوعي (يومي الجمعة والسبت):
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: '900', color: '#047857' }}>
+              {selectedWinner.customer_name}
+            </div>
+            <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px' }}>
+              الموزع المسؤول عن الزبون: <strong>{selectedWinner.profiles?.full_name || 'غير محدد'}</strong>
+            </div>
+          </div>
+        )
+      ) : (
         <div style={{
-          background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-          border: '1.5px solid #34D399',
+          background: '#F8FAFC',
+          border: '1px dashed #CBD5E1',
           borderRadius: '14px',
           padding: '16px',
           marginBottom: '15px',
-          textAlign: 'center'
+          textAlign: 'center',
+          color: '#475569',
+          fontSize: '13px'
         }}>
-          <div style={{ fontSize: '12px', fontWeight: '850', color: '#065F46', marginBottom: '4px' }}>
-            🎉 الفائز في السحب الحالي (جاهز لتسليم الجائزة):
-          </div>
-          <div style={{ fontSize: '20px', fontWeight: '900', color: '#047857' }}>
-            {selectedWinner.customer_name}
-          </div>
-          <div style={{ fontSize: '12px', color: '#047857', marginTop: '4px' }}>
-            الموزع المسؤول عن الزبون: <strong>{selectedWinner.profiles?.full_name || 'غير محدد'}</strong>
-          </div>
+          🔒 سيظهر اسم الفائز الأسبوعي الثابت حصرياً يومي <strong>الجمعة والسبت</strong> بناءً على مبيعات الأسبوع.
         </div>
       )}
 
