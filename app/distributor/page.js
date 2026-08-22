@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
+import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel'; // استيراد لوحة الفائز الموحدة
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -29,10 +30,6 @@ export default function DistributorPage() {
   const [noteContent, setNoteContent] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
-
-  // متغيرات الفائز الأسبوعي (مطابقة لصفحة المدير)
-  const [winnerName, setWinnerName] = useState('');
-  const [winnerDistributor, setWinnerDistributor] = useState('');
 
   async function load() {
     if (!profile) return;
@@ -75,34 +72,6 @@ export default function DistributorPage() {
       setIsRefreshing(false);
     }
   }
-
-  // جلب الفائز الأسبوعي (نفس منطق صفحة المدير تماماً)
-  useEffect(() => {
-    async function fetchWinner() {
-      try {
-        const { data } = await supabase
-          .from('cards')
-          .select('customer_name, profiles:assigned_to(full_name)')
-          .eq('status', 'sold')
-          .not('customer_name', 'is', null)
-          .order('sold_at', { ascending: false });
-
-        if (data && data.length > 0) {
-          const today = new Date();
-          const startOfYear = new Date(today.getFullYear(), 0, 1);
-          const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
-          const weekNumber = Math.floor(days / 7);
-          const index = (today.getFullYear() * 1000 + weekNumber) % data.length;
-          
-          setWinnerName(data[index].customer_name);
-          setWinnerDistributor(data[index].profiles?.full_name || 'غير محدد');
-        }
-      } catch (err) {
-        console.error('Error fetching winner:', err);
-      }
-    }
-    fetchWinner();
-  }, []);
 
   useEffect(() => {
     if (profile) {
@@ -417,38 +386,8 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* بانر السحب الأسبوعي (مطابق لصفحة المدير تماماً) */}
-        <div style={{
-          background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          color: '#fff',
-          boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
-          marginBottom: '20px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 10
-        }}>
-          <div>
-            <div style={{ fontSize: '11.5px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
-              🎉 مسابقة السحب الأسبوعي للزبائن:
-            </div>
-            <div style={{ fontSize: '15px', fontWeight: '900', color: '#fff' }}>
-              {winnerName ? `الفائز في السحب الأسبوعي لهذا الأسبوع: ${winnerName}` : 'اكتب اسم الزبون عند إظهار الكرت ليدخل السحب تلقائياً!'}
-            </div>
-          </div>
-          {winnerName ? (
-            <div style={{ fontSize: '12px', background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '10px', color: '#E3D6FF' }}>
-              عبر الموزع: <strong>{winnerDistributor}</strong>
-            </div>
-          ) : (
-            <div style={{ fontSize: '11px', background: '#10B981', padding: '6px 12px', borderRadius: '10px', color: '#fff', fontWeight: '800' }}>
-              🎁 السحب مستمر
-            </div>
-          )}
-        </div>
+        {/* لوحة الفائز الأسبوعي الموحدة (نفس ما يظهر في صفحة المدير تماماً) */}
+        <WeeklyWinnerPanel />
 
         <div style={{ 
           background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
