@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [pendingPackage, setPendingPackage] = useState(null);
-  const [customerName, setCustomerName] = useState(''); // حقل اسم الزبون للسحب الأسبوعي
+  const [customerName, setCustomerName] = useState('');
 
   const [revealedCard, setRevealedCard] = useState(null);
   const [revealBusy, setRevealBusy] = useState(false);
@@ -421,34 +421,38 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* صندوق عرض الفائز الأسبوعي المباشر */}
-        {winnerName && (
-          <div style={{
-            background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
-            borderRadius: '16px',
-            padding: '16px 20px',
-            color: '#fff',
-            boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
-            marginBottom: '20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 10
-          }}>
-            <div>
-              <div style={{ fontSize: '11.5px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
-                🎉 الفائز في السحب الأسبوعي لهذا الأسبوع:
-              </div>
-              <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>
-                {winnerName}
-              </div>
+        {/* بانر السحب الأسبوعي (ثابت دائماً ولا يختفي) */}
+        <div style={{
+          background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+          borderRadius: '16px',
+          padding: '16px 20px',
+          color: '#fff',
+          boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10
+        }}>
+          <div>
+            <div style={{ fontSize: '11.5px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
+              🎉 السحب الأسبوعي لشبكة تواصل:
             </div>
+            <div style={{ fontSize: '16px', fontWeight: '900', color: '#fff' }}>
+              {winnerName ? `الفائز لهذا الأسبوع: ${winnerName}` : 'اكتب اسم الزبون عند إظهار الكرت ليدخل السحب تلقائياً!'}
+            </div>
+          </div>
+          {winnerName ? (
             <div style={{ fontSize: '12px', background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '10px', color: '#E3D6FF' }}>
               الموزع: <strong>{winnerDistributor}</strong>
             </div>
-          </div>
-        )}
+          ) : (
+            <div style={{ fontSize: '11px', background: '#10B981', padding: '6px 12px', borderRadius: '10px', color: '#fff', fontWeight: '800' }}>
+              🎁 السحب مستمر
+            </div>
+          )}
+        </div>
 
         <div style={{ 
           background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
