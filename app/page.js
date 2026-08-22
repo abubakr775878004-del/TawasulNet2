@@ -64,161 +64,428 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="auth-wrap">
-      {/* القسم الجانبي الجمالي المعدل */}
-      <div className="auth-art" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '48px 40px' }}>
-        
-        {/* الجزء الأعلى: الشارة فقط */}
-        <div>
-          <span style={{ 
-            background: 'rgba(255, 255, 255, 0.12)', 
-            backdropFilter: 'blur(8px)',
-            color: '#A7F3D0',
-            padding: '6px 16px', 
-            borderRadius: '20px', 
-            fontSize: '12px', 
-            fontWeight: '700',
-            display: 'inline-block',
-            border: '1px solid rgba(255, 255, 255, 0.15)'
-          }}>
-            ⚡ نظام إدارة وتوزيع كروت الشبكة
-          </span>
-        </div>
-        
-        {/* المنتصف: اسم الشبكة البارز والعنوان الرئيسي */}
-        <div style={{ margin: 'auto 0', padding: '20px 0' }}>
-          <h1 style={{ 
-            fontSize: 38, 
-            fontWeight: 900, 
-            color: '#FFFFFF',
-            marginBottom: 12,
-            letterSpacing: '-0.5px',
-            textShadow: '0 2px 10px rgba(0,0,0,0.15)'
-          }}>
-            شبكة تواصل
-          </h1>
-
-          <h2 style={{ fontSize: 22, lineHeight: 1.6, fontWeight: 700, color: '#E2E8F0', marginBottom: 16 }}>
-            منصتك المتكاملة لإدارة الكروت، المبيعات، ورصيد الموزعين.
-          </h2>
-
-          <p style={{ color: '#A7F3D0', lineHeight: 1.8, fontSize: '14px', maxWidth: '440px', margin: 0 }}>
-            طباعة وتصدير الكروت، متابعة طلبيات الموزعين فورياً، والسحب الأسبوعي للزبائن في مكان واحد.
-          </p>
-        </div>
-
-        {/* الأسفل: توقيع المطور بأسلوب هادئ وأنيق */}
-        <div style={{ 
-          paddingTop: '20px', 
-          borderTop: '1px solid rgba(255, 255, 255, 0.12)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: '12px',
-          color: '#94A3B8'
-        }}>
-          <span>© شبكة تواصل</span>
-          <span style={{ color: '#6EE7B7', fontWeight: '600' }}>
-            تطوير وإدارة: <strong style={{ color: '#FFF' }}>أبو بكر محسن</strong>
-          </span>
-        </div>
-      </div>
-
-      {/* نموذج تسجيل الدخول */}
-      <div className="auth-form">
-        <form className="form-card" onSubmit={handleLogin}>
-          <div style={{ marginBottom: 24 }}>
-            <div className="brand" style={{ fontWeight: 900, fontSize: 22, color: '#0F172A', marginBottom: 6 }}>
-              تسجيل الدخول
-            </div>
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-              أدخل اسم المستخدم المخصص لك للوصول إلى لوحة المبيعات
-            </p>
-          </div>
-
-          {error && <div className="error-note" style={{ marginBottom: 16 }}>{error}</div>}
-
-          {/* حقل اسم المستخدم المدمج مع @gmail.com */}
-          <div className="field" style={{ marginBottom: 18 }}>
-            <label style={{ fontWeight: '700', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
-              اسم المستخدم
-            </label>
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              border: '1.5px solid #E2E8F0', 
-              borderRadius: '10px', 
-              overflow: 'hidden', 
-              background: '#fff'
-            }}>
-              <input 
-                type="text" 
-                required 
-                value={username} 
-                onChange={(e) => setUsername(e.target.value)} 
-                placeholder="ادخل اسم المستخدم" 
-                style={{ 
-                  border: 'none', 
-                  flex: 1, 
-                  padding: '12px 14px', 
-                  outline: 'none',
-                  fontSize: '14px',
-                  direction: 'ltr',
-                  textAlign: 'right'
-                }}
-              />
-              <span style={{ 
-                padding: '0 12px', 
-                color: '#64748B', 
-                fontSize: '13px', 
-                fontWeight: '700',
-                background: '#F8FAFC', 
-                borderRight: '1.5px solid #E2E8F0',
-                lineHeight: '42px',
-                direction: 'ltr'
-              }}>
-                {EMAIL_DOMAIN}
-              </span>
-            </div>
-            <span style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px', display: 'block' }}>
-              اكتب اسم حسابك فقط بدون كتابة {EMAIL_DOMAIN}
+    <div className="auth-container">
+      <div className="auth-card-wrap">
+        {/* القسم الجانبي الجمالي */}
+        <div className="auth-art">
+          {/* الشارة */}
+          <div className="badge-wrap">
+            <span className="network-badge">
+              ⚡ نظام إدارة وتوزيع كروت الشبكة
             </span>
           </div>
 
-          {/* حقل كلمة المرور */}
-          <div className="field" style={{ marginBottom: 22 }}>
-            <label style={{ fontWeight: '700', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
-              كلمة المرور
-            </label>
-            <input 
-              type="password" 
-              required 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              placeholder="••••••••" 
-              style={{
-                width: '100%',
-                padding: '12px 14px',
-                borderRadius: '10px',
-                border: '1.5px solid #E2E8F0',
-                fontSize: '14px',
-                outline: 'none'
-              }}
-            />
+          {/* المحتوى الرئيسي */}
+          <div className="art-main">
+            <h1 className="brand-title">
+              شبكة تواصل
+            </h1>
+            <h2 className="brand-subtitle">
+              منصتك المتكاملة لإدارة الكروت، المبيعات، ورصيد الموزعين.
+            </h2>
+            <p className="brand-description">
+              طباعة وتصدير الكروت، متابعة طلبيات الموزعين فورياً، والسحب الأسبوعي للزبائن في مكان واحد.
+            </p>
           </div>
 
-          <button className="btn-primary" type="submit" disabled={loading} style={{ width: '100%', padding: '13px' }}>
-            {loading ? 'جاري التحقق والدخول...' : 'تسجيل الدخول'}
-          </button>
-
-          <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--ink-soft)', marginTop: 20 }}>
-            ليس لديك حساب موزع؟{' '}
-            <a href="/signup" style={{ color: 'var(--grape)', fontWeight: 800, textDecoration: 'none' }}>
-              طلب انضمام كموزع
-            </a>
+          {/* التوقيع */}
+          <div className="art-footer">
+            <span>© شبكة تواصل</span>
+            <span className="developer-tag">
+              تطوير وإدارة: <strong>أبو بكر محسن</strong>
+            </span>
           </div>
-        </form>
+        </div>
+
+        {/* نموذج تسجيل الدخول */}
+        <div className="auth-form-side">
+          <form className="form-card" onSubmit={handleLogin}>
+            <div className="form-header">
+              <h2 className="login-title">تسجيل الدخول</h2>
+              <p className="login-subtitle">
+                أدخل اسم المستخدم المخصص لك للوصول إلى لوحة المبيعات
+              </p>
+            </div>
+
+            {error && <div className="error-note">{error}</div>}
+
+            {/* حقل اسم المستخدم */}
+            <div className="field-group">
+              <label className="input-label">اسم المستخدم</label>
+              <div className="username-input-wrap">
+                <input 
+                  type="text" 
+                  required 
+                  value={username} 
+                  onChange={(e) => setUsername(e.target.value)} 
+                  placeholder="ادخل اسم المستخدم" 
+                  className="username-input"
+                />
+                <span className="email-domain-tag">
+                  {EMAIL_DOMAIN}
+                </span>
+              </div>
+              <span className="helper-text">
+                اكتب اسم حسابك فقط بدون كتابة {EMAIL_DOMAIN}
+              </span>
+            </div>
+
+            {/* حقل كلمة المرور */}
+            <div className="field-group">
+              <label className="input-label">كلمة المرور</label>
+              <input 
+                type="password" 
+                required 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                placeholder="••••••••" 
+                className="password-input"
+              />
+            </div>
+
+            {/* زر الدخول */}
+            <button className="btn-primary" type="submit" disabled={loading}>
+              {loading ? (
+                <span className="btn-loading flex-center">
+                  <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="12" cy="12" r="10" strokeWidth="4" className="spinner-track" />
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  جاري التحقق والدخول...
+                </span>
+              ) : 'تسجيل الدخول'}
+            </button>
+
+            {/* رابط طلب انضمام */}
+            <div className="signup-prompt">
+              ليس لديك حساب موزع؟{' '}
+              <a href="/signup" className="signup-link">
+                طلب انضمام كموزع
+              </a>
+            </div>
+          </form>
+        </div>
       </div>
+
+      {/* التنسيقات المضمنة المباشرة */}
+      <style jsx>{`
+        .auth-container {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #090d16;
+          background-image: 
+            radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.12) 0px, transparent 50%),
+            radial-gradient(at 100% 100%, rgba(37, 99, 235, 0.15) 0px, transparent 50%);
+          padding: 20px;
+          direction: rtl;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .auth-card-wrap {
+          display: flex;
+          width: 100%;
+          max-width: 980px;
+          background: #ffffff;
+          border-radius: 24px;
+          overflow: hidden;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* القسم الجانبي الجمالي */
+        .auth-art {
+          flex: 1.1;
+          background: linear-gradient(145deg, #0f172a 0%, #064e3b 100%);
+          padding: 48px 40px;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .auth-art::before {
+          content: '';
+          position: absolute;
+          top: -100px;
+          right: -100px;
+          width: 300px;
+          height: 300px;
+          background: rgba(16, 185, 129, 0.15);
+          border-radius: 50%;
+          filter: blur(80px);
+        }
+
+        .network-badge {
+          background: rgba(255, 255, 255, 0.1);
+          backdrop-filter: blur(12px);
+          color: #6ee7b7;
+          padding: 8px 18px;
+          border-radius: 30px;
+          font-size: 13px;
+          font-weight: 700;
+          display: inline-block;
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .art-main {
+          margin: auto 0;
+          padding: 30px 0;
+          position: relative;
+          z-index: 2;
+        }
+
+        .brand-title {
+          font-size: 42px;
+          font-weight: 900;
+          color: #ffffff;
+          margin-bottom: 12px;
+          letter-spacing: -0.5px;
+        }
+
+        .brand-subtitle {
+          font-size: 20px;
+          line-height: 1.6;
+          font-weight: 700;
+          color: #e2e8f0;
+          margin-bottom: 16px;
+        }
+
+        .brand-description {
+          color: #94a3b8;
+          line-height: 1.8;
+          font-size: 14px;
+          max-width: 420px;
+          margin: 0;
+        }
+
+        .art-footer {
+          padding-top: 24px;
+          border-top: 1px solid rgba(255, 255, 255, 0.12);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          font-size: 13px;
+          color: #94a3b8;
+          position: relative;
+          z-index: 2;
+        }
+
+        .developer-tag {
+          color: #6ee7b7;
+          font-weight: 600;
+        }
+
+        .developer-tag strong {
+          color: #ffffff;
+        }
+
+        /* قسم نموذج الدخول */
+        .auth-form-side {
+          flex: 1;
+          padding: 48px 40px;
+          display: flex;
+          align-items: center;
+          background: #ffffff;
+        }
+
+        .form-card {
+          width: 100%;
+        }
+
+        .form-header {
+          margin-bottom: 28px;
+        }
+
+        .login-title {
+          font-weight: 900;
+          font-size: 26px;
+          color: #0f172a;
+          margin: 0 0 8px 0;
+        }
+
+        .login-subtitle {
+          font-size: 14px;
+          color: #64748b;
+          margin: 0;
+          line-height: 1.5;
+        }
+
+        .error-note {
+          background: #fef2f2;
+          color: #dc2626;
+          border: 1px solid #fecaca;
+          padding: 12px 16px;
+          border-radius: 12px;
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 20px;
+        }
+
+        .field-group {
+          margin-bottom: 20px;
+        }
+
+        .input-label {
+          font-weight: 700;
+          font-size: 13px;
+          color: #334155;
+          margin-bottom: 8px;
+          display: block;
+        }
+
+        .username-input-wrap {
+          display: flex;
+          align-items: center;
+          border: 1.5px solid #cbd5e1;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #ffffff;
+          transition: all 0.2s ease;
+        }
+
+        .username-input-wrap:focus-within {
+          border-color: #059669;
+          box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+        }
+
+        .username-input {
+          border: none;
+          flex: 1;
+          padding: 14px 16px;
+          outline: none;
+          font-size: 14px;
+          color: #0f172a;
+          direction: ltr;
+          text-align: right;
+          background: transparent;
+        }
+
+        .email-domain-tag {
+          padding: 0 16px;
+          color: #059669;
+          font-size: 13px;
+          font-weight: 800;
+          background: #f0fdf4;
+          border-right: 1.5px solid #e2e8f0;
+          height: 48px;
+          display: flex;
+          align-items: center;
+          direction: ltr;
+        }
+
+        .password-input {
+          width: 100%;
+          padding: 14px 16px;
+          border-radius: 12px;
+          border: 1.5px solid #cbd5e1;
+          font-size: 14px;
+          color: #0f172a;
+          outline: none;
+          transition: all 0.2s ease;
+          box-sizing: border-box;
+        }
+
+        .password-input:focus {
+          border-color: #059669;
+          box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.12);
+        }
+
+        .helper-text {
+          font-size: 12px;
+          color: #94a3b8;
+          margin-top: 6px;
+          display: block;
+        }
+
+        .btn-primary {
+          width: 100%;
+          padding: 14px;
+          background: #059669;
+          color: #ffffff;
+          border: none;
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+          margin-top: 8px;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+          background: #047857;
+          transform: translateY(-1px);
+        }
+
+        .btn-primary:disabled {
+          opacity: 0.7;
+          cursor: not-allowed;
+        }
+
+        .btn-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .spinner {
+          width: 18px;
+          height: 18px;
+          animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+
+        .signup-prompt {
+          text-align: center;
+          font-size: 14px;
+          color: #64748b;
+          margin-top: 24px;
+        }
+
+        .signup-link {
+          color: #059669;
+          font-weight: 800;
+          text-decoration: none;
+          transition: color 0.2s ease;
+        }
+
+        .signup-link:hover {
+          color: #047857;
+          text-decoration: underline;
+        }
+
+        /* الاستجابة للهواتف والشاشات الصغيرة */
+        @media (max-width: 868px) {
+          .auth-card-wrap {
+            flex-direction: column;
+            border-radius: 16px;
+          }
+
+          .auth-art {
+            padding: 32px 24px;
+          }
+
+          .brand-title {
+            font-size: 32px;
+          }
+
+          .brand-subtitle {
+            font-size: 17px;
+          }
+
+          .auth-form-side {
+            padding: 32px 24px;
+          }
+        }
+      `}</style>
     </div>
   );
 }
