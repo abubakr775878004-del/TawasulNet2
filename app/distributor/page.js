@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
-import WeeklyGiveawayBanner from '../../components/WeeklyGiveawayBanner';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -30,6 +29,10 @@ export default function DistributorPage() {
   const [noteContent, setNoteContent] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
+
+  // متغيرات الفائز الأسبوعي
+  const [winnerName, setWinnerName] = useState('');
+  const [winnerDistributor, setWinnerDistributor] = useState('');
 
   async function load() {
     if (!profile) return;
@@ -73,6 +76,38 @@ export default function DistributorPage() {
     }
   }
 
+  // جلب الفائز الأسبوعي
+  useEffect(() => {
+    async function fetchWinner() {
+      try {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+        const { data } = await supabase
+          .from('cards')
+          .select('customer_name, profiles:assigned_to(full_name)')
+          .eq('status', 'sold')
+          .not('customer_name', 'is', null)
+          .gte('sold_at', oneWeekAgo.toISOString())
+          .order('sold_at', { ascending: false });
+
+        if (data && data.length > 0) {
+          const today = new Date();
+          const startOfYear = new Date(today.getFullYear(), 0, 1);
+          const days = Math.floor((today - startOfYear) / (24 * 60 * 60 * 1000));
+          const weekNumber = Math.floor(days / 7);
+          const index = (today.getFullYear() * 1000 + weekNumber) % data.length;
+          
+          setWinnerName(data[index].customer_name);
+          setWinnerDistributor(data[index].profiles?.full_name || 'غير محدد');
+        }
+      } catch (err) {
+        console.error('Error fetching winner:', err);
+      }
+    }
+    fetchWinner();
+  }, []);
+
   useEffect(() => {
     if (profile) {
       load();
@@ -89,7 +124,7 @@ export default function DistributorPage() {
 
   function askReveal(pkgId, pkgName) {
     setRevealError('');
-    setCustomerName(''); // إعادة تعيين الحقل فارغاً عند كل فتح
+    setCustomerName('');
     setPendingPackage({
       id: pkgId,
       name: pkgName,
@@ -128,7 +163,6 @@ export default function DistributorPage() {
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
 
-      // تحديث حالة الكرت مباشرة كمباع مع حفظ اسم الزبون ووقت البيع لضمان ظهوره في المسابقة
       const { error: updateError } = await supabase
         .from('cards')
         .update({
@@ -387,8 +421,34 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* بانر المسابقة */}
-        <WeeklyGiveawayBanner />
+        {/* صندوق عرض الفائز الأسبوعي المباشر */}
+        {winnerName && (
+          <div style={{
+            background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+            borderRadius: '16px',
+            padding: '16px 20px',
+            color: '#fff',
+            boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 10
+          }}>
+            <div>
+              <div style={{ fontSize: '11.5px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
+                🎉 الفائز في السحب الأسبوعي لهذا الأسبوع:
+              </div>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>
+                {winnerName}
+              </div>
+            </div>
+            <div style={{ fontSize: '12px', background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: '10px', color: '#E3D6FF' }}>
+              الموزع: <strong>{winnerDistributor}</strong>
+            </div>
+          </div>
+        )}
 
         <div style={{ 
           background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
