@@ -10,7 +10,6 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // النطاق الافتراضي
   const EMAIL_DOMAIN = '@gmail.com';
 
   async function handleLogin(e) {
@@ -20,12 +19,11 @@ export default function LoginPage() {
 
     const cleanUser = username.trim().toLowerCase();
     if (!cleanUser) {
-      setError('الرجاء إدخال اسم المستخدم أو البريد');
+      setError('الرجاء إدخال اسم المستخدم');
       setLoading(false);
       return;
     }
 
-    // إذا كتب المستخدم البريد كاملاً يستخدمه، وإلا يدمج @gmail.com تلقائياً
     const fullEmail = cleanUser.includes('@') ? cleanUser : `${cleanUser}${EMAIL_DOMAIN}`;
 
     try {
@@ -35,7 +33,7 @@ export default function LoginPage() {
       });
 
       if (authError) {
-        setError('بيانات الدخول غير صحيحة، يرجى التأكد من اسم المستخدم وكلمة المرور');
+        setError('اسم المستخدم أو كلمة المرور غير صحيحة');
         setLoading(false);
         return;
       }
@@ -47,7 +45,7 @@ export default function LoginPage() {
         .single();
 
       if (!profile) {
-        setError('تعذّر العثور على الحساب المرتبط بهذه البيانات');
+        setError('تعذّر العثور على حساب مرتبط بهذا البريد');
         setLoading(false);
         return;
       }
@@ -67,34 +65,62 @@ export default function LoginPage() {
 
   return (
     <div className="auth-wrap">
-      {/* القسم الجانبي الجمالي */}
-      <div className="auth-art">
-        <div className="brand" style={{ fontWeight: 900, fontSize: 24, letterSpacing: '0.5px' }}>
-          شبكة تواصل
-        </div>
+      {/* القسم الجانبي الجمالي المعدل */}
+      <div className="auth-art" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '48px 40px' }}>
         
-        <div style={{ marginTop: 'auto', marginBottom: 'auto' }}>
+        {/* الجزء الأعلى: الشارة فقط */}
+        <div>
           <span style={{ 
-            background: 'rgba(255, 255, 255, 0.15)', 
-            padding: '6px 14px', 
+            background: 'rgba(255, 255, 255, 0.12)', 
+            backdropFilter: 'blur(8px)',
+            color: '#A7F3D0',
+            padding: '6px 16px', 
             borderRadius: '20px', 
             fontSize: '12px', 
             fontWeight: '700',
             display: 'inline-block',
-            marginBottom: '16px'
+            border: '1px solid rgba(255, 255, 255, 0.15)'
           }}>
-            نظام إدارة وتوزيع كروت الشبكة
+            ⚡ نظام إدارة وتوزيع كروت الشبكة
           </span>
-          <h2 style={{ fontSize: 28, lineHeight: 1.5, fontWeight: 800 }}>
+        </div>
+        
+        {/* المنتصف: اسم الشبكة البارز والعنوان الرئيسي */}
+        <div style={{ margin: 'auto 0', padding: '20px 0' }}>
+          <h1 style={{ 
+            fontSize: 38, 
+            fontWeight: 900, 
+            color: '#FFFFFF',
+            marginBottom: 12,
+            letterSpacing: '-0.5px',
+            textShadow: '0 2px 10px rgba(0,0,0,0.15)'
+          }}>
+            شبكة تواصل
+          </h1>
+
+          <h2 style={{ fontSize: 22, lineHeight: 1.6, fontWeight: 700, color: '#E2E8F0', marginBottom: 16 }}>
             منصتك المتكاملة لإدارة الكروت، المبيعات، ورصيد الموزعين.
           </h2>
-          <p style={{ color: '#E3D6FF', marginTop: 14, lineHeight: 1.8, fontSize: '14px' }}>
+
+          <p style={{ color: '#A7F3D0', lineHeight: 1.8, fontSize: '14px', maxWidth: '440px', margin: 0 }}>
             طباعة وتصدير الكروت، متابعة طلبيات الموزعين فورياً، والسحب الأسبوعي للزبائن في مكان واحد.
           </p>
         </div>
 
-        <div style={{ fontSize: 12, color: '#C9BFEA', fontWeight: '600' }}>
-          © شبكة تواصل — تطوير وإدارة أبو بكر محسن
+        {/* الأسفل: توقيع المطور بأسلوب هادئ وأنيق */}
+        <div style={{ 
+          paddingTop: '20px', 
+          borderTop: '1px solid rgba(255, 255, 255, 0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: '12px',
+          color: '#94A3B8'
+        }}>
+          <span>© شبكة تواصل</span>
+          <span style={{ color: '#6EE7B7', fontWeight: '600' }}>
+            تطوير وإدارة: <strong style={{ color: '#FFF' }}>أبو بكر محسن</strong>
+          </span>
         </div>
       </div>
 
@@ -102,7 +128,7 @@ export default function LoginPage() {
       <div className="auth-form">
         <form className="form-card" onSubmit={handleLogin}>
           <div style={{ marginBottom: 24 }}>
-            <div className="brand" style={{ fontWeight: 900, fontSize: 22, color: 'var(--ink-dark, #0F172A)', marginBottom: 6 }}>
+            <div className="brand" style={{ fontWeight: 900, fontSize: 22, color: '#0F172A', marginBottom: 6 }}>
               تسجيل الدخول
             </div>
             <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
@@ -115,7 +141,7 @@ export default function LoginPage() {
           {/* حقل اسم المستخدم المدمج مع @gmail.com */}
           <div className="field" style={{ marginBottom: 18 }}>
             <label style={{ fontWeight: '700', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
-              اسم المستخدم / البريد
+              اسم المستخدم
             </label>
             <div style={{ 
               display: 'flex', 
@@ -123,15 +149,14 @@ export default function LoginPage() {
               border: '1.5px solid #E2E8F0', 
               borderRadius: '10px', 
               overflow: 'hidden', 
-              background: '#fff',
-              transition: 'border-color 0.2s'
+              background: '#fff'
             }}>
               <input 
                 type="text" 
                 required 
                 value={username} 
                 onChange={(e) => setUsername(e.target.value)} 
-                placeholder="أدخل اسم المستخدم" 
+                placeholder="ادخل اسم المستخدم" 
                 style={{ 
                   border: 'none', 
                   flex: 1, 
