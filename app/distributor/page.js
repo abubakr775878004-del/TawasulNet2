@@ -1,10 +1,11 @@
+الان ساقوم برفق كود اخر او برسال كود اخر قوم بالتعديل على شكل او واجهه الموقع وعلى الحفاظ على كل اعدادات اعدادات التي في
 'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
-import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
+import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel'; // استيراد لوحة الفائز الموحدة
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -348,87 +349,159 @@ export default function DistributorPage() {
   );
 
   return (
-    <div className="app-layout">
+    <div className="app">
       <Sidebar
         role="distributor"
         active="/distributor"
         name={profile.full_name}
       />
 
-      <div className="main-content">
-        {/* الشريط العلوي */}
-        <div className="topbar">
+      <div className="main">
+        <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1 className="user-greeting">
+            <h1>
               مرحبًا، {profile.full_name} 👋
             </h1>
-            <div className="sub-greet">
+
+            <div className="greet">
               إليك ملخص حسابك اليوم
             </div>
           </div>
 
-          <div className={`status-badge ${isOnline ? 'online' : 'offline'}`}>
-            <span className="dot"></span>
+          <div style={{ 
+            display: 'flex', alignItems: 'center', gap: 6, 
+            background: isOnline ? '#ECFDF5' : '#FEF2F2', 
+            color: isOnline ? '#059669' : '#DC2626', 
+            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
+          }}>
+            <span style={{ 
+              width: 7, height: 7, borderRadius: '50%', 
+              background: isOnline ? '#10B981' : '#EF4444',
+              display: 'inline-block',
+              boxShadow: isOnline ? '0 0 6px #10B981' : 'none'
+            }}></span>
             {isOnline ? 'نشط' : 'خامل'}
           </div>
         </div>
 
         <AdSlotBar />
 
-        {/* لوحة الفائز الأسبوعي */}
+        {/* لوحة الفائز الأسبوعي الموحدة (نفس ما يظهر في صفحة المدير تماماً) */}
         <WeeklyWinnerPanel />
 
-        {/* كرت العهدة والديون */}
-        <div className={`debt-card ${Number(profile?.debt_balance || 0) > 0 ? 'has-debt' : 'no-debt'}`}>
-          <div className="debt-flex">
+        <div style={{ 
+          background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
+          border: Number(profile?.debt_balance || 0) > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          padding: '16px', 
+          borderRadius: '16px', 
+          marginBottom: '20px' 
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div className="debt-label">
+              <div style={{ fontSize: '13px', color: Number(profile?.debt_balance || 0) > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
                 {Number(profile?.debt_balance || 0) > 0 ? 'المبلغ المطلوب سداده للإدارة (عهدة):' : 'حساب العهدة والديون:'}
               </div>
-              <div className="debt-amount">
-                {Number(profile?.debt_balance || 0).toLocaleString('en-US')} <span>ريال</span>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: Number(profile?.debt_balance || 0) > 0 ? '#DC2626' : '#059669' }}>
+                {Number(profile?.debt_balance || 0).toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ريال</span>
               </div>
             </div>
             {Number(profile?.debt_balance || 0) > 0 && (
-              <div className="debt-warning-tag">
+              <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
                 عليكم مبالغ معلقة
               </div>
             )}
           </div>
         </div>
 
-        {/* الكرت الشخصي */}
         {profile.personal_card && (
-          <div className="personal-card-box">
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
+              borderRadius: 20,
+              padding: '20px 24px',
+              color: '#fff',
+              marginBottom: 20,
+              boxShadow:
+                '0 10px 25px rgba(124, 58, 237, 0.25)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 15,
+            }}
+          >
             <div>
-              <div className="pcard-tag">
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                  marginBottom: 4,
+                }}
+              >
                 ⭐ كرتك الشخصي (ثابت ومميز)
               </div>
-              <div className="mono pcard-code">
+
+              <div
+                className="mono"
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  letterSpacing: 1.5,
+                }}
+              >
                 {profile.personal_card}
               </div>
             </div>
 
             <button
-              className="btn-pcard-copy"
-              onClick={() => copyPersonalCode(profile.personal_card)}
+              onClick={() =>
+                copyPersonalCode(profile.personal_card)
+              }
+              style={{
+                background:
+                  'rgba(255,255,255,0.2)',
+                border:
+                  '1px solid rgba(255,255,255,0.4)',
+                color: '#fff',
+                padding: '10px 18px',
+                borderRadius: 12,
+                fontWeight: 800,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
             >
-              {personalCopied ? '✓ تم النسخ' : '📋 نسخ الكرت الشخصي'}
+              {personalCopied
+                ? '✓ تم النسخ'
+                : '📋 نسخ الكرت الشخصي'}
             </button>
           </div>
         )}
 
-        {/* كرت الرصيد الحالي */}
         <div className="balance-card">
-          <div className="lbl">رصيدك الحالي</div>
+          <div className="lbl">
+            رصيدك الحالي
+          </div>
+
           <div className="amt">
-            {Number(profile.balance).toLocaleString('en-US')} <span>ريال</span>
+            {Number(profile.balance).toLocaleString(
+              'en-US'
+            )}{' '}
+            <span>ريال</span>
           </div>
 
           <div className="foot">
-            <div className="my-cards-cnt">
+            <div
+              style={{
+                fontSize: 11.5,
+                color: '#E3D6FF',
+              }}
+            >
               كروت لديك الآن: {myCards.length}
             </div>
+
             <Link href="/distributor/request">
               <button className="req-btn">
                 طلب كروت جديد
@@ -437,106 +510,186 @@ export default function DistributorPage() {
           </div>
         </div>
 
-        {/* شبكة الإحصائيات */}
-        <div className="grid-stats">
-          <div className="stat-card">
-            <div className="label">كروت متاحة عندي</div>
-            <div className="value">{myCards.length}</div>
+        <div
+          className="grid-stats"
+          style={{
+            gridTemplateColumns:
+              'repeat(3,1fr)',
+          }}
+        >
+          <div className="stat">
+            <div className="label">
+              كروت متاحة عندي
+            </div>
+
+            <div className="value">
+              {myCards.length}
+            </div>
           </div>
 
-          <div className="stat-card">
-            <div className="label">مبيعات اليوم</div>
-            <div className="value">{soldToday}</div>
+          <div className="stat">
+            <div className="label">
+              مبيعات اليوم
+            </div>
+
+            <div className="value">
+              {soldToday}
+            </div>
           </div>
 
-          <div className="stat-card">
-            <div className="label">القيمة الإجمالية لكروتك</div>
-            <div className="value highlight">
-              {totalValue.toLocaleString('en-US')} <span>ريال</span>
+          <div className="stat">
+            <div className="label">
+              القيمة الإجمالية لكروتك
+            </div>
+
+            <div
+              className="value"
+              style={{
+                fontSize: 20,
+              }}
+            >
+              {totalValue.toLocaleString(
+                'en-US'
+              )}{' '}
+
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                }}
+              >
+                ريال
+              </span>
             </div>
           </div>
         </div>
 
-        {/* قسم الباقات المتاحة */}
         <div className="panel">
-          <div className="panel-head">
+          <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3>باقاتي المتاحة</h3>
-              <span className="muted">اضغط "إظهار كرت" عند وجود زبون</span>
+
+              <span className="muted">
+                اضغط "إظهار كرت" عند وجود زبون
+              </span>
             </div>
 
             <button 
               onClick={load} 
               disabled={isRefreshing}
-              className="refresh-btn"
+              style={{
+                background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
+                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
+              }}
             >
-              <span className={`refresh-icon ${isRefreshing ? 'spin' : ''}`}>🔄</span>
+              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
               {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
             </button>
           </div>
 
           {revealError && (
-            <div className="error-note-box">
+            <div className="error-note" style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
               {revealError}
             </div>
           )}
 
           {Object.keys(byPackage).length === 0 && (
-            <div className="empty-state">
+            <div
+              style={{
+                color: 'var(--ink-soft)',
+                fontSize: 13,
+              }}
+            >
               لا توجد كروت لديك حاليًا
             </div>
           )}
 
           <div className="pkg-grid">
-            {Object.entries(byPackage).map(([name, info]) => (
-              <div className="pkg-card" key={name}>
-                <div className="pname">{name}</div>
-                <div className="pcount">
-                  {info.count} <span>كرت لديك</span>
-                </div>
-                <div className="pval">
-                  القيمة: {(info.count * info.price).toLocaleString('en-US')} ريال
-                </div>
-
-                <button
-                  className="btn-reveal"
-                  onClick={() => askReveal(info.packageId, name)}
+            {Object.entries(byPackage).map(
+              ([name, info]) => (
+                <div
+                  className="pkg-card"
+                  key={name}
                 >
-                  إظهار كرت
-                </button>
-              </div>
-            ))}
+                  <div className="pname">
+                    {name}
+                  </div>
+
+                  <div className="pcount">
+                    {info.count}{' '}
+                    <span>كرت لديك</span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      color: 'var(--ink-soft)',
+                      fontWeight: 700,
+                      marginTop: 4,
+                    }}
+                  >
+                    القيمة:{' '}
+                    {(
+                      info.count *
+                      info.price
+                    ).toLocaleString(
+                      'en-US'
+                    )}{' '}
+                    ريال
+                  </div>
+
+                  <button
+                    className="btn-primary"
+                    style={{
+                      marginTop: 14,
+                      width: '100%',
+                    }}
+                    onClick={() =>
+                      askReveal(
+                        info.packageId,
+                        name
+                      )
+                    }
+                  >
+                    إظهار كرت
+                  </button>
+                </div>
+              )
+            )}
           </div>
         </div>
 
-        {/* سجل المبيعات */}
-        <div className="panel gap-top">
+        <div className="panel" style={{ marginTop: 20 }}>
           <div className="panel-head">
             <h3>سجل مبيعات اليوم الأخيرة</h3>
             <span className="muted">آخر الكروت التي قمت ببيعها اليوم</span>
           </div>
 
           {recentSales.length === 0 ? (
-            <div className="empty-state">
+            <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
               لم تقم ببيع أي كرت حتى الآن اليوم.
             </div>
           ) : (
-            <div className="sales-list">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
               {recentSales.map((sale) => (
-                <div key={sale.id} className="sale-item">
+                <div key={sale.id} style={{ 
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' 
+                }}>
                   <div>
-                    <div className="sale-title">
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
                       {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
                     </div>
-                    <div className="mono sale-code">
+                    <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
                       {sale.code}
                     </div>
                   </div>
-                  <div className="sale-meta">
-                    <div className="sale-price">
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#059669' }}>
                       {sale.packages?.price || 0} ريال
                     </div>
-                    <div className="sale-time">
+                    <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
                       {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
@@ -546,53 +699,164 @@ export default function DistributorPage() {
           )}
         </div>
 
-        {/* إرسال ملاحظة */}
-        <div className="panel gap-top">
+        <div
+          className="panel"
+          style={{
+            marginTop: 20,
+          }}
+        >
           <div className="panel-head">
-            <h3>إرسال ملاحظة أو طلب للمدير</h3>
+            <h3>
+              إرسال ملاحظة أو طلب للمدير
+            </h3>
           </div>
 
           <form onSubmit={sendNoteToAdmin}>
             <textarea
               rows={3}
               value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
+              onChange={(e) =>
+                setNoteContent(
+                  e.target.value
+                )
+              }
               disabled={noteBusy}
               placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
-              className="note-textarea"
+              style={{
+                width: '100%',
+                padding: 12,
+                borderRadius: 10,
+                border:
+                  '1.5px solid var(--line)',
+                marginBottom: 10,
+                fontSize: 13.5,
+                resize: 'vertical',
+                opacity: noteBusy ? 0.7 : 1,
+              }}
             />
 
             {noteMessage && (
-              <div className={`note-status ${
-                noteMessage.startsWith('✓') ? 'success' : noteMessage.startsWith('⚠️') ? 'warning' : 'error'
-              }`}>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  marginBottom: 10,
+                  color:
+                    noteMessage.startsWith('✓')
+                      ? '#10B981'
+                      : noteMessage.startsWith(
+                          '⚠️'
+                        )
+                      ? '#D97706'
+                      : '#DC2626',
+                }}
+              >
                 {noteMessage}
               </div>
             )}
 
             <button
               type="submit"
-              disabled={noteBusy || !noteContent.trim()}
-              className="btn-send-note"
+              disabled={
+                noteBusy ||
+                !noteContent.trim()
+              }
+              className="btn-primary"
+              style={{
+                width: 'auto',
+                padding: '10px 20px',
+                opacity:
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 0.65
+                    : 1,
+                cursor:
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
             >
-              {noteBusy ? 'جاري الإرسال...' : 'إرسال للمدير'}
+              {noteBusy
+                ? 'جاري الإرسال...'
+                : 'إرسال للمدير'}
             </button>
           </form>
         </div>
       </div>
 
-      {/* مودال اختيار اسم الزبون قبل التأكيد */}
       {pendingPackage && (
-        <div className="modal-overlay">
-          <div className="modal-card">
-            <div className="modal-header">
-              <div className="modal-sub">إظهار كرت من باقة</div>
-              <div className="modal-title">{pendingPackage.name}</div>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(20,10,40,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 22,
+              padding: 0,
+              maxWidth: 340,
+              width: '100%',
+              textAlign: 'center',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                padding:
+                  '26px 20px 22px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                  marginBottom: 6,
+                }}
+              >
+                إظهار كرت من باقة
+              </div>
+
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 900,
+                  color: '#fff',
+                  lineHeight: 1.2,
+                }}
+              >
+                {pendingPackage.name}
+              </div>
             </div>
 
-            <div className="modal-body">
-              <div className="field-block">
-                <label className="field-label">
+            <div
+              style={{
+                padding: '20px 24px 24px',
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: 'var(--ink-soft)',
+                  marginBottom: 15,
+                  textAlign: 'right'
+                }}
+              >
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#374151' }}>
                   اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
                 <input
@@ -600,22 +864,52 @@ export default function DistributorPage() {
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   placeholder="مثال: أحمد محمد (لإدخاله في السحب)"
-                  className="modal-input"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    borderRadius: 10,
+                    border: '1.5px solid var(--line)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
                 />
-                <span className="field-hint">
+                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: 600 }}>
                   💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
                 </span>
               </div>
 
-              <div className="modal-note">
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--ink-soft)',
+                  marginBottom: 20,
+                }}
+              >
                 سيتم تسليم كرت واحد وتأكيده كمباع
               </div>
 
-              <div className="modal-actions">
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                }}
+              >
                 <button
                   onClick={cancelReveal}
                   disabled={revealBusy}
-                  className="btn-cancel"
+                  style={{
+                    flex: 1,
+                    padding: '13px 0',
+                    borderRadius: 12,
+                    border:
+                      '1.5px solid var(--line)',
+                    background: '#fff',
+                    color:
+                      'var(--ink-soft)',
+                    fontWeight: 800,
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                  }}
                 >
                   إلغاء
                 </button>
@@ -623,9 +917,22 @@ export default function DistributorPage() {
                 <button
                   onClick={confirmReveal}
                   disabled={revealBusy}
-                  className="btn-confirm"
+                  style={{
+                    flex: 1,
+                    padding: '13px 0',
+                    borderRadius: 12,
+                    border: 'none',
+                    background:
+                      'linear-gradient(120deg, #7C3AED, #DB2777)',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: 13.5,
+                    cursor: 'pointer',
+                  }}
                 >
-                  {revealBusy ? 'جاري التأكيد...' : 'تأكيد البيع'}
+                  {revealBusy
+                    ? 'جاري التأكيد...'
+                    : 'تأكيد البيع'}
                 </button>
               </div>
             </div>
@@ -633,727 +940,171 @@ export default function DistributorPage() {
         </div>
       )}
 
-      {/* مودال إظهار الكرت المباع */}
       {revealedCard && (
-        <div className="modal-overlay">
-          <div className="modal-card card-reveal">
-            <div className="modal-header">
-              <button onClick={closeModal} className="close-btn" title="إغلاق">✕</button>
-              <div className="modal-sub">{revealedCard.packageName}</div>
-              <div className="modal-success-tag">✓ تم البيع بنجاح</div>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(20,10,40,0.6)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background:
+                'linear-gradient(160deg, #ffffff 0%, #ffffff 60%, #F3F0FB 100%)',
+              borderRadius: 24,
+              padding: 0,
+              maxWidth: 380,
+              width: '100%',
+              textAlign: 'center',
+              position: 'relative',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                padding: '18px 20px',
+                position: 'relative',
+              }}
+            >
+              <button
+                onClick={closeModal}
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  left: 12,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 10,
+                  border: 'none',
+                  background:
+                    'rgba(255,255,255,0.25)',
+                  color: '#fff',
+                  fontSize: 15,
+                  fontWeight: 900,
+                  cursor: 'pointer',
+                }}
+                title="إغلاق"
+              >
+                ✕
+              </button>
+
+              <div
+                style={{
+                  fontSize: 12.5,
+                  color: '#E3D6FF',
+                  fontWeight: 700,
+                }}
+              >
+                {revealedCard.packageName}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#fff',
+                  fontWeight: 900,
+                  marginTop: 2,
+                }}
+              >
+                ✓ تم البيع بنجاح
+              </div>
             </div>
 
-            <div className="modal-body">
-              <div className="mono revealed-code">
+            <div
+              style={{
+                padding: 26,
+              }}
+            >
+              <div
+                className="mono"
+                style={{
+                  fontSize: 28,
+                  fontWeight: 900,
+                  margin: '4px 0 18px',
+                  letterSpacing: 1,
+                  direction: 'ltr',
+                  color: '#3A1D66',
+                }}
+              >
                 {revealedCard.code}
               </div>
 
-              <div className="modal-actions gap-bottom">
-                <button onClick={copyCode} className="btn-copy-code">
-                  {copied ? '✓ تم النسخ' : '📋 نسخ الكود'}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10,
+                  marginBottom: 18,
+                }}
+              >
+                <button
+                  onClick={copyCode}
+                  style={{
+                    flex: 1,
+                    padding: '11px 0',
+                    borderRadius: 12,
+                    border:
+                      '1.5px solid #DDD3F5',
+                    background: '#F3F0FB',
+                    color: '#5B21B6',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {copied
+                    ? '✓ تم النسخ'
+                    : '📋 نسخ الكود'}
                 </button>
 
-                <button onClick={shareWhatsapp} className="btn-whatsapp">
+                <button
+                  onClick={shareWhatsapp}
+                  style={{
+                    flex: '1',
+                    padding: '11px 0',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: '#25D366',
+                    color: '#fff',
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
                   واتساب
                 </button>
               </div>
 
-              <button onClick={closeModal} className="btn-close-modal">
+              <button
+                onClick={closeModal}
+                style={{
+                  width: '100%',
+                  padding: '13px 0',
+                  borderRadius: 14,
+                  border: 'none',
+                  background: '#F3F0FB',
+                  color: '#5B21B6',
+                  fontWeight: 800,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                }}
+              >
                 إغلاق
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* التنسيقات المضمنة المباشرة */}
-      <style jsx>{`
-        .app-layout {
-          display: flex;
-          min-height: 100vh;
-          background: #f8fafc;
-          direction: rtl;
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
-        .main-content {
-          flex: 1;
-          padding: 24px;
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-
-        .topbar {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        .user-greeting {
-          font-size: 26px;
-          font-weight: 900;
-          color: #0f172a;
-          margin: 0;
-        }
-
-        .sub-greet {
-          font-size: 13px;
-          color: #64748b;
-          margin-top: 4px;
-        }
-
-        .status-badge {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 14px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 800;
-        }
-
-        .status-badge.online {
-          background: #ecfdf5;
-          color: #059669;
-          border: 1px solid #a7f3d0;
-        }
-
-        .status-badge.offline {
-          background: #fef2f2;
-          color: #dc2626;
-          border: 1px solid #fecaca;
-        }
-
-        .dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          display: inline-block;
-        }
-
-        .online .dot {
-          background: #10b981;
-          box-shadow: 0 0 8px #10b981;
-        }
-
-        .offline .dot {
-          background: #ef4444;
-        }
-
-        /* كرت الديون */
-        .debt-card {
-          padding: 18px 20px;
-          border-radius: 16px;
-          margin-bottom: 20px;
-          transition: all 0.2s ease;
-        }
-
-        .debt-card.has-debt {
-          background: #fef2f2;
-          border: 1px solid #fecaca;
-        }
-
-        .debt-card.no-debt {
-          background: #f0fdf4;
-          border: 1px solid #bbf7d0;
-        }
-
-        .debt-flex {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .debt-label {
-          font-size: 13px;
-          font-weight: 700;
-        }
-
-        .has-debt .debt-label { color: #991b1b; }
-        .no-debt .debt-label { color: #166534; }
-
-        .debt-amount {
-          font-size: 24px;
-          font-weight: 900;
-        }
-
-        .has-debt .debt-amount { color: #dc2626; }
-        .no-debt .debt-amount { color: #059669; }
-
-        .debt-warning-tag {
-          font-size: 11px;
-          background: #ef4444;
-          color: #ffffff;
-          padding: 5px 10px;
-          border-radius: 8px;
-          font-weight: 800;
-        }
-
-        /* الكرت الشخصي */
-        .personal-card-box {
-          background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #d946ef 100%);
-          border-radius: 20px;
-          padding: 20px 24px;
-          color: #ffffff;
-          margin-bottom: 20px;
-          box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
-          gap: 15px;
-        }
-
-        .pcard-tag {
-          font-size: 12px;
-          color: #e0e7ff;
-          font-weight: 700;
-          margin-bottom: 4px;
-        }
-
-        .pcard-code {
-          font-size: 26px;
-          font-weight: 900;
-          letter-spacing: 1.5px;
-        }
-
-        .btn-pcard-copy {
-          background: rgba(255, 255, 255, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.4);
-          color: #ffffff;
-          padding: 10px 18px;
-          border-radius: 12px;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-          backdrop-filter: blur(8px);
-          transition: background 0.2s;
-        }
-
-        .btn-pcard-copy:hover {
-          background: rgba(255, 255, 255, 0.3);
-        }
-
-        /* كرت الرصيد */
-        .balance-card {
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          border-radius: 20px;
-          padding: 24px;
-          color: #ffffff;
-          margin-bottom: 20px;
-          box-shadow: 0 12px 24px rgba(15, 23, 42, 0.15);
-        }
-
-        .balance-card .lbl {
-          font-size: 13px;
-          color: #94a3b8;
-          font-weight: 700;
-        }
-
-        .balance-card .amt {
-          font-size: 36px;
-          font-weight: 900;
-          color: #38bdf8;
-          margin: 6px 0 16px 0;
-        }
-
-        .balance-card .amt span {
-          font-size: 16px;
-          color: #94a3b8;
-        }
-
-        .balance-card .foot {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          border-top: 1px solid rgba(255, 255, 255, 0.1);
-          padding-top: 16px;
-        }
-
-        .my-cards-cnt {
-          font-size: 13px;
-          color: #cbd5e1;
-          font-weight: 600;
-        }
-
-        .req-btn {
-          background: #059669;
-          color: #ffffff;
-          border: none;
-          padding: 8px 18px;
-          border-radius: 10px;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .req-btn:hover {
-          background: #047857;
-        }
-
-        /* شبكة الإحصائيات */
-        .grid-stats {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 16px;
-          margin-bottom: 20px;
-        }
-
-        .stat-card {
-          background: #ffffff;
-          border-radius: 16px;
-          padding: 18px;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-
-        .stat-card .label {
-          font-size: 12px;
-          color: #64748b;
-          font-weight: 700;
-          margin-bottom: 6px;
-        }
-
-        .stat-card .value {
-          font-size: 24px;
-          font-weight: 900;
-          color: #0f172a;
-        }
-
-        .stat-card .value.highlight {
-          color: #059669;
-        }
-
-        /* اللوحات الرئيسية */
-        .panel {
-          background: #ffffff;
-          border-radius: 20px;
-          padding: 24px;
-          border: 1px solid #e2e8f0;
-          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
-        }
-
-        .panel.gap-top {
-          margin-top: 20px;
-        }
-
-        .panel-head {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-
-        .panel-head h3 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 800;
-          color: #0f172a;
-        }
-
-        .panel-head .muted {
-          font-size: 12px;
-          color: #94a3b8;
-          display: block;
-          margin-top: 2px;
-        }
-
-        .refresh-btn {
-          background: #f1f5f9;
-          border: 1px solid #cbd5e1;
-          color: #334155;
-          padding: 8px 14px;
-          border-radius: 10px;
-          font-size: 12px;
-          font-weight: 800;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .refresh-icon.spin {
-          animation: spin 0.8s linear infinite;
-        }
-
-        .error-note-box {
-          color: #dc2626;
-          background: #fef2f2;
-          padding: 12px;
-          border-radius: 10px;
-          margin-bottom: 16px;
-          font-size: 13px;
-          font-weight: 700;
-          border: 1px solid #fecaca;
-        }
-
-        .empty-state {
-          color: #94a3b8;
-          font-size: 13px;
-          padding: 10px 0;
-        }
-
-        /* شبكة الباقات */
-        .pkg-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-          gap: 16px;
-        }
-
-        .pkg-card {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 18px;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-        }
-
-        .pkg-card .pname {
-          font-size: 16px;
-          font-weight: 800;
-          color: #0f172a;
-        }
-
-        .pkg-card .pcount {
-          font-size: 13px;
-          color: #059669;
-          font-weight: 800;
-          margin-top: 4px;
-        }
-
-        .pkg-card .pval {
-          font-size: 12px;
-          color: #64748b;
-          font-weight: 700;
-          margin-top: 4px;
-        }
-
-        .btn-reveal {
-          margin-top: 16px;
-          width: 100%;
-          padding: 10px;
-          background: #059669;
-          color: #ffffff;
-          border: none;
-          border-radius: 10px;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-          transition: background 0.2s;
-        }
-
-        .btn-reveal:hover {
-          background: #047857;
-        }
-
-        /* سجل المبيعات */
-        .sales-list {
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
-
-        .sale-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: #f8fafc;
-          padding: 12px 16px;
-          border-radius: 12px;
-          border: 1px solid #e2e8f0;
-        }
-
-        .sale-title {
-          font-size: 13px;
-          font-weight: 800;
-          color: #1e293b;
-        }
-
-        .sale-code {
-          font-size: 12px;
-          color: #64748b;
-          letter-spacing: 0.5px;
-        }
-
-        .sale-meta {
-          text-align: left;
-        }
-
-        .sale-price {
-          font-size: 13px;
-          font-weight: 800;
-          color: #059669;
-        }
-
-        .sale-time {
-          font-size: 11px;
-          color: #94a3b8;
-        }
-
-        /* نموذج إرسال الرسائل */
-        .note-textarea {
-          width: 100%;
-          padding: 14px;
-          border-radius: 12px;
-          border: 1.5px solid #cbd5e1;
-          margin-bottom: 12px;
-          font-size: 14px;
-          resize: vertical;
-          outline: none;
-          box-sizing: border-box;
-        }
-
-        .note-textarea:focus {
-          border-color: #059669;
-        }
-
-        .note-status {
-          font-size: 13px;
-          font-weight: 700;
-          margin-bottom: 12px;
-        }
-
-        .note-status.success { color: #10b981; }
-        .note-status.warning { color: #d97706; }
-        .note-status.error { color: #dc2626; }
-
-        .btn-send-note {
-          padding: 10px 24px;
-          background: #0f172a;
-          color: #ffffff;
-          border: none;
-          border-radius: 10px;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        /* النوافذ المنبثقة (Modals) */
-        .modal-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(15, 23, 42, 0.6);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          padding: 20px;
-        }
-
-        .modal-card {
-          background: #ffffff;
-          border-radius: 24px;
-          maxWidth: 380px;
-          width: 100%;
-          overflow: hidden;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
-
-        .modal-header {
-          background: linear-gradient(135deg, #0f172a 0%, #064e3b 100%);
-          padding: 24px 20px;
-          color: #ffffff;
-          text-align: center;
-          position: relative;
-        }
-
-        .modal-sub {
-          font-size: 12px;
-          color: #a7f3d0;
-          font-weight: 700;
-        }
-
-        .modal-title {
-          font-size: 24px;
-          font-weight: 900;
-          margin-top: 4px;
-        }
-
-        .modal-success-tag {
-          font-size: 13px;
-          color: #6ee7b7;
-          font-weight: 800;
-          margin-top: 4px;
-        }
-
-        .close-btn {
-          position: absolute;
-          top: 14px;
-          left: 14px;
-          width: 32px;
-          height: 32px;
-          border-radius: 10px;
-          border: none;
-          background: rgba(255, 255, 255, 0.15);
-          color: #ffffff;
-          font-size: 16px;
-          cursor: pointer;
-        }
-
-        .modal-body {
-          padding: 24px;
-        }
-
-        .field-block {
-          text-align: right;
-          margin-bottom: 16px;
-        }
-
-        .field-label {
-          display: block;
-          margin-bottom: 8px;
-          font-weight: 700;
-          font-size: 13px;
-          color: #334155;
-        }
-
-        .modal-input {
-          width: 100%;
-          padding: 12px 14px;
-          border-radius: 10px;
-          border: 1.5px solid #cbd5e1;
-          font-size: 13px;
-          outline: none;
-          box-sizing: border-box;
-        }
-
-        .field-hint {
-          font-size: 11px;
-          color: #059669;
-          display: block;
-          margin-top: 6px;
-          font-weight: 700;
-        }
-
-        .modal-note {
-          font-size: 12px;
-          color: #64748b;
-          margin-bottom: 20px;
-          text-align: center;
-        }
-
-        .modal-actions {
-          display: flex;
-          gap: 12px;
-        }
-
-        .modal-actions.gap-bottom {
-          margin-bottom: 16px;
-        }
-
-        .btn-cancel {
-          flex: 1;
-          padding: 12px 0;
-          border-radius: 12px;
-          border: 1.5px solid #cbd5e1;
-          background: #ffffff;
-          color: #475569;
-          font-weight: 800;
-          font-size: 14px;
-          cursor: pointer;
-        }
-
-        .btn-confirm {
-          flex: 1;
-          padding: 12px 0;
-          border-radius: 12px;
-          border: none;
-          background: #059669;
-          color: #ffffff;
-          font-weight: 800;
-          font-size: 14px;
-          cursor: pointer;
-        }
-
-        .revealed-code {
-          font-size: 28px;
-          font-weight: 900;
-          margin: 12px 0 24px 0;
-          letter-spacing: 1.5px;
-          direction: ltr;
-          color: #0f172a;
-          text-align: center;
-          background: #f1f5f9;
-          padding: 14px;
-          border-radius: 14px;
-          border: 1px dashed #cbd5e1;
-        }
-
-        .btn-copy-code {
-          flex: 1;
-          padding: 12px 0;
-          border-radius: 12px;
-          border: 1.5px solid #cbd5e1;
-          background: #f8fafc;
-          color: #0f172a;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .btn-whatsapp {
-          flex: 1;
-          padding: 12px 0;
-          border-radius: 12px;
-          border: none;
-          background: #25d366;
-          color: #ffffff;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .btn-close-modal {
-          width: 100%;
-          padding: 12px 0;
-          border-radius: 12px;
-          border: none;
-          background: #f1f5f9;
-          color: #475569;
-          font-weight: 800;
-          font-size: 13px;
-          cursor: pointer;
-        }
-
-        .mono {
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        }
-
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-
-        /* الاستجابة للهواتف */
-        @media (max-width: 768px) {
-          .main-content {
-            padding: 16px;
-          }
-
-          .grid-stats {
-            grid-template-columns: repeat(1, 1fr);
-          }
-
-          .topbar {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 12px;
-          }
-
-          .personal-card-box {
-            flex-direction: column;
-            align-items: flex-start;
-          }
-
-          .btn-pcard-copy {
-            width: 100%;
-          }
-        }
-      `}</style>
     </div>
   );
 }
