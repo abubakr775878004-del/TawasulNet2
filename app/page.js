@@ -5,17 +5,27 @@ import { supabase } from '../lib/supabase';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // النطاق الذي يستخدمه الموزعون في حساباتهم
+  const EMAIL_DOMAIN = '@gmail.com';
 
   async function handleLogin(e) {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    // دمج المدخل مع @gmail.com
+    const fullEmail = `${username.trim().toLowerCase()}${EMAIL_DOMAIN}`;
+
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ 
+      email: fullEmail, 
+      password 
+    });
+
     if (authError) {
       setError('البريد الإلكتروني أو كلمة المرور غير صحيحة');
       setLoading(false);
@@ -64,15 +74,30 @@ export default function LoginPage() {
 
           <div className="field">
             <label>البريد الإلكتروني</label>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+              <input 
+                type="text" 
+                required 
+                value={username} 
+                onChange={(e) => setUsername(e.target.value)} 
+                placeholder="اسم المستخدم" 
+                style={{ border: 'none', flex: 1, padding: '10px', outline: 'none' }}
+              />
+              <span style={{ padding: '0 8px', color: '#888', fontSize: '12px', background: '#f5f5f5', borderRight: '1px solid #ddd' }}>
+                {EMAIL_DOMAIN}
+              </span>
+            </div>
           </div>
+
           <div className="field">
             <label>كلمة المرور</label>
             <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
           </div>
+
           <button className="btn-primary" type="submit" disabled={loading}>
             {loading ? 'جاري الدخول...' : 'تسجيل الدخول'}
           </button>
+          
           <div style={{ textAlign: 'center', fontSize: 12.5, color: 'var(--ink-soft)', marginTop: 16 }}>
             ليس لديك حساب موزع؟ <a href="/signup" style={{ color: 'var(--grape)', fontWeight: 700 }}>أنشئ حسابًا</a>
           </div>
