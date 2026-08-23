@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // العهدة/الدين المستحق للإدارة فقط (بعد خصم 10% والسدادات)
+  // المبلغ المستحق المطابق لصفحة المدير
   const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -73,18 +73,23 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. حساب المطلوب سداده فقط: (الكروت المباعة × 90%) - السدادات
+      // 4. حساب الدين/المبلغ المستحق بأسلوب صفحة المدير التام:
+      // جلب جميع الكروت المباعة بواسطة الموزع مع سعر الباقة أو سعر الموزع
       const { data: soldCards } = await supabase
         .from('cards')
-        .select('packages(price)')
+        .select('distributor_price, price, packages(price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold');
 
-      const totalSalesValue = (soldCards || []).reduce(
-        (sum, card) => sum + (card.packages?.price || 0),
-        0
-      );
+      // حساب إجمالي المستحق عن الكروت المباعة بعد النسبة (10% خصم للموزع = 90% صافي للإدارة)
+      const totalSoldAmount = (soldCards || []).reduce((sum, card) => {
+        // إذا كان هناك سعر مخصص للموزع مخزن في الكرت يُحسب مباشرة، وإلا يُخصم 10% من سعر الباقة الأصلي
+        const cardPrice = card.distributor_price || card.price || card.packages?.price || 0;
+        const netCardPrice = card.distributor_price ? cardPrice : cardPrice * 0.9;
+        return sum + netCardPrice;
+      }, 0);
 
+      // جلب إجمالي السدادات الدفوعات المسجلة لهذا الموزع
       const { data: paymentsData } = await supabase
         .from('distributor_payments')
         .select('amount')
@@ -95,8 +100,8 @@ export default function DistributorPage() {
         0
       );
 
-      // حصة الإدارة (90% من الكروت المباعة) مطروحاً منها السدادات
-      const netDebt = (totalSalesValue * 0.9) - totalPayments;
+      // الصافي المطلوب سداده = (إجمالي مبيعات الموزع الصافية) - (إجمالي السدادات)
+      const netDebt = totalSoldAmount - totalPayments;
       setCalculatedDebt(netDebt > 0 ? netDebt : 0);
 
     } catch (err) {
@@ -417,7 +422,7 @@ export default function DistributorPage() {
         {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* بطاقة العهدة والمبلغ المطلوب سداده للإدارة فقط */}
+        {/* كرت المبلغ المطلوب سداده المطابق تماماً لصفحة المدير */}
         <div
           style={{
             background: '#FFF5F5',
@@ -470,7 +475,7 @@ export default function DistributorPage() {
                 marginBottom: '6px',
               }}
             >
-              المبلغ المطلوب سداده للإدارة (عهدة):
+              المبلغ المطلوب سداده للإدارة:
             </div>
             <div
               style={{
