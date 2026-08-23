@@ -457,8 +457,8 @@ export default function DistributorPage() {
                 عليك مبالغ معلقة
               </div>
             ) : (
-              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight 800 }}>
-                الحساب مصفى %100
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
+                {"الحساب مصفى 100%"}
               </div>
             )}
           </div>
@@ -628,7 +628,7 @@ export default function DistributorPage() {
               <h3>باقاتي المتاحة</h3>
 
               <span className="muted">
-                اضغط "إظهار كرت" عند وجود زبون
+                اضغط &quot;إظهار كرت&quot; عند وجود زبون
               </span>
             </div>
 
