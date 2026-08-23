@@ -100,7 +100,6 @@ export default function DistributorPage() {
       const managerShare = totalSalesAmount * 0.9;
       const netDebt = managerShare - totalPayments;
 
-      // إذا كانت النتيجة بالسالب (أي سدد أكثر مما عليه)، تجعل المتبقي 0
       setCalculatedDebt(netDebt > 0 ? netDebt : 0);
 
     } catch (err) {
@@ -408,7 +407,7 @@ export default function DistributorPage() {
             display: 'flex', alignItems: 'center', gap: 6, 
             background: isOnline ? '#ECFDF5' : '#FEF2F2', 
             color: isOnline ? '#059669' : '#DC2626', 
-            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: '800',
             border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
           }}>
             <span style={{ 
@@ -426,7 +425,7 @@ export default function DistributorPage() {
         {/* لوحة الفائز الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* صندوق العهدة النظيفة (حصة المدير 90% مطروحاً منها السدادات) */}
+        {/* صندوق العهدة المطلوبة تسليمه للمدير */}
         <div style={{ 
           background: calculatedDebt > 0 ? '#FEF2F2' : '#0F172A', 
           border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #1E293B',
@@ -438,20 +437,20 @@ export default function DistributorPage() {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div style={{ fontSize: '12px', color: calculatedDebt > 0 ? '#DC2626' : '#94A3B8', fontWeight: 700 }}>
+              <div style={{ fontSize: '12px', color: calculatedDebt > 0 ? '#DC2626' : '#94A3B8', fontWeight: '700' }}>
                 المبلغ المطلوب تسليمه للمدير
               </div>
               <div style={{ fontSize: '14px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
-                صافي المبيعات المتبقية (بعد خصم 10% عمولة الموزع والسدادات)
+                صافي المبيعات (بعد خصم 10% عمولة الموزع)
               </div>
             </div>
 
             {calculatedDebt > 0 ? (
-              <div style={{ fontSize: '11px', background: '#DC2626', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
+              <div style={{ fontSize: '11px', background: '#DC2626', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: '800' }}>
                 عليك مبالغ معلقة
               </div>
             ) : (
-              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight 800 }}>
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: '800' }}>
                 الحساب مصفى
               </div>
             )}
@@ -485,7 +484,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#E3D6FF',
-                  fontWeight: 700,
+                  fontWeight: '700',
                   marginBottom: 4,
                 }}
               >
@@ -496,7 +495,7 @@ export default function DistributorPage() {
                 className="mono"
                 style={{
                   fontSize: 24,
-                  fontWeight: 900,
+                  fontWeight: '900',
                   letterSpacing: 1.5,
                 }}
               >
@@ -516,7 +515,7 @@ export default function DistributorPage() {
                 color: '#fff',
                 padding: '10px 18px',
                 borderRadius: 12,
-                fontWeight: 800,
+                fontWeight: '800',
                 fontSize: 13,
                 cursor: 'pointer',
               }}
@@ -603,7 +602,7 @@ export default function DistributorPage() {
               <span
                 style={{
                   fontSize: 12,
-                  fontWeight: 700,
+                  fontWeight: '700',
                 }}
               >
                 ريال
@@ -627,7 +626,7 @@ export default function DistributorPage() {
               disabled={isRefreshing}
               style={{
                 background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
-                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800,
+                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '800',
                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
               }}
             >
@@ -673,7 +672,7 @@ export default function DistributorPage() {
                     style={{
                       fontSize: 12.5,
                       color: 'var(--ink-soft)',
-                      fontWeight: 700,
+                      fontWeight: '700',
                       marginTop: 4,
                     }}
                   >
@@ -787,7 +786,7 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12.5,
-                  fontWeight: 700,
+                  fontWeight: '700',
                   marginBottom: 10,
                   color:
                     noteMessage.startsWith('✓')
@@ -872,7 +871,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#E3D6FF',
-                  fontWeight: 700,
+                  fontWeight: '700',
                   marginBottom: 6,
                 }}
               >
@@ -882,7 +881,7 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 26,
-                  fontWeight: 900,
+                  fontWeight: '900',
                   color: '#fff',
                   lineHeight: 1.2,
                 }}
@@ -904,7 +903,7 @@ export default function DistributorPage() {
                   textAlign: 'right'
                 }}
               >
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#374151' }}>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
                   اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
                 <input
@@ -921,7 +920,7 @@ export default function DistributorPage() {
                     outline: 'none'
                   }}
                 />
-                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: '600' }}>
                   💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
                 </span>
               </div>
@@ -954,7 +953,7 @@ export default function DistributorPage() {
                     background: '#fff',
                     color:
                       'var(--ink-soft)',
-                    fontWeight: 800,
+                    fontWeight: '800',
                     fontSize: 13.5,
                     cursor: 'pointer',
                   }}
@@ -973,7 +972,7 @@ export default function DistributorPage() {
                     background:
                       'linear-gradient(120deg, #7C3AED, #DB2777)',
                     color: '#fff',
-                    fontWeight: 800,
+                    fontWeight: '800',
                     fontSize: 13.5,
                     cursor: 'pointer',
                   }}
@@ -1039,7 +1038,7 @@ export default function DistributorPage() {
                     'rgba(255,255,255,0.25)',
                   color: '#fff',
                   fontSize: 15,
-                  fontWeight: 900,
+                  fontWeight: '900',
                   cursor: 'pointer',
                 }}
                 title="إغلاق"
@@ -1051,7 +1050,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12.5,
                   color: '#E3D6FF',
-                  fontWeight: 700,
+                  fontWeight: '700',
                 }}
               >
                 {revealedCard.packageName}
@@ -1061,7 +1060,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#fff',
-                  fontWeight: 900,
+                  fontWeight: '900',
                   marginTop: 2,
                 }}
               >
@@ -1078,7 +1077,7 @@ export default function DistributorPage() {
                 className="mono"
                 style={{
                   fontSize: 28,
-                  fontWeight: 900,
+                  fontWeight: '900',
                   margin: '4px 0 18px',
                   letterSpacing: 1,
                   direction: 'ltr',
@@ -1105,7 +1104,7 @@ export default function DistributorPage() {
                       '1.5px solid #DDD3F5',
                     background: '#F3F0FB',
                     color: '#5B21B6',
-                    fontWeight: 800,
+                    fontWeight: '800',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1124,7 +1123,7 @@ export default function DistributorPage() {
                     border: 'none',
                     background: '#25D366',
                     color: '#fff',
-                    fontWeight: 800,
+                    fontWeight: '800',
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1142,7 +1141,7 @@ export default function DistributorPage() {
                   border: 'none',
                   background: '#F3F0FB',
                   color: '#5B21B6',
-                  fontWeight: 800,
+                  fontWeight: '800',
                   fontSize: 13.5,
                   cursor: 'pointer',
                 }}
