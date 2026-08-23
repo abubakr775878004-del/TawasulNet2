@@ -4,6 +4,16 @@ import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
+// دالة تحويل التاريخ إلى صيغة رقمية بالكامل (YYYY/MM/DD)
+function formatNumericDate(dateString) {
+  if (!dateString) return '';
+  const d = new Date(dateString);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
+}
+
 export default function SalesPage() {
   const { profile, loading } = useProfile('distributor');
   const [sold, setSold] = useState([]);
@@ -63,12 +73,12 @@ export default function SalesPage() {
         
         {/* اختيار الشهر */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-soft)' }}>استعراض تقرير شهر:</label>
+          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-soft)' }}>استعراض تقرير شهر (سنة/شهر):</label>
           <input 
             type="month" 
             value={selectedMonth} 
             onChange={(e) => setSelectedMonth(e.target.value)}
-            style={{ display: 'block', padding: '8px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', width: '100%', marginTop: 5, fontWeight: 600 }}
+            style={{ display: 'block', padding: '8px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', width: '100%', marginTop: 5, fontWeight: 700, fontFamily: 'monospace' }}
           />
         </div>
 
@@ -98,12 +108,15 @@ export default function SalesPage() {
           ))}
         </div>
 
-        {/* 2. بطاقة التقرير المالي والتصفية الشاملة (المعدلة والأنيقة) */}
+        {/* 2. بطاقة التقرير المالي والتصفية الشاملة */}
         <div className="panel" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 18, padding: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', marginBottom: 20 }}>
           <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 10, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#0F172A' }}>كشف الحساب والتصفية المالية</h3>
-              <span style={{ fontSize: 11, color: '#64748B', fontWeight: 500 }}>موقف الحساب المالي لشهر ({selectedMonth})</span>
+              {/* عرض الشهر بالسنة والضرورة بالأرقام فقط مثل 2026/08 */}
+              <span style={{ fontSize: 11, color: '#64748B', fontWeight: 700, fontFamily: 'monospace' }}>
+                موقف الحساب لشهر: {selectedMonth.replace('-', '/')}
+              </span>
             </div>
             <span style={{ background: '#F1F5F9', color: '#475569', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6 }}>10% صافي</span>
           </div>
@@ -121,7 +134,7 @@ export default function SalesPage() {
               <span style={{ fontWeight: 900, fontSize: 14, color: '#059669' }}>- {totalCommission.toLocaleString()} ر.ي</span>
             </div>
 
-            {/* الصافي الواجب تسليمه للشبكة (شريط زاهي وبارز) */}
+            {/* الصافي الواجب تسليمه للشبكة */}
             <div style={{ background: '#1E293B', color: '#FFFFFF', padding: '14px 16px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
               <div>
                 <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>الصافي الواجب تسليمه للشبكة (90%):</div>
@@ -148,7 +161,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 3. سجل المبيعات المفصل */}
+        {/* 3. سجل المبيعات المفصل بالتواريخ الرقمية */}
         <div className="panel">
           <h3>سجل المبيعات المفصل</h3>
           {filteredSold.length === 0 && (
@@ -160,8 +173,9 @@ export default function SalesPage() {
                 <div className="tcode mono">{c.code}</div>
                 <div className="tpkg">{c.packages?.name}</div>
               </div>
-              <div className="tleft" style={{ fontSize: 11 }}>
-                {new Date(c.sold_at).toLocaleDateString('ar-YE')}
+              {/* عرض التاريخ بصيغة رقمية بوضوح تام: YYYY/MM/DD */}
+              <div className="tleft mono" style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
+                {formatNumericDate(c.sold_at)}
               </div>
             </div>
           ))}
