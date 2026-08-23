@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة العهدة والسدادات
+  // حالة العهدة والسدادات المحسوبة تلقائياً
   const [calculatedDebt, setCalculatedDebt] = useState(0);
   const [displayPayments, setDisplayPayments] = useState(0);
 
@@ -74,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. حساب إجمالي قيمة الكروت المباعة كلياً للموزع (حصة الإدارة 90%)
+      // 4. حساب إجمالي المبيعات التراكمية للموزع (حصة الإدارة 90%)
       const { data: allSoldCards } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -98,11 +98,11 @@ export default function DistributorPage() {
         0
       );
 
-      // 6. حساب الدين المتبقي الحقيقي
+      // 6. حساب صافي الدين المترتب
       const netDebt = Math.max(0, totalRequiredFromSales - totalPayments);
       setCalculatedDebt(netDebt);
 
-      // 7. إذا كان الحساب مصفى (الدين 0) يظهر السداد كـ 0، وغير ذلك يظهر السداد الحقيقي
+      // 7. شرط التصفية الخيار الأول: إذا كان الدين 0 يتم تصفير خانة السدادات الظاهرة
       if (netDebt === 0) {
         setDisplayPayments(0);
       } else {
@@ -242,7 +242,7 @@ export default function DistributorPage() {
     if (!revealedCard) return;
 
     const dailyReminders = [
-      'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
+      'أكثروا من الصلاة على النبي (صل الله عليه وسلم)',
       'سبحان الله وبحمده، سبحان الله العظيم',
       'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
       'اللهم صل وسلم وبارك على نبينا محمد',
@@ -429,46 +429,38 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* لوحة الفائز الأسبوعي */}
+        {/* لوحة الفائز الأسبوعي الموحدة */}
         <WeeklyWinnerPanel />
 
-        {/* صندوق العهدة والدين */}
+        {/* الخانة الخضراء/الحمراء المتكيفة - تتصفر السدادات عند تصفية الدين بالكامل */}
         <div style={{ 
-          background: calculatedDebt > 0 ? '#FEF2F2' : '#0F172A', 
-          border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #1E293B',
-          padding: '20px', 
-          borderRadius: '18px', 
-          color: '#fff',
-          marginBottom: '20px',
-          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)'
+          background: calculatedDebt > 0 ? '#FEF2F2' : '#F0FDF4', 
+          border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          padding: '16px', 
+          borderRadius: '16px', 
+          marginBottom: '20px' 
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '12px', color: calculatedDebt > 0 ? '#DC2626' : '#94A3B8', fontWeight: 700 }}>
-                صندوق العهدة الحقيقي (التراكمي)
+              <div style={{ fontSize: '13px', color: calculatedDebt > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
+                {calculatedDebt > 0 ? 'إجمالي الدين المطلوب تسليمه حالياً:' : 'صندوق العهدة الحقيقي (التراكمي):'}
               </div>
-              <div style={{ fontSize: '15px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
-                إجمالي الدين المطلوب تسليمه حالياً
+              <div style={{ fontSize: '22px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#059669', marginTop: '4px' }}>
+                {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ر.ي</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '700', marginTop: '6px' }}>
+                مجموع السدادات المستلمة منك: <span style={{ color: '#0F172A', fontFamily: 'monospace' }}>{displayPayments.toLocaleString('en-US')}</span> ر.ي
               </div>
             </div>
-
             {calculatedDebt > 0 ? (
-              <div style={{ fontSize: '11px', background: '#DC2626', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
-                عليك مبالغ معلقة
+              <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                عليكم مبالغ معلقة
               </div>
             ) : (
-              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
-                {"الحساب مصفى 100%"}
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                الحساب مصفى %100
               </div>
             )}
-          </div>
-
-          <div style={{ fontSize: '28px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#10B981', marginTop: '12px' }}>
-            {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '14px', color: calculatedDebt > 0 ? '#991B1B' : '#CBD5E1' }}>ر.ي</span>
-          </div>
-
-          <div style={{ fontSize: '12.5px', color: calculatedDebt > 0 ? '#7F1D1D' : '#94A3B8', fontWeight: '700', marginTop: '8px', borderTop: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid rgba(255,255,255,0.1)', paddingTop: '10px' }}>
-            مجموع السدادات المستلمة منك: <span style={{ color: calculatedDebt > 0 ? '#2563EB' : '#38BDF8', fontFamily: 'monospace', fontWeight: '800' }}>{displayPayments.toLocaleString('en-US')}</span> ر.ي
           </div>
         </div>
 
@@ -628,7 +620,7 @@ export default function DistributorPage() {
               <h3>باقاتي المتاحة</h3>
 
               <span className="muted">
-                اضغط &quot;إظهار كرت&quot; عند وجود زبون
+                اضغط "إظهار كرت" عند وجود زبون
               </span>
             </div>
 
