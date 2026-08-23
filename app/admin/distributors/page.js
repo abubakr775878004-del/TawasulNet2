@@ -12,6 +12,7 @@ export default function DistributorsPage() {
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
+  const [calculatedDebts, setCalculatedDebts] = useState({});
 
   async function loadList() {
     const { data, error: loadError } = await supabase
@@ -19,7 +20,12 @@ export default function DistributorsPage() {
       .select('*')
       .eq('role', 'distributor')
       .order('created_at', { ascending: false });
-    if (loadError) { setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); return; }
+
+    if (loadError) { 
+      setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); 
+      return; 
+    }
+
     setList(data || []);
     const initialCards = {};
     const initialDebts = {};
@@ -29,6 +35,40 @@ export default function DistributorsPage() {
     });
     setPersonalCards(initialCards);
     setDebts(initialDebts);
+
+    // حساب الدين التراكمي تلقائياً لكل موزع
+    if (data && data.length > 0) {
+      const debtMap = {};
+      for (const dist of data) {
+        // 1. جلب كروت الموزع المباعة
+        const { data: soldCards } = await supabase
+          .from('cards')
+          .select('packages(price)')
+          .eq('assigned_to', dist.id)
+          .eq('status', 'sold');
+
+        const totalSales = (soldCards || []).reduce(
+          (sum, card) => sum + (card.packages?.price || 0), 
+          0
+        );
+        const requiredAmount = totalSales * 0.9;
+
+        // 2. جلب إجمالي السدادات
+        const { data: payments } = await supabase
+          .from('payments')
+          .select('amount')
+          .eq('distributor_id', dist.id);
+
+        const totalPaid = (payments || []).reduce(
+          (sum, p) => sum + Number(p.amount || 0), 
+          0
+        );
+
+        // 3. الصافي المستحق
+        debtMap[dist.id] = Math.max(0, requiredAmount - totalPaid);
+      }
+      setCalculatedDebts(debtMap);
+    }
   }
 
   useEffect(() => { if (profile) loadList(); }, [profile]);
@@ -68,47 +108,31 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  async function updateDebt(id, actionType) {
+  async function payDebt(id) {
     const amount = parseFloat(debts[id]);
     if (!amount || amount <= 0) return;
     setError(''); setBusyId(id);
     
-    if (actionType === 'pay') {
-      // 1. تسجيل عملية السداد في جدول المدفوعات لتصفية الدين التراكمي في صفحة الموزع
-      const { error: payError } = await supabase
-        .from('payments')
-        .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
+    // 1. تسجيل عملية السداد في جدول المدفوعات لتحديث الدين المحسوب آلياً
+    const { error: payError } = await supabase
+      .from('payments')
+      .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
 
-      if (payError) {
-        setBusyId(null);
-        setError('تعذّر تسجيل عملية السداد: ' + payError.message);
-        return;
-      }
-
-      // 2. خصم المبلغ من الدين المسجل في البروفايل
-      const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
-        target_id: id,
-        amount: amount,
-        is_debt: true,
-        is_add: false
-      });
-
+    if (payError) {
       setBusyId(null);
-      if (updateError) { setError('تعذّر خصم الدين: ' + updateError.message); return; }
-
-    } else {
-      // تسجيل عهدة جديدة (إضافة دين)
-      const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
-        target_id: id,
-        amount: amount,
-        is_debt: true,
-        is_add: true
-      });
-
-      setBusyId(null);
-      if (updateError) { setError('تعذّر تحديث حساب العهدة: ' + updateError.message); return; }
+      setError('تعذّر تسجيل عملية السداد: ' + payError.message);
+      return;
     }
-    
+
+    // 2. تحديث سجل البروفايل اختياريًا
+    await supabase.rpc('modify_distributor_balance', {
+      target_id: id,
+      amount: amount,
+      is_debt: true,
+      is_add: false
+    });
+
+    setBusyId(null);
     setDebts({ ...debts, [id]: '' });
     loadList();
   }
@@ -173,121 +197,117 @@ export default function DistributorsPage() {
           {others.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا يوجد موزعون بعد</div>}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {others.map((d) => (
-              <div
-                key={d.id}
-                style={{
-                  background: '#ffffff',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 16,
-                  padding: 16,
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 14,
-                }}
-              >
-                {/* 1. ترويسة الموزع */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
-                  <div>
-                    <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
-                      {d.full_name}
+            {others.map((d) => {
+              const currentDebt = calculatedDebts[d.id] ?? 0;
+              return (
+                <div
+                  key={d.id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 16,
+                    padding: 16,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  {/* 1. ترويسة الموزع */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
+                        {d.full_name}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
+                        {d.email}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
-                      {d.email}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
+                        {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                      </span>
+                      <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+                        حذف
+                      </button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
-                      {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                    </span>
-                    <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
-                      حذف
-                    </button>
-                  </div>
-                </div>
 
-                {/* 2. شريط عرض الأرقام والبيانات المالية */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
-                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد الحالي</div>
-                    <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                      {Number(d.balance).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                  {/* 2. شريط عرض الأرقام والبيانات المالية الحسابية المباشرة */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد الحالي</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                        {Number(d.balance).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                      </div>
+                    </div>
+                    <div style={{ background: currentDebt > 0 ? '#fef2f2' : '#f0fdf4', border: currentDebt > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: currentDebt > 0 ? '#991b1b' : '#166534', fontWeight: 600 }}>العهدة / الدين التراكمي</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
+                        {currentDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                      </div>
                     </div>
                   </div>
-                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '8px 12px' }}>
-                    <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600 }}>العهدة / الدين</div>
-                    <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: '#dc2626', marginTop: 2 }}>
-                      {Number(d.debt_balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
-                    </div>
-                  </div>
-                </div>
 
-                {/* 3. قسم إضافة الرصيد */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="مبلغ الرصيد (مثلاً 50000)"
-                    value={topUps[d.id] || ''}
-                    onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
-                    style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #e5e7eb', fontFamily: 'monospace', fontSize: 12.5 }}
-                  />
-                  <button className="btn-sm btn-approve" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }} disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>
-                    إضافة رصيد
-                  </button>
-                </div>
-
-                {/* 4. قسم إدارة العهدة والسداد */}
-                <div style={{ background: '#fff5f5', padding: 10, borderRadius: 12, border: '1px solid #ffe4e4', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontSize: 11.5, color: '#991b1b', fontWeight: 700 }}>عمليات العهدة والذمم:</div>
-                  <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                  {/* 3. قسم إضافة الرصيد */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
                     <input
                       type="number"
                       min="0"
-                      placeholder="المبلغ"
-                      value={debts[d.id] || ''}
-                      onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
-                      style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #fca5a5', fontFamily: 'monospace', fontSize: 12 }}
+                      placeholder="مبلغ الرصيد (مثلاً 50000)"
+                      value={topUps[d.id] || ''}
+                      onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #e5e7eb', fontFamily: 'monospace', fontSize: 12.5 }}
                     />
-                    <button 
-                      disabled={busyId === d.id || !debts[d.id]} 
-                      onClick={() => updateDebt(d.id, 'add')}
-                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      تسجيل عهدة
-                    </button>
-                    <button 
-                      disabled={busyId === d.id || !debts[d.id]} 
-                      onClick={() => updateDebt(d.id, 'pay')}
-                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                      سداد
+                    <button className="btn-sm btn-approve" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }} disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>
+                      إضافة رصيد
                     </button>
                   </div>
-                </div>
 
-                {/* 5. قسم الكرت الشخصي */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
-                  <input
-                    type="text"
-                    placeholder="رمز الكرت الشخصي"
-                    value={personalCards[d.id] ?? ''}
-                    onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
-                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd6fe', fontFamily: 'monospace', fontSize: 12.5 }}
-                  />
-                  <button
-                    className="btn-sm btn-approve"
-                    style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}
-                    disabled={busyId === d.id}
-                    onClick={() => savePersonalCard(d.id)}
-                  >
-                    حفظ الكرت
-                  </button>
-                </div>
+                  {/* 4. قسم تسديد العهدة (تم إيقاف إضافة عهدة يدوياً لمنع الازدواجية) */}
+                  <div style={{ background: '#f0fdf4', padding: 10, borderRadius: 12, border: '1px solid #dcfce7', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 700 }}>تسجيل سداد نقدي من الموزع:</div>
+                    <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        placeholder="مبلغ السداد المقبوض"
+                        value={debts[d.id] || ''}
+                        onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
+                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12 }}
+                      />
+                      <button 
+                        disabled={busyId === d.id || !debts[d.id]} 
+                        onClick={() => payDebt(d.id)}
+                        style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        تسجيل السداد
+                      </button>
+                    </div>
+                  </div>
 
-              </div>
-            ))}
+                  {/* 5. قسم الكرت الشخصي */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
+                    <input
+                      type="text"
+                      placeholder="رمز الكرت الشخصي"
+                      value={personalCards[d.id] ?? ''}
+                      onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd6fe', fontFamily: 'monospace', fontSize: 12.5 }}
+                    />
+                    <button
+                      className="btn-sm btn-approve"
+                      style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}
+                      disabled={busyId === d.id}
+                      onClick={() => savePersonalCard(d.id)}
+                    >
+                      حفظ الكرت
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
