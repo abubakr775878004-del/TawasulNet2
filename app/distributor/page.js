@@ -17,9 +17,8 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة العهدة والسدادات
+  // حالة المبلغ المطلوب للمدير
   const [calculatedDebt, setCalculatedDebt] = useState(0);
-  const [displayPayments, setDisplayPayments] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
@@ -74,7 +73,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. حساب إجمالي قيمة الكروت المباعة كلياً للموزع (حصة الإدارة 90%)
+      // 4. حساب المبلغ المطلوب تسليمه للمدير بنسبة 90% (عمولة الموزع 10%)
       const { data: allSoldCards } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -85,29 +84,10 @@ export default function DistributorPage() {
         (sum, card) => sum + (card.packages?.price || 0),
         0
       );
-      const totalRequiredFromSales = totalSalesAmount * 0.9;
 
-      // 5. جلب إجمالي السدادات النقديّة المسجلة من المدير
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('distributor_id', profile.id);
-
-      const totalPayments = (paymentsData || []).reduce(
-        (sum, p) => sum + Number(p.amount || 0),
-        0
-      );
-
-      // 6. حساب الدين المتبقي الحقيقي
-      const netDebt = Math.max(0, totalRequiredFromSales - totalPayments);
+      // خصم 10% للموزع تلقائياً من الإجمالي
+      const netDebt = totalSalesAmount * 0.9;
       setCalculatedDebt(netDebt);
-
-      // 7. إذا كان الحساب مصفى (الدين 0) يظهر السداد كـ 0، وغير ذلك يظهر السداد الحقيقي
-      if (netDebt === 0) {
-        setDisplayPayments(0);
-      } else {
-        setDisplayPayments(totalPayments);
-      }
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -432,7 +412,7 @@ export default function DistributorPage() {
         {/* لوحة الفائز الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* صندوق العهدة والدين */}
+        {/* صندوق المستحق تسليمه للمدير بعد خصم 10% عمولة الموزع */}
         <div style={{ 
           background: calculatedDebt > 0 ? '#FEF2F2' : '#0F172A', 
           border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #1E293B',
@@ -445,10 +425,10 @@ export default function DistributorPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontSize: '12px', color: calculatedDebt > 0 ? '#DC2626' : '#94A3B8', fontWeight: 700 }}>
-                صندوق العهدة الحقيقي (التراكمي)
+                المبلغ المطلوب تسليمه للمدير
               </div>
-              <div style={{ fontSize: '15px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
-                إجمالي الدين المطلوب تسليمه حالياً
+              <div style={{ fontSize: '14px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
+                صافي المبيعات (بعد خصم 10% عمولة الموزع)
               </div>
             </div>
 
@@ -458,17 +438,13 @@ export default function DistributorPage() {
               </div>
             ) : (
               <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
-                {"الحساب مصفى 100%"}
+                الحساب مصفى
               </div>
             )}
           </div>
 
-          <div style={{ fontSize: '28px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#10B981', marginTop: '12px' }}>
+          <div style={{ fontSize: '30px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#10B981', marginTop: '12px' }}>
             {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '14px', color: calculatedDebt > 0 ? '#991B1B' : '#CBD5E1' }}>ر.ي</span>
-          </div>
-
-          <div style={{ fontSize: '12.5px', color: calculatedDebt > 0 ? '#7F1D1D' : '#94A3B8', fontWeight: '700', marginTop: '8px', borderTop: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid rgba(255,255,255,0.1)', paddingTop: '10px' }}>
-            مجموع السدادات المستلمة منك: <span style={{ color: calculatedDebt > 0 ? '#2563EB' : '#38BDF8', fontFamily: 'monospace', fontWeight: '800' }}>{displayPayments.toLocaleString('en-US')}</span> ر.ي
           </div>
         </div>
 
