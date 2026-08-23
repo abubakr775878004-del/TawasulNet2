@@ -154,20 +154,24 @@ export default function DistributorsPage() {
                 key={d.id}
                 style={{
                   background: '#ffffff',
-                  border: '1px solid #e5e7eb',
+                  border: '1px solid #e2e8f0',
                   borderRadius: 16,
                   padding: 16,
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 14,
                 }}
               >
-                {/* 1. ترويسة الموزع */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f3f4f6', pb: 12, paddingBottom: 10 }}>
+                {/* 1. ترويسة الموزع (تم إبراز الاسم هنا) */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
                   <div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>{d.full_name}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{d.email}</div>
+                    <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
+                      {d.full_name}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
+                      {d.email}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
@@ -210,7 +214,7 @@ export default function DistributorsPage() {
                   </button>
                 </div>
 
-                {/* 4. قسم إجارة العهدة والسداد */}
+                {/* 4. قسم إدارة العهدة والسداد */}
                 <div style={{ background: '#fff5f5', padding: 10, borderRadius: 12, border: '1px solid #ffe4e4', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 11.5, color: '#991b1b', fontWeight: 700 }}>عمليات العهدة والذمم:</div>
                   <div style={{ display: 'flex', gap: 6, width: '100%' }}>
