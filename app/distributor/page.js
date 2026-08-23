@@ -17,8 +17,9 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة المبلغ الصافي المطلوب تسليمه للإدارة (عهدة)
+  // حالة العهدة والسدادات المحسوبة تلقائياً
   const [calculatedDebt, setCalculatedDebt] = useState(0);
+  const [displayPayments, setDisplayPayments] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
@@ -39,7 +40,7 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
-      // 1. جلب الكروت المتاحة حالياً لدى الموزع
+      // 1. جلب الكروت المتاحة حالياً
       const { data } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -73,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. جلب إجمالي كافة المبيعات للحساب
+      // 4. حساب إجمالي المبيعات التراكمية للموزع (حصة الإدارة 90%)
       const { data: allSoldCards } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -84,23 +85,29 @@ export default function DistributorPage() {
         (sum, card) => sum + (card.packages?.price || 0),
         0
       );
+      const totalRequiredFromSales = totalSalesAmount * 0.9;
 
-      // 5. جلب إجمالي السدادات
+      // 5. جلب إجمالي السدادات النقديّة المسجلة من المدير
       const { data: paymentsData } = await supabase
-        .from('distributor_payments')
+        .from('payments')
         .select('amount')
         .eq('distributor_id', profile.id);
 
       const totalPayments = (paymentsData || []).reduce(
-        (sum, p) => sum + (Number(p.amount) || 0),
+        (sum, p) => sum + Number(p.amount || 0),
         0
       );
 
-      // 6. الحسبة: (إجمالي المبيعات × 0.9) - السدادات
-      const managerShare = totalSalesAmount * 0.9;
-      const netDebt = managerShare - totalPayments;
+      // 6. حساب صافي الدين المترتب
+      const netDebt = Math.max(0, totalRequiredFromSales - totalPayments);
+      setCalculatedDebt(netDebt);
 
-      setCalculatedDebt(netDebt > 0 ? netDebt : 0);
+      // 7. شرط التصفية الخيار الأول: إذا كان الدين 0 يتم تصفير خانة السدادات الظاهرة
+      if (netDebt === 0) {
+        setDisplayPayments(0);
+      } else {
+        setDisplayPayments(totalPayments);
+      }
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -235,7 +242,7 @@ export default function DistributorPage() {
     if (!revealedCard) return;
 
     const dailyReminders = [
-      'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
+      'أكثروا من الصلاة على النبي (صل الله عليه وسلم)',
       'سبحان الله وبحمده، سبحان الله العظيم',
       'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
       'اللهم صل وسلم وبارك على نبينا محمد',
@@ -407,7 +414,7 @@ export default function DistributorPage() {
             display: 'flex', alignItems: 'center', gap: 6, 
             background: isOnline ? '#ECFDF5' : '#FEF2F2', 
             color: isOnline ? '#059669' : '#DC2626', 
-            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: '800',
+            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: 800,
             border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
           }}>
             <span style={{ 
@@ -422,83 +429,38 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* مسابقة السحب الأسبوعي */}
+        {/* لوحة الفائز الأسبوعي الموحدة */}
         <WeeklyWinnerPanel />
 
-        {/* بطاقة العهدة والمبلغ المطلوب سداده للإدارة */}
-        <div
-          style={{
-            background: '#FFF5F5',
-            border: '1px solid #FFE3E3',
-            borderRadius: '20px',
-            padding: '20px 24px',
-            marginBottom: '20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            boxShadow: '0 4px 15px rgba(220, 38, 38, 0.03)',
-          }}
-        >
-          {calculatedDebt > 0 ? (
-            <div
-              style={{
-                background: '#FFA8A8',
-                color: '#FFFFFF',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '700',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              عليكم مبالغ معلقة
+        {/* الخانة الخضراء/الحمراء المتكيفة - تتصفر السدادات عند تصفية الدين بالكامل */}
+        <div style={{ 
+          background: calculatedDebt > 0 ? '#FEF2F2' : '#F0FDF4', 
+          border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          padding: '16px', 
+          borderRadius: '16px', 
+          marginBottom: '20px' 
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '13px', color: calculatedDebt > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
+                {calculatedDebt > 0 ? 'إجمالي الدين المطلوب تسليمه حالياً:' : 'صندوق العهدة الحقيقي (التراكمي):'}
+              </div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#059669', marginTop: '4px' }}>
+                {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ر.ي</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '700', marginTop: '6px' }}>
+                مجموع السدادات المستلمة منك: <span style={{ color: '#0F172A', fontFamily: 'monospace' }}>{displayPayments.toLocaleString('en-US')}</span> ر.ي
+              </div>
             </div>
-          ) : (
-            <div
-              style={{
-                background: '#D1FAE5',
-                color: '#065F46',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '700',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              الحساب مصفى
-            </div>
-          )}
-
-          <div style={{ textAlign: 'left' }}>
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '700',
-                color: '#C92A2A',
-                marginBottom: '6px',
-              }}
-            >
-              المبلغ المطلوب سداده للإدارة (عهدة):
-            </div>
-            <div
-              style={{
-                fontSize: '28px',
-                fontWeight: '900',
-                color: '#C92A2A',
-                lineHeight: 1,
-              }}
-            >
-              {calculatedDebt.toLocaleString('en-US')}{' '}
-              <span
-                style={{
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  color: '#C92A2A',
-                }}
-              >
-                ريال
-              </span>
-            </div>
+            {calculatedDebt > 0 ? (
+              <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                عليكم مبالغ معلقة
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                الحساب مصفى %100
+              </div>
+            )}
           </div>
         </div>
 
@@ -525,7 +487,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#E3D6FF',
-                  fontWeight: '700',
+                  fontWeight: 700,
                   marginBottom: 4,
                 }}
               >
@@ -536,7 +498,7 @@ export default function DistributorPage() {
                 className="mono"
                 style={{
                   fontSize: 24,
-                  fontWeight: '900',
+                  fontWeight: 900,
                   letterSpacing: 1.5,
                 }}
               >
@@ -556,7 +518,7 @@ export default function DistributorPage() {
                 color: '#fff',
                 padding: '10px 18px',
                 borderRadius: 12,
-                fontWeight: '800',
+                fontWeight: 800,
                 fontSize: 13,
                 cursor: 'pointer',
               }}
@@ -643,7 +605,7 @@ export default function DistributorPage() {
               <span
                 style={{
                   fontSize: 12,
-                  fontWeight: '700',
+                  fontWeight: 700,
                 }}
               >
                 ريال
@@ -658,7 +620,7 @@ export default function DistributorPage() {
               <h3>باقاتي المتاحة</h3>
 
               <span className="muted">
-                اضغط &quot;إظهار كرت&quot; عند وجود زبون
+                اضغط "إظهار كرت" عند وجود زبون
               </span>
             </div>
 
@@ -667,7 +629,7 @@ export default function DistributorPage() {
               disabled={isRefreshing}
               style={{
                 background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
-                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '800',
+                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 800,
                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
               }}
             >
@@ -713,7 +675,7 @@ export default function DistributorPage() {
                     style={{
                       fontSize: 12.5,
                       color: 'var(--ink-soft)',
-                      fontWeight: '700',
+                      fontWeight: 700,
                       marginTop: 4,
                     }}
                   >
@@ -827,7 +789,7 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12.5,
-                  fontWeight: '700',
+                  fontWeight: 700,
                   marginBottom: 10,
                   color:
                     noteMessage.startsWith('✓')
@@ -912,7 +874,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#E3D6FF',
-                  fontWeight: '700',
+                  fontWeight: 700,
                   marginBottom: 6,
                 }}
               >
@@ -922,7 +884,7 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 26,
-                  fontWeight: '900',
+                  fontWeight: 900,
                   color: '#fff',
                   lineHeight: 1.2,
                 }}
@@ -944,7 +906,7 @@ export default function DistributorPage() {
                   textAlign: 'right'
                 }}
               >
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 700, color: '#374151' }}>
                   اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
                 <input
@@ -961,7 +923,7 @@ export default function DistributorPage() {
                     outline: 'none'
                   }}
                 />
-                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: '600' }}>
+                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: 600 }}>
                   💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
                 </span>
               </div>
@@ -994,7 +956,7 @@ export default function DistributorPage() {
                     background: '#fff',
                     color:
                       'var(--ink-soft)',
-                    fontWeight: '800',
+                    fontWeight: 800,
                     fontSize: 13.5,
                     cursor: 'pointer',
                   }}
@@ -1013,7 +975,7 @@ export default function DistributorPage() {
                     background:
                       'linear-gradient(120deg, #7C3AED, #DB2777)',
                     color: '#fff',
-                    fontWeight: '800',
+                    fontWeight: 800,
                     fontSize: 13.5,
                     cursor: 'pointer',
                   }}
@@ -1079,7 +1041,7 @@ export default function DistributorPage() {
                     'rgba(255,255,255,0.25)',
                   color: '#fff',
                   fontSize: 15,
-                  fontWeight: '900',
+                  fontWeight: 900,
                   cursor: 'pointer',
                 }}
                 title="إغلاق"
@@ -1091,7 +1053,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12.5,
                   color: '#E3D6FF',
-                  fontWeight: '700',
+                  fontWeight: 700,
                 }}
               >
                 {revealedCard.packageName}
@@ -1101,7 +1063,7 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12,
                   color: '#fff',
-                  fontWeight: '900',
+                  fontWeight: 900,
                   marginTop: 2,
                 }}
               >
@@ -1118,7 +1080,7 @@ export default function DistributorPage() {
                 className="mono"
                 style={{
                   fontSize: 28,
-                  fontWeight: '900',
+                  fontWeight: 900,
                   margin: '4px 0 18px',
                   letterSpacing: 1,
                   direction: 'ltr',
@@ -1145,7 +1107,7 @@ export default function DistributorPage() {
                       '1.5px solid #DDD3F5',
                     background: '#F3F0FB',
                     color: '#5B21B6',
-                    fontWeight: '800',
+                    fontWeight: 800,
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1164,7 +1126,7 @@ export default function DistributorPage() {
                     border: 'none',
                     background: '#25D366',
                     color: '#fff',
-                    fontWeight: '800',
+                    fontWeight: 800,
                     fontSize: 13,
                     cursor: 'pointer',
                   }}
@@ -1182,7 +1144,7 @@ export default function DistributorPage() {
                   border: 'none',
                   background: '#F3F0FB',
                   color: '#5B21B6',
-                  fontWeight: '800',
+                  fontWeight: 800,
                   fontSize: 13.5,
                   cursor: 'pointer',
                 }}
