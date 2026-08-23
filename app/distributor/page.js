@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
-import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel'; // استيراد لوحة الفائز الموحدة
+import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -16,6 +16,9 @@ export default function DistributorPage() {
   const [recentSales, setRecentSales] = useState([]);
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // حالة العهدة المحسوبة تلقائياً
+  const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
@@ -36,6 +39,7 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
+      // 1. جلب الكروت المتاحة حالياً
       const { data } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -47,6 +51,7 @@ export default function DistributorPage() {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
+      // 2. عدد مبيعات اليوم
       const { count } = await supabase
         .from('cards')
         .select('*', { count: 'exact', head: true })
@@ -56,6 +61,7 @@ export default function DistributorPage() {
 
       setSoldToday(count || 0);
 
+      // 3. آخر مبيعات اليوم
       const { data: salesData } = await supabase
         .from('cards')
         .select('id, code, sold_at, customer_name, packages(name, price)')
@@ -66,6 +72,35 @@ export default function DistributorPage() {
         .limit(10);
 
       setRecentSales(salesData || []);
+
+      // 4. حساب إجمالي المبيعات التراكمية للموزع (حصة الإدارة 90%)
+      const { data: allSoldCards } = await supabase
+        .from('cards')
+        .select('packages(price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold');
+
+      const totalSalesAmount = (allSoldCards || []).reduce(
+        (sum, card) => sum + (card.packages?.price || 0),
+        0
+      );
+      const totalRequiredFromSales = totalSalesAmount * 0.9;
+
+      // 5. جلب إجمالي السدادات النقديّة المسجلة من المدير
+      const { data: paymentsData } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('distributor_id', profile.id);
+
+      const totalPayments = (paymentsData || []).reduce(
+        (sum, p) => sum + Number(p.amount || 0),
+        0
+      );
+
+      // 6. حساب صافي الدين المترتب
+      const netDebt = Math.max(0, totalRequiredFromSales - totalPayments);
+      setCalculatedDebt(netDebt);
+
     } catch (err) {
       console.error('Error loading distributor data:', err);
     } finally {
@@ -386,26 +421,27 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* لوحة الفائز الأسبوعي الموحدة (نفس ما يظهر في صفحة المدير تماماً) */}
+        {/* لوحة الفائز الأسبوعي الموحدة */}
         <WeeklyWinnerPanel />
 
+        {/* الخانة الخضراء الحساسة التلقائية المربوطة 100% بالتقارير والسداد */}
         <div style={{ 
-          background: Number(profile?.debt_balance || 0) > 0 ? '#FEF2F2' : '#F0FDF4', 
-          border: Number(profile?.debt_balance || 0) > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
+          background: calculatedDebt > 0 ? '#FEF2F2' : '#F0FDF4', 
+          border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
           padding: '16px', 
           borderRadius: '16px', 
           marginBottom: '20px' 
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '13px', color: Number(profile?.debt_balance || 0) > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
-                {Number(profile?.debt_balance || 0) > 0 ? 'المبلغ المطلوب سداده للإدارة (عهدة):' : 'حساب العهدة والديون:'}
+              <div style={{ fontSize: '13px', color: calculatedDebt > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
+                {calculatedDebt > 0 ? 'المبلغ المطلوب سداده للإدارة (عهدة):' : 'حساب العهدة والديون:'}
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '900', color: Number(profile?.debt_balance || 0) > 0 ? '#DC2626' : '#059669' }}>
-                {Number(profile?.debt_balance || 0).toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ريال</span>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#059669' }}>
+                {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ريال</span>
               </div>
             </div>
-            {Number(profile?.debt_balance || 0) > 0 && (
+            {calculatedDebt > 0 && (
               <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
                 عليكم مبالغ معلقة
               </div>
