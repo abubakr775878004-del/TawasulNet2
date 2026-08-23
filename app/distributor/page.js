@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة المبلغ الصافي المطلوب تسليمه للإدارة (عهدة)
+  // العهدة/الدين المستحق للإدارة فقط (بعد خصم 10% والسدادات)
   const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -73,19 +73,18 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. جلب إجمالي كافة المبيعات للحساب
-      const { data: allSoldCards } = await supabase
+      // 4. حساب المطلوب سداده فقط: (الكروت المباعة × 90%) - السدادات
+      const { data: soldCards } = await supabase
         .from('cards')
         .select('packages(price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold');
 
-      const totalSalesAmount = (allSoldCards || []).reduce(
+      const totalSalesValue = (soldCards || []).reduce(
         (sum, card) => sum + (card.packages?.price || 0),
         0
       );
 
-      // 5. جلب إجمالي السدادات
       const { data: paymentsData } = await supabase
         .from('distributor_payments')
         .select('amount')
@@ -96,10 +95,8 @@ export default function DistributorPage() {
         0
       );
 
-      // 6. الحسبة: (إجمالي المبيعات × 0.9) - السدادات
-      const managerShare = totalSalesAmount * 0.9;
-      const netDebt = managerShare - totalPayments;
-
+      // حصة الإدارة (90% من الكروت المباعة) مطروحاً منها السدادات
+      const netDebt = (totalSalesValue * 0.9) - totalPayments;
       setCalculatedDebt(netDebt > 0 ? netDebt : 0);
 
     } catch (err) {
@@ -378,11 +375,6 @@ export default function DistributorPage() {
     byPackage[key].count += 1;
   });
 
-  const totalValue = Object.values(byPackage).reduce(
-    (sum, p) => sum + p.count * p.price,
-    0
-  );
-
   return (
     <div className="app">
       <Sidebar
@@ -425,7 +417,7 @@ export default function DistributorPage() {
         {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* بطاقة العهدة والمبلغ المطلوب سداده للإدارة */}
+        {/* بطاقة العهدة والمبلغ المطلوب سداده للإدارة فقط */}
         <div
           style={{
             background: '#FFF5F5',
@@ -602,7 +594,7 @@ export default function DistributorPage() {
           className="grid-stats"
           style={{
             gridTemplateColumns:
-              'repeat(3,1fr)',
+              'repeat(2,1fr)',
           }}
         >
           <div className="stat">
@@ -622,32 +614,6 @@ export default function DistributorPage() {
 
             <div className="value">
               {soldToday}
-            </div>
-          </div>
-
-          <div className="stat">
-            <div className="label">
-              القيمة الإجمالية لكروتك
-            </div>
-
-            <div
-              className="value"
-              style={{
-                fontSize: 20,
-              }}
-            >
-              {totalValue.toLocaleString(
-                'en-US'
-              )}{' '}
-
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: '700',
-                }}
-              >
-                ريال
-              </span>
             </div>
           </div>
         </div>
@@ -709,24 +675,6 @@ export default function DistributorPage() {
                     <span>كرت لديك</span>
                   </div>
 
-                  <div
-                    style={{
-                      fontSize: 12.5,
-                      color: 'var(--ink-soft)',
-                      fontWeight: '700',
-                      marginTop: 4,
-                    }}
-                  >
-                    القيمة:{' '}
-                    {(
-                      info.count *
-                      info.price
-                    ).toLocaleString(
-                      'en-US'
-                    )}{' '}
-                    ريال
-                  </div>
-
                   <button
                     className="btn-primary"
                     style={{
@@ -774,9 +722,6 @@ export default function DistributorPage() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#059669' }}>
-                      {sale.packages?.price || 0} ريال
-                    </div>
                     <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
                       {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
                     </div>
