@@ -11,7 +11,7 @@ export default function DistributorsPage() {
   const [busyId, setBusyId] = useState(null);
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
-  const [debts, setDebts] = useState({}); // حالة خاصة لمبالغ الديون والعهدة
+  const [debts, setDebts] = useState({});
 
   async function loadList() {
     const { data, error: loadError } = await supabase
@@ -42,7 +42,7 @@ export default function DistributorsPage() {
   }
 
   async function deleteDistributor(id, name) {
-    if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. ملاحظة: بريده وكلمة سره في نظام تسجيل الدخول تبقى موجودة إلا إذا حذفتها يدويًا من Supabase. متابعة؟`)) return;
+    if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. متابعة؟`)) return;
     setError(''); setBusyId(id);
     const { error: deleteError } = await supabase.from('profiles').delete().eq('id', id);
     setBusyId(null);
@@ -50,7 +50,6 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  // تم تحديثها لتستخدم RPC لضمان الذرية ومنع تضارب الأرصدة
   async function addBalance(id) {
     const amount = parseFloat(topUps[id]);
     if (!amount || amount <= 0) return;
@@ -69,7 +68,6 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  // تم تحديثها لتستخدم RPC لضمان الذرية ومنع تضارب الديون والعهد
   async function updateDebt(id, actionType) {
     const amount = parseFloat(debts[id]);
     if (!amount || amount <= 0) return;
@@ -103,8 +101,8 @@ export default function DistributorsPage() {
   }
 
   const deleteBtnStyle = {
-    backgroundColor: '#dc2626', color: '#ffffff', opacity: 1,
-    padding: '7px 16px', borderRadius: 8, border: 'none', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+    backgroundColor: '#fee2e2', color: '#dc2626', opacity: 1,
+    padding: '6px 12px', borderRadius: 8, border: '1px solid #fca5a5', fontWeight: 700, fontSize: 12, cursor: 'pointer',
   };
 
   if (loading) return null;
@@ -120,7 +118,8 @@ export default function DistributorsPage() {
 
         {error && <div className="error-note">{error}</div>}
 
-        <div className="panel">
+        {/* طلبات بانتظار الموافقة */}
+        <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-head"><h3>طلبات بانتظار الموافقة</h3><span className="muted">{pending.length} طلب</span></div>
           {pending.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا توجد طلبات معلّقة حاليًا</div>}
           {pending.map((d) => (
@@ -140,106 +139,128 @@ export default function DistributorsPage() {
           ))}
         </div>
 
+        {/* قائمة الموزعين بالكامل */}
         <div className="panel">
-          <div className="panel-head"><h3>كل الموزعين</h3><span className="muted">{others.length}</span></div>
-          {others.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا يوجد موزعون بعد</div>}
-          {others.map((d) => (
-            <div
-              key={d.id}
-              style={{
-                borderTop: '1px solid var(--line)', padding: '14px 4px',
-                display: 'flex', flexDirection: 'column', gap: 10,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 14 }}>{d.full_name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{d.email}</div>
-                </div>
-                <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
-                  حذف الحساب
-                </button>
-              </div>
+          <div className="panel-head" style={{ marginBottom: 16 }}>
+            <h3>كل الموزعين</h3>
+            <span className="muted">{others.length}</span>
+          </div>
 
-              {/* قسم الرصيد وحالة الحساب */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span className="mono" style={{ fontWeight: 700, fontSize: 13.5 }}>
-                    {Number(d.balance).toLocaleString('en-US')} ريال
-                  </span>
-                  <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`}>
-                    {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
-                  </span>
+          {others.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا يوجد موزعون بعد</div>}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {others.map((d) => (
+              <div
+                key={d.id}
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: 16,
+                  padding: 16,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 14,
+                }}
+              >
+                {/* 1. ترويسة الموزع */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f3f4f6', pb: 12, paddingBottom: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: '#111827' }}>{d.full_name}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{d.email}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
+                      {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                    </span>
+                    <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+                      حذف
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+
+                {/* 2. شريط عرض الأرقام والبيانات المالية */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد الحالي</div>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                      {Number(d.balance).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                    </div>
+                  </div>
+                  <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '8px 12px' }}>
+                    <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600 }}>العهدة / الدين</div>
+                    <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: '#dc2626', marginTop: 2 }}>
+                      {Number(d.debt_balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. قسم إضافة الرصيد */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
                   <input
                     type="number"
                     min="0"
-                    placeholder="مثلاً 50000"
+                    placeholder="مبلغ الرصيد (مثلاً 50000)"
                     value={topUps[d.id] || ''}
                     onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
-                    style={{ width: 110, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
+                    style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #e5e7eb', fontFamily: 'monospace', fontSize: 12.5 }}
                   />
-                  <button className="btn-sm btn-approve" disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>
+                  <button className="btn-sm btn-approve" style={{ padding: '9px 14px', whiteSpace: 'nowrap' }} disabled={busyId === d.id || !topUps[d.id]} onClick={() => addBalance(d.id)}>
                     إضافة رصيد
                   </button>
                 </div>
-              </div>
 
-              {/* قسم إدارة الذمم والديون (العهدة) */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, background: '#FEF2F2', padding: 10, borderRadius: 12, border: '1px solid #FEE2E2' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12, color: '#991B1B', fontWeight: 800 }}>العهدَة / الدين:</span>
-                  <span className="mono" style={{ fontWeight: 900, fontSize: 13.5, color: '#DC2626' }}>
-                    {Number(d.debt_balance || 0).toLocaleString('en-US')} ريال
-                  </span>
+                {/* 4. قسم إجارة العهدة والسداد */}
+                <div style={{ background: '#fff5f5', padding: 10, borderRadius: 12, border: '1px solid #ffe4e4', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11.5, color: '#991b1b', fontWeight: 700 }}>عمليات العهدة والذمم:</div>
+                  <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="المبلغ"
+                      value={debts[d.id] || ''}
+                      onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #fca5a5', fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                    <button 
+                      disabled={busyId === d.id || !debts[d.id]} 
+                      onClick={() => updateDebt(d.id, 'add')}
+                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      تسجيل عهدة
+                    </button>
+                    <button 
+                      disabled={busyId === d.id || !debts[d.id]} 
+                      onClick={() => updateDebt(d.id, 'pay')}
+                      style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                    >
+                      سداد
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+
+                {/* 5. قسم الكرت الشخصي */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
                   <input
-                    type="number"
-                    min="0"
-                    placeholder="المبلغ"
-                    value={debts[d.id] || ''}
-                    onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
-                    style={{ width: 90, padding: '6px 8px', borderRadius: 8, border: '1.5px solid #FCA5A5', fontFamily: 'monospace', fontSize: 12 }}
+                    type="text"
+                    placeholder="رمز الكرت الشخصي"
+                    value={personalCards[d.id] ?? ''}
+                    onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
+                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd6fe', fontFamily: 'monospace', fontSize: 12.5 }}
                   />
-                  <button 
-                    disabled={busyId === d.id || !debts[d.id]} 
-                    onClick={() => updateDebt(d.id, 'add')}
-                    style={{ background: '#3B82F6', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                  <button
+                    className="btn-sm btn-approve"
+                    style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}
+                    disabled={busyId === d.id}
+                    onClick={() => savePersonalCard(d.id)}
                   >
-                    تسجيل عهدة
-                  </button>
-                  <button 
-                    disabled={busyId === d.id || !debts[d.id]} 
-                    onClick={() => updateDebt(d.id, 'pay')}
-                    style={{ background: '#10B981', color: '#fff', border: 'none', padding: '6px 10px', borderRadius: 8, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    سداد
+                    حفظ الكرت
                   </button>
                 </div>
-              </div>
 
-              {/* قسم الكرت الشخصي */}
-              <div style={{ display: 'flex', gap: 6, alignItems: 'center', background: '#F3F0FB', padding: 10, borderRadius: 12 }}>
-                <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 700, whiteSpace: 'nowrap' }}>كرته الشخصي:</span>
-                <input
-                  type="text"
-                  placeholder="اكتب كود الكرت هنا"
-                  value={personalCards[d.id] ?? ''}
-                  onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
-                  style={{ flex: 1, padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--line)', fontFamily: 'monospace', fontSize: 12.5 }}
-                />
-                <button
-                  className="btn-sm btn-approve"
-                  disabled={busyId === d.id}
-                  onClick={() => savePersonalCard(d.id)}
-                >
-                  حفظ
-                </button>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </div>
