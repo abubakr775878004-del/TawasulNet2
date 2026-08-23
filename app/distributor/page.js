@@ -17,8 +17,9 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة العهدة المحسوبة تلقائياً
+  // حالة العهدة والسدادات المحسوبة تلقائياً
   const [calculatedDebt, setCalculatedDebt] = useState(0);
+  const [displayPayments, setDisplayPayments] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
@@ -100,6 +101,13 @@ export default function DistributorPage() {
       // 6. حساب صافي الدين المترتب
       const netDebt = Math.max(0, totalRequiredFromSales - totalPayments);
       setCalculatedDebt(netDebt);
+
+      // 7. شرط التصفية الخيار الأول: إذا كان الدين 0 يتم تصفير خانة السدادات الظاهرة
+      if (netDebt === 0) {
+        setDisplayPayments(0);
+      } else {
+        setDisplayPayments(totalPayments);
+      }
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -424,7 +432,7 @@ export default function DistributorPage() {
         {/* لوحة الفائز الأسبوعي الموحدة */}
         <WeeklyWinnerPanel />
 
-        {/* الخانة الخضراء الحساسة التلقائية المربوطة 100% بالتقارير والسداد */}
+        {/* الخانة الخضراء/الحمراء المتكيفة - تتصفر السدادات عند تصفية الدين بالكامل */}
         <div style={{ 
           background: calculatedDebt > 0 ? '#FEF2F2' : '#F0FDF4', 
           border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #BBF7D0',
@@ -435,15 +443,22 @@ export default function DistributorPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '13px', color: calculatedDebt > 0 ? '#991B1B' : '#166534', fontWeight: 700 }}>
-                {calculatedDebt > 0 ? 'المبلغ المطلوب سداده للإدارة (عهدة):' : 'حساب العهدة والديون:'}
+                {calculatedDebt > 0 ? 'إجمالي الدين المطلوب تسليمه حالياً:' : 'صندوق العهدة الحقيقي (التراكمي):'}
               </div>
-              <div style={{ fontSize: '22px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#059669' }}>
-                {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ريال</span>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#059669', marginTop: '4px' }}>
+                {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '13px' }}>ر.ي</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#64748B', fontWeight: '700', marginTop: '6px' }}>
+                مجموع السدادات المستلمة منك: <span style={{ color: '#0F172A', fontFamily: 'monospace' }}>{displayPayments.toLocaleString('en-US')}</span> ر.ي
               </div>
             </div>
-            {calculatedDebt > 0 && (
+            {calculatedDebt > 0 ? (
               <div style={{ fontSize: '11px', background: '#FCA5A5', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
                 عليكم مبالغ معلقة
+              </div>
+            ) : (
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 8px', borderRadius: 6, fontWeight: 700 }}>
+                الحساب مصفى %100
               </div>
             )}
           </div>
