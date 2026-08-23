@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة المبلغ الصافي المطلوب تسليمه للمدير
+  // حالة المبلغ الصافي المطلوب تسليمه للإدارة (عهدة)
   const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -73,7 +73,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. جلب إجمالي كافة المبيعات للربط الحسابي
+      // 4. جلب إجمالي كافة المبيعات للحساب
       const { data: allSoldCards } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -85,7 +85,7 @@ export default function DistributorPage() {
         0
       );
 
-      // 5. جلب إجمالي المبالغ التي سددها الموزع للمدير
+      // 5. جلب إجمالي السدادات
       const { data: paymentsData } = await supabase
         .from('distributor_payments')
         .select('amount')
@@ -96,7 +96,7 @@ export default function DistributorPage() {
         0
       );
 
-      // 6. الحسبة المباشرة: (إجمالي المبيعات × 0.9 حصة المدير) - إجمالي السدادات
+      // 6. الحسبة: (إجمالي المبيعات × 0.9) - السدادات
       const managerShare = totalSalesAmount * 0.9;
       const netDebt = managerShare - totalPayments;
 
@@ -422,42 +422,83 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* لوحة الفائز الأسبوعي */}
+        {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* صندوق العهدة المطلوبة تسليمه للمدير */}
-        <div style={{ 
-          background: calculatedDebt > 0 ? '#FEF2F2' : '#0F172A', 
-          border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #1E293B',
-          padding: '20px', 
-          borderRadius: '18px', 
-          color: '#fff',
-          marginBottom: '20px',
-          boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <div style={{ fontSize: '12px', color: calculatedDebt > 0 ? '#DC2626' : '#94A3B8', fontWeight: '700' }}>
-                المبلغ المطلوب تسليمه للمدير
-              </div>
-              <div style={{ fontSize: '14px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
-                صافي المبيعات (بعد خصم 10% عمولة الموزع)
-              </div>
+        {/* بطاقة العهدة والمبلغ المطلوب سداده للإدارة */}
+        <div
+          style={{
+            background: '#FFF5F5',
+            border: '1px solid #FFE3E3',
+            borderRadius: '20px',
+            padding: '20px 24px',
+            marginBottom: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            boxShadow: '0 4px 15px rgba(220, 38, 38, 0.03)',
+          }}
+        >
+          {calculatedDebt > 0 ? (
+            <div
+              style={{
+                background: '#FFA8A8',
+                color: '#FFFFFF',
+                padding: '6px 14px',
+                borderRadius: '10px',
+                fontSize: '12px',
+                fontWeight: '700',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              عليكم مبالغ معلقة
             </div>
+          ) : (
+            <div
+              style={{
+                background: '#D1FAE5',
+                color: '#065F46',
+                padding: '6px 14px',
+                borderRadius: '10px',
+                fontSize: '12px',
+                fontWeight: '700',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              الحساب مصفى
+            </div>
+          )}
 
-            {calculatedDebt > 0 ? (
-              <div style={{ fontSize: '11px', background: '#DC2626', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: '800' }}>
-                عليك مبالغ معلقة
-              </div>
-            ) : (
-              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: '800' }}>
-                الحساب مصفى
-              </div>
-            )}
-          </div>
-
-          <div style={{ fontSize: '30px', fontWeight: '900', color: calculatedDebt > 0 ? '#DC2626' : '#10B981', marginTop: '12px' }}>
-            {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: '14px', color: calculatedDebt > 0 ? '#991B1B' : '#CBD5E1' }}>ر.ي</span>
+          <div style={{ textAlign: 'left' }}>
+            <div
+              style={{
+                fontSize: '14px',
+                fontWeight: '700',
+                color: '#C92A2A',
+                marginBottom: '6px',
+              }}
+            >
+              المبلغ المطلوب سداده للإدارة (عهدة):
+            </div>
+            <div
+              style={{
+                fontSize: '28px',
+                fontWeight: '900',
+                color: '#C92A2A',
+                lineHeight: 1,
+              }}
+            >
+              {calculatedDebt.toLocaleString('en-US')}{' '}
+              <span
+                style={{
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  color: '#C92A2A',
+                }}
+              >
+                ريال
+              </span>
+            </div>
           </div>
         </div>
 
