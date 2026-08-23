@@ -4,7 +4,6 @@ import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
-// دالة تحويل التاريخ إلى صيغة رقمية بالكامل (YYYY/MM/DD)
 function formatNumericDate(dateString) {
   if (!dateString) return '';
   const d = new Date(dateString);
@@ -18,7 +17,14 @@ export default function SalesPage() {
   const { profile, loading } = useProfile('distributor');
   const [sold, setSold] = useState([]);
   const [myCards, setMyCards] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+
+  // الحسابات الزمنية بالأرقام فقط
+  const currentDate = new Date();
+  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const [selectedMonthNum, setSelectedMonthNum] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
+
+  // الشهر المحدد بصيغة YYYY-MM
+  const selectedMonth = `${selectedYear}-${selectedMonthNum}`;
 
   async function loadData() {
     if (!profile) return;
@@ -71,15 +77,43 @@ export default function SalesPage() {
       <div className="main">
         <h1>سجل المبيعات والتقارير</h1>
         
-        {/* اختيار الشهر */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink-soft)' }}>استعراض تقرير شهر (سنة/شهر):</label>
-          <input 
-            type="month" 
-            value={selectedMonth} 
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            style={{ display: 'block', padding: '8px 12px', borderRadius: 10, border: '1.5px solid #E5E7EB', width: '100%', marginTop: 5, fontWeight: 700, fontFamily: 'monospace' }}
-          />
+        {/* اختيار الشهر والسنة بالأرقام الصريحة 100% */}
+        <div style={{ marginBottom: 20, background: '#FFFFFF', padding: 14, borderRadius: 14, border: '1px solid #E2E8F0' }}>
+          <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>
+            تحديد تقرير الشهر (أرقام):
+          </label>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {/* قائمة السنة */}
+            <select 
+              value={selectedYear} 
+              onChange={(e) => setSelectedYear(e.target.value)}
+              style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #CBD5E1', fontWeight: 800, fontSize: 14 }}
+            >
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+            </select>
+
+            {/* قائمة الأشهر بالرقم من 01 إلى 12 */}
+            <select 
+              value={selectedMonthNum} 
+              onChange={(e) => setSelectedMonthNum(e.target.value)}
+              style={{ flex: 1, padding: '10px', borderRadius: 10, border: '1.5px solid #CBD5E1', fontWeight: 800, fontSize: 14, direction: 'ltr' }}
+            >
+              <option value="01">شهر 01</option>
+              <option value="02">شهر 02</option>
+              <option value="03">شهر 03</option>
+              <option value="04">شهر 04</option>
+              <option value="05">شهر 05</option>
+              <option value="06">شهر 06</option>
+              <option value="07">شهر 07</option>
+              <option value="08">شهر 08</option>
+              <option value="09">شهر 09</option>
+              <option value="10">شهر 10</option>
+              <option value="11">شهر 11</option>
+              <option value="12">شهر 12</option>
+            </select>
+          </div>
         </div>
 
         {/* بطاقات الإحصائيات السريعة */}
@@ -113,28 +147,24 @@ export default function SalesPage() {
           <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 10, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#0F172A' }}>كشف الحساب والتصفية المالية</h3>
-              {/* عرض الشهر بالسنة والضرورة بالأرقام فقط مثل 2026/08 */}
-              <span style={{ fontSize: 11, color: '#64748B', fontWeight: 700, fontFamily: 'monospace' }}>
-                موقف الحساب لشهر: {selectedMonth.replace('-', '/')}
+              <span style={{ fontSize: 12, color: '#0284C7', fontWeight: 800, fontFamily: 'monospace' }}>
+                موقف الحساب لشهر: {selectedYear} / {selectedMonthNum}
               </span>
             </div>
             <span style={{ background: '#F1F5F9', color: '#475569', fontSize: 11, fontWeight: 700, padding: '4px 8px', borderRadius: 6 }}>10% صافي</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* إجمالي المبيعات */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#F8FAFC', padding: '10px 12px', borderRadius: 10 }}>
               <span style={{ color: '#475569', fontWeight: 600 }}>إجمالي المبيعات للمواطنين:</span>
               <span style={{ fontWeight: 900, fontSize: 14, color: '#0F172A' }}>{totalRevenue.toLocaleString()} ر.ي</span>
             </div>
 
-            {/* خصم العمولة */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#ECFDF5', padding: '10px 12px', borderRadius: 10, border: '1px solid #D1FAE5' }}>
               <span style={{ color: '#065F46', fontWeight: 700 }}>أرباحك وعمولتك المستقطعة (10%):</span>
               <span style={{ fontWeight: 900, fontSize: 14, color: '#059669' }}>- {totalCommission.toLocaleString()} ر.ي</span>
             </div>
 
-            {/* الصافي الواجب تسليمه للشبكة */}
             <div style={{ background: '#1E293B', color: '#FFFFFF', padding: '14px 16px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
               <div>
                 <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>الصافي الواجب تسليمه للشبكة (90%):</div>
@@ -145,7 +175,6 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* العهدة إن وجدت */}
             {userDebt > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: '#991B1B', background: '#FEF2F2', padding: '8px 12px', borderRadius: 10, border: '1px solid #FECACA' }}>
                 <span style={{ fontWeight: 700 }}>عهدة متبقية سابقة عليك:</span>
@@ -153,7 +182,6 @@ export default function SalesPage() {
               </div>
             )}
 
-            {/* قيمة المخزون المتبقي */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: '#64748B', background: '#FAF5FF', padding: '10px 12px', borderRadius: 10, border: '1px solid #F3E8FF', marginTop: 2 }}>
               <span style={{ fontWeight: 600, color: '#6B21A8' }}>قيمة الكروت المتبقية في مخزنك ({myCards.length} كرت):</span>
               <span style={{ fontWeight: 800, color: '#7E22CE', fontSize: 13 }}>{remainingInventoryValue.toLocaleString()} ر.ي</span>
@@ -161,7 +189,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 3. سجل المبيعات المفصل بالتواريخ الرقمية */}
+        {/* 3. سجل المبيعات المفصل بالتواريخ الرقمية الكاملة YYYY/MM/DD */}
         <div className="panel">
           <h3>سجل المبيعات المفصل</h3>
           {filteredSold.length === 0 && (
@@ -173,7 +201,6 @@ export default function SalesPage() {
                 <div className="tcode mono">{c.code}</div>
                 <div className="tpkg">{c.packages?.name}</div>
               </div>
-              {/* عرض التاريخ بصيغة رقمية بوضوح تام: YYYY/MM/DD */}
               <div className="tleft mono" style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
                 {formatNumericDate(c.sold_at)}
               </div>
