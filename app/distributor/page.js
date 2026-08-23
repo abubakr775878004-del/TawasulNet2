@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة المبلغ المطلوب للمدير
+  // حالة المبلغ الصافي المطلوب تسليمه للمدير
   const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -39,7 +39,7 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
-      // 1. جلب الكروت المتاحة حالياً
+      // 1. جلب الكروت المتاحة حالياً لدى الموزع
       const { data } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -73,7 +73,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. حساب المبلغ المطلوب تسليمه للمدير بنسبة 90% (عمولة الموزع 10%)
+      // 4. جلب إجمالي كافة المبيعات للربط الحسابي
       const { data: allSoldCards } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -85,9 +85,23 @@ export default function DistributorPage() {
         0
       );
 
-      // خصم 10% للموزع تلقائياً من الإجمالي
-      const netDebt = totalSalesAmount * 0.9;
-      setCalculatedDebt(netDebt);
+      // 5. جلب إجمالي المبالغ التي سددها الموزع للمدير
+      const { data: paymentsData } = await supabase
+        .from('distributor_payments')
+        .select('amount')
+        .eq('distributor_id', profile.id);
+
+      const totalPayments = (paymentsData || []).reduce(
+        (sum, p) => sum + (Number(p.amount) || 0),
+        0
+      );
+
+      // 6. الحسبة المباشرة: (إجمالي المبيعات × 0.9 حصة المدير) - إجمالي السدادات
+      const managerShare = totalSalesAmount * 0.9;
+      const netDebt = managerShare - totalPayments;
+
+      // إذا كانت النتيجة بالسالب (أي سدد أكثر مما عليه)، تجعل المتبقي 0
+      setCalculatedDebt(netDebt > 0 ? netDebt : 0);
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -412,7 +426,7 @@ export default function DistributorPage() {
         {/* لوحة الفائز الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* صندوق المستحق تسليمه للمدير بعد خصم 10% عمولة الموزع */}
+        {/* صندوق العهدة النظيفة (حصة المدير 90% مطروحاً منها السدادات) */}
         <div style={{ 
           background: calculatedDebt > 0 ? '#FEF2F2' : '#0F172A', 
           border: calculatedDebt > 0 ? '1px solid #FECACA' : '1px solid #1E293B',
@@ -428,7 +442,7 @@ export default function DistributorPage() {
                 المبلغ المطلوب تسليمه للمدير
               </div>
               <div style={{ fontSize: '14px', fontWeight: '800', marginTop: '2px', color: calculatedDebt > 0 ? '#991B1B' : '#FFFFFF' }}>
-                صافي المبيعات (بعد خصم 10% عمولة الموزع)
+                صافي المبيعات المتبقية (بعد خصم 10% عمولة الموزع والسدادات)
               </div>
             </div>
 
@@ -437,7 +451,7 @@ export default function DistributorPage() {
                 عليك مبالغ معلقة
               </div>
             ) : (
-              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight: 800 }}>
+              <div style={{ fontSize: '11px', background: '#10B981', color: '#fff', padding: '4px 10px', borderRadius: 20, fontWeight 800 }}>
                 الحساب مصفى
               </div>
             )}
