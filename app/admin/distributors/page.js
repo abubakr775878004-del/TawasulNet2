@@ -73,17 +73,41 @@ export default function DistributorsPage() {
     if (!amount || amount <= 0) return;
     setError(''); setBusyId(id);
     
-    const isAdd = actionType === 'add';
+    if (actionType === 'pay') {
+      // 1. تسجيل عملية السداد في جدول المدفوعات لتصفية الدين التراكمي في صفحة الموزع
+      const { error: payError } = await supabase
+        .from('payments')
+        .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
 
-    const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
-      target_id: id,
-      amount: amount,
-      is_debt: true,
-      is_add: isAdd
-    });
+      if (payError) {
+        setBusyId(null);
+        setError('تعذّر تسجيل عملية السداد: ' + payError.message);
+        return;
+      }
 
-    setBusyId(null);
-    if (updateError) { setError('تعذّر تحديث حساب العهدة: ' + updateError.message); return; }
+      // 2. خصم المبلغ من الدين المسجل في البروفايل
+      const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+        target_id: id,
+        amount: amount,
+        is_debt: true,
+        is_add: false
+      });
+
+      setBusyId(null);
+      if (updateError) { setError('تعذّر خصم الدين: ' + updateError.message); return; }
+
+    } else {
+      // تسجيل عهدة جديدة (إضافة دين)
+      const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+        target_id: id,
+        amount: amount,
+        is_debt: true,
+        is_add: true
+      });
+
+      setBusyId(null);
+      if (updateError) { setError('تعذّر تحديث حساب العهدة: ' + updateError.message); return; }
+    }
     
     setDebts({ ...debts, [id]: '' });
     loadList();
@@ -163,7 +187,7 @@ export default function DistributorsPage() {
                   gap: 14,
                 }}
               >
-                {/* 1. ترويسة الموزع (تم إبراز الاسم هنا) */}
+                {/* 1. ترويسة الموزع */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
                   <div>
                     <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
