@@ -12,11 +12,10 @@ export default function DistributorsPage() {
   const [busyId, setBusyId] = useState(null);
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
-  const [debts, setDebts] = useState({});
-  const [adminNetBalances, setAdminNetBalances] = useState({});
+  const [calculatedDebts, setCalculatedDebts] = useState({}); // المبلغ المطلوب على الموزع للمدير
 
   async function loadList() {
-    // 1. جلب قائمة الموزعين
+    // 1. جلب قائمة الموزعين من قاعدة البيانات
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -30,18 +29,16 @@ export default function DistributorsPage() {
 
     setList(distributors || []);
     
+    // تهيئة قيم الكروت الشخصية
     const initialCards = {};
-    const initialDebts = {};
     (distributors || []).forEach((d) => { 
       initialCards[d.id] = d.personal_card || ''; 
-      initialDebts[d.id] = '';
     });
     setPersonalCards(initialCards);
-    setDebts(initialDebts);
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع مبيعات الموزعين من سجل المبيعات
+    // 2. جلب جميع سجلات المبيعات الخاصة بالموزعين
     const { data: sales, error: salesErr } = await supabase
       .from('sales_log')
       .select('distributor_id, price');
@@ -50,41 +47,33 @@ export default function DistributorsPage() {
       console.error('Error fetching sales_log:', salesErr);
     }
 
-    // 3. جلب جميع السدادات والمقبوضات
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('distributor_id, amount');
-
-    // 4. احتساب صافي حق المدير المتبقي المطابق لشاشة الموزع
-    const netMap = {};
+    // 3. حساب المبلغ المطلوب على الموزع مباشرة (90% من مبيعات الموزع الفعلية)
+    const debtMap = {};
 
     distributors.forEach((dist) => {
-      // إجمالي مبيعات الموزع التراكمية
       const distSales = (sales || []).filter(s => s.distributor_id === dist.id);
       const totalSales = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
-
-      // صافي حق المدير التراكمي بعد خصم 10% عمولة الموزع
-      const totalAdminNetRequired = totalSales * 0.90;
-
-      // إجمالي المبالغ المسددة فعلياً من الموزع للمدير
-      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
-      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      // المبلغ الصافي المتبقي المسجل على الموزع لصالح المدير (نفس رقم شاشة الموزع)
-      netMap[dist.id] = Math.max(0, Math.round(totalAdminNetRequired - totalPaid));
+      
+      // إجمالي المبلغ الواجب على الموزع تسليمه للمدير (90% من مبيعاته)
+      debtMap[dist.id] = Math.round(totalSales * 0.90);
     });
 
-    setAdminNetBalances(netMap);
+    setCalculatedDebts(debtMap);
   }
 
   useEffect(() => { 
     if (profile) loadList(); 
   }, [profile]);
 
+  // دالة تحديث حالة الموزع (قبول / رفض)
   async function updateStatus(id, status) {
     setError(''); 
     setBusyId(id);
-    const { error: updateError } = await supabase.from('profiles').update({ status }).eq('id', id);
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ status })
+      .eq('id', id);
+      
     setBusyId(null);
     if (updateError) { 
       setError('تعذّر تنفيذ الإجراء: ' + updateError.message); 
@@ -93,11 +82,16 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  // دالة حذف الموزع نهائياً من النظام
   async function deleteDistributor(id, name) {
     if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. متابعة؟`)) return;
     setError(''); 
     setBusyId(id);
-    const { error: deleteError } = await supabase.from('profiles').delete().eq('id', id);
+    const { error: deleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+      
     setBusyId(null);
     if (deleteError) { 
       setError('تعذّر حذف الحساب: ' + deleteError.message); 
@@ -106,6 +100,7 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  // دالة إضافة الرصيد إلى مخزن الموزع
   async function addBalance(id) {
     const amount = parseFloat(topUps[id]);
     if (!amount || amount <= 0) return;
@@ -128,34 +123,7 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  async function payDebt(id) {
-    const amount = parseFloat(debts[id]);
-    if (!amount || amount <= 0) return;
-    setError(''); 
-    setBusyId(id);
-    
-    const { error: payError } = await supabase
-      .from('payments')
-      .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
-
-    if (payError) {
-      setBusyId(null);
-      setError('تعذّر تسجيل عملية السداد: ' + payError.message);
-      return;
-    }
-
-    await supabase.rpc('modify_distributor_balance', {
-      target_id: id,
-      amount: amount,
-      is_debt: true,
-      is_add: false
-    });
-
-    setBusyId(null);
-    setDebts({ ...debts, [id]: '' });
-    loadList();
-  }
-
+  // دالة حفظ رمز الكرت الشخصي للموزع
   async function savePersonalCard(id) {
     setError(''); 
     setBusyId(id);
@@ -163,6 +131,7 @@ export default function DistributorsPage() {
       .from('profiles')
       .update({ personal_card: personalCards[id] || null })
       .eq('id', id);
+      
     setBusyId(null);
     if (updateError) { 
       setError('تعذّر حفظ الكرت الشخصي: ' + updateError.message); 
@@ -171,6 +140,7 @@ export default function DistributorsPage() {
     loadList();
   }
 
+  // تنسيق زر الحذف
   const deleteBtnStyle = {
     backgroundColor: '#fee2e2', 
     color: '#dc2626', 
@@ -184,6 +154,8 @@ export default function DistributorsPage() {
   };
 
   if (loading) return null;
+  
+  // تصفية الطلبات المعلقة والموزعين المقبولين/المرفوضين
   const pending = list.filter((d) => d.status === 'pending');
   const others = list.filter((d) => d.status !== 'pending');
 
@@ -193,12 +165,12 @@ export default function DistributorsPage() {
       <div className="main">
         <h1>الموزعون</h1>
         <p className="greet" style={{ marginBottom: 20 }}>
-          إدارة طلبات التسجيل والحسابات الحالية والمستحقات النقدية الصافية
+          إدارة طلبات التسجيل وإضافة الرصيد ومتابعة المبالغ المطلوبة
         </p>
 
         {error && <div className="error-note">{error}</div>}
 
-        {/* طلبات بانتظار الموافقة */}
+        {/* 1. قسم طلبات بانتظار الموافقة */}
         <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-head">
             <h3>طلبات بانتظار الموافقة</h3>
@@ -245,7 +217,7 @@ export default function DistributorsPage() {
           ))}
         </div>
 
-        {/* قائمة الموزعين بالكامل */}
+        {/* 2. قسم قائمة الموزعين بالكامل */}
         <div className="panel">
           <div className="panel-head" style={{ marginBottom: 16 }}>
             <h3>كل الموزعين</h3>
@@ -260,7 +232,8 @@ export default function DistributorsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {others.map((d) => {
-              const netAdminAmount = adminNetBalances[d.id] ?? 0;
+              const currentTotalDebt = calculatedDebts[d.id] ?? 0;
+
               return (
                 <div
                   key={d.id}
@@ -275,7 +248,7 @@ export default function DistributorsPage() {
                     gap: 14,
                   }}
                 >
-                  {/* 1. ترويسة الموزع */}
+                  {/* أ) ترويسة معلومات الموزع وحالته */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
@@ -295,7 +268,7 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 2. شريط الأرقام: الرصيد الحالي + صافي حق المدير (مطابق لصفحة الموزع) */}
+                  {/* ب) بطاقات العرض المالية (الرصيد المتبقي | المبلغ المطلوب على الموزع) */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
                       <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
@@ -304,15 +277,15 @@ export default function DistributorsPage() {
                       </div>
                     </div>
                     
-                    <div style={{ background: netAdminAmount > 0 ? '#eff6ff' : '#f0fdf4', border: netAdminAmount > 0 ? '1px solid #bfdbfe' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
-                      <div style={{ fontSize: 11, color: netAdminAmount > 0 ? '#1e40af' : '#166534', fontWeight: 600 }}>المبلغ الصافي المستحق للمدير</div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: netAdminAmount > 0 ? '#1d4ed8' : '#059669', marginTop: 2 }}>
-                        {netAdminAmount.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600 }}>المبلغ المطلوب على الموزع</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: '#1d4ed8', marginTop: 2 }}>
+                        {currentTotalDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 3. قسم إضافة الرصيد */}
+                  {/* ج) قسم إضافة الرصيد لمخزن الموزع */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
                     <input
                       type="number"
@@ -332,29 +305,7 @@ export default function DistributorsPage() {
                     </button>
                   </div>
 
-                  {/* 4. قسم تسديد العهدة الصافية */}
-                  <div style={{ background: '#f0fdf4', padding: 10, borderRadius: 12, border: '1px solid #dcfce7', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 700 }}>تسجيل سداد نقدي مقبوض من الموزع:</div>
-                    <div style={{ display: 'flex', gap: 6, width: '100%' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="المبلغ المقبوض تسليمه"
-                        value={debts[d.id] || ''}
-                        onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
-                        style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12 }}
-                      />
-                      <button 
-                        disabled={busyId === d.id || !debts[d.id]} 
-                        onClick={() => payDebt(d.id)}
-                        style={{ background: '#059669', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                      >
-                        تسجيل السداد
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 5. قسم الكرت الشخصي */}
+                  {/* د) قسم حفظ رمز الكرت الشخصي */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
                     <input
                       type="text"
