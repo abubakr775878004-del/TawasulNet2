@@ -41,45 +41,37 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع الكروت المباعة أو المخصصة مع بيانات الباقات للجلب الدقيق للسعر
-    const { data: soldCards, error: cardsErr } = await supabase
-      .from('cards')
-      .select('id, price, assigned_to, distributor_id, sold_by, status, package_id, packages(price)')
-      .or('status.eq.sold,status.eq.used,status.eq.active');
+    // 2. جلب جميع المبيعات الفعلية من جدول sales_log بنفس طريقة صفحة التقارير والموزع
+    const { data: sales, error: salesErr } = await supabase
+      .from('sales_log')
+      .select('distributor_id, price');
 
-    if (cardsErr) {
-      console.error('Error fetching cards:', cardsErr);
+    if (salesErr) {
+      console.error('Error fetching sales_log:', salesErr);
     }
 
-    // 3. جلب كافة السدادات النقدية
+    // 3. جلب جميع المقبوضات/السدادات النقدية المسجلة
     const { data: payments } = await supabase
       .from('payments')
       .select('distributor_id, amount');
 
-    // 4. الحساب الدقيق والمطابق لصفحة الموزع
+    // 4. احتساب المبيعات والدين لكل موزع (خصم 10% للموزع و90% للمدير)
     const debtMap = {};
 
     distributors.forEach((dist) => {
-      // فلترة جميع الكروت المباعة الخاصة بهذا الموزع بأي من المعرفات المرتبطة به
-      const distSoldCards = (soldCards || []).filter(
-        c => c.assigned_to === dist.id || c.distributor_id === dist.id || c.sold_by === dist.id
-      );
+      // تجميع مبيعات الموزع من جدول sales_log
+      const distSales = (sales || []).filter(s => s.distributor_id === dist.id);
+      const totalSales = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
 
-      // حساب إجمالي قيم المبيعات (قراءة سعر الكرت أو سعر الباقة المربوطة)
-      const totalSales = distSoldCards.reduce((sum, card) => {
-        const cardPrice = Number(card.price || card.packages?.price || 0);
-        return sum + cardPrice;
-      }, 0);
-
-      // صافي حق المدير = 90% من إجمالي المبيعات (استقطاع 10% عمولة الموزع)
-      // مثال: كرت 7,000 * 0.90 = 6,300 ريال للمدير
+      // صافي حق المدير = 90% من إجمالي المبيعات
+      // (مثال: إذا باع كرت بـ 7,000 ريال -> 7000 * 0.90 = 6,300 ريال للمدير)
       const requiredNetAdmin = totalSales * 0.90;
 
-      // إجمالي السدادات المقبوضة نقدياً من هذا الموزع
+      // إجمالي المبالغ المسددة نقداً للمدير
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
       const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // المتبقي كعهدة على الموزع
+      // الدين / العهدة التراكمية الحالية
       debtMap[dist.id] = Math.max(0, Math.round(requiredNetAdmin - totalPaid));
     });
 
@@ -198,7 +190,7 @@ export default function DistributorsPage() {
 
   return (
     <div className="app">
-      <Sidebar role="admin" active="/admin/distributors" name={profile.full_name} />
+      <Sidebar role="admin" active="/admin/distributors" name={profile?.full_name} />
       <div className="main">
         <h1>الموزعون</h1>
         <p className="greet" style={{ marginBottom: 20 }}>
@@ -309,7 +301,7 @@ export default function DistributorsPage() {
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
                       <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد الحالي</div>
                       <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                        {Number(d.balance).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                        {Number(d.balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
                     <div style={{ background: currentDebt > 0 ? '#fef2f2' : '#f0fdf4', border: currentDebt > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
