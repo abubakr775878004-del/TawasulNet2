@@ -41,42 +41,41 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    const distIds = distributors.map(d => d.id);
-
-    // 2. جلب كل الكروت المباعة لكل الموزعين دفعة واحدة
+    // 2. جلب كل الكروت المباعة التراكمية من قاعدة البيانات (مثل استعلام صفحة الموزع)
     const { data: soldCards } = await supabase
       .from('cards')
-      .select('assigned_to, price, packages(price)')
-      .in('assigned_to', distIds)
+      .select('assigned_to, distributor_id, price, packages(price)')
       .eq('status', 'sold');
 
     // 3. جلب كل المقبوضات/السدادات النقدية
     const { data: payments } = await supabase
       .from('payments')
-      .select('distributor_id, amount')
-      .in('distributor_id', distIds);
+      .select('distributor_id, amount');
 
-    // 4. احتساب الدين التراكمي (90% للمدير بعد خصم 10% عمولة الموزع)
+    // 4. احتساب الدين التراكمي بنفس معادلة الموزع تماماً (90% للمدير و10% عمولة)
     const debtMap = {};
 
     distributors.forEach((dist) => {
-      // جمع إجمالي مبيعات هذا الموزع (يقرأ سعر الكرت الفعلي أو سعر الباقة المربوطة)
-      const distSoldCards = (soldCards || []).filter(c => c.assigned_to === dist.id);
+      // شمول الكروت المسجلة بـ assigned_to أو distributor_id لمنع سقوط أي كرت
+      const distSoldCards = (soldCards || []).filter(
+        c => c.assigned_to === dist.id || c.distributor_id === dist.id
+      );
+
+      // حساب إجمالي المبيعات (سعر الكرت المباشر أو سعر الباقة المربوطة)
       const totalSales = distSoldCards.reduce((sum, card) => {
         const cardPrice = Number(card.price || card.packages?.price || 0);
         return sum + cardPrice;
       }, 0);
 
-      // صافي حق المدير = 90% من إجمالي المبيعات (خصم 10% للموزع)
-      // مثال: 14,000 * 0.90 = 12,600 ريال
+      // صافي حق المدير = 90% من إجمالي المبيعات
       const requiredNetAdmin = totalSales * 0.90;
 
       // إجمالي ما سدده الموزع نقداً للمدير
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
       const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // العهدة / الدين التراكمي النهائي
-      debtMap[dist.id] = Math.max(0, requiredNetAdmin - totalPaid);
+      // العهدة / الدين التراكمي النهائي المطابق لصفحة الموزع
+      debtMap[dist.id] = Math.max(0, Math.round(requiredNetAdmin - totalPaid));
     });
 
     setCalculatedDebts(debtMap);
@@ -261,7 +260,7 @@ export default function DistributorsPage() {
 
           {others.length === 0 && (
             <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
-              لا يوجد موزعون بعد
+              لا يوجد مووزعون بعد
             </div>
           )}
 
