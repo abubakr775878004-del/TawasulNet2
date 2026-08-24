@@ -13,7 +13,7 @@ export default function DistributorsPage() {
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
-  const [calculatedDebts, setCalculatedDebts] = useState({});
+  const [salesSummary, setSalesSummary] = useState({});
 
   async function loadList() {
     // 1. جلب قائمة الموزعين
@@ -41,7 +41,7 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع المبيعات الفعلية من جدول sales_log بنفس طريقة صفحة التقارير والموزع
+    // 2. جلب جميع المبيعات الفعلية من جدول sales_log
     const { data: sales, error: salesErr } = await supabase
       .from('sales_log')
       .select('distributor_id, price');
@@ -50,32 +50,28 @@ export default function DistributorsPage() {
       console.error('Error fetching sales_log:', salesErr);
     }
 
-    // 3. جلب جميع المقبوضات/السدادات النقدية المسجلة
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('distributor_id, amount');
-
-    // 4. احتساب المبيعات والدين لكل موزع (خصم 10% للموزع و90% للمدير)
-    const debtMap = {};
+    // 3. احتساب المبيعات وعمولة الموزع وحق المدير المباشر
+    const summaryMap = {};
 
     distributors.forEach((dist) => {
       // تجميع مبيعات الموزع من جدول sales_log
       const distSales = (sales || []).filter(s => s.distributor_id === dist.id);
       const totalSales = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
 
-      // صافي حق المدير = 90% من إجمالي المبيعات
-      // (مثال: إذا باع كرت بـ 7,000 ريال -> 7000 * 0.90 = 6,300 ريال للمدير)
-      const requiredNetAdmin = totalSales * 0.90;
+      // عمولة الموزع (10%)
+      const distributorCommission = totalSales * 0.10;
 
-      // إجمالي المبالغ المسددة نقداً للمدير
-      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
-      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      // صافي حق المدير المطلوب (90%)
+      const netAdminAmount = totalSales * 0.90;
 
-      // الدين / العهدة التراكمية الحالية
-      debtMap[dist.id] = Math.max(0, Math.round(requiredNetAdmin - totalPaid));
+      summaryMap[dist.id] = {
+        totalSales,
+        distributorCommission,
+        netAdminAmount
+      };
     });
 
-    setCalculatedDebts(debtMap);
+    setSalesSummary(summaryMap);
   }
 
   useEffect(() => { 
@@ -194,7 +190,7 @@ export default function DistributorsPage() {
       <div className="main">
         <h1>الموزعون</h1>
         <p className="greet" style={{ marginBottom: 20 }}>
-          إدارة طلبات التسجيل والحسابات الحالية وإضافة الرصيد والذمم المالية
+          إدارة طلبات التسجيل والحسابات الحالية وإضافة الرصيد وعمولات الموزعين
         </p>
 
         {error && <div className="error-note">{error}</div>}
@@ -261,7 +257,7 @@ export default function DistributorsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {others.map((d) => {
-              const currentDebt = calculatedDebts[d.id] ?? 0;
+              const summary = salesSummary[d.id] || { totalSales: 0, distributorCommission: 0, netAdminAmount: 0 };
               return (
                 <div
                   key={d.id}
@@ -296,18 +292,26 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 2. شريط عرض الأرقام والبيانات المالية الحسابية المباشرة */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد الحالي</div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                        {Number(d.balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                  {/* 2. شريط عرض الأرقام: مبيعات الكروت، العمولة، وحق المدير */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>إجمالي مبيعات الكروت</div>
+                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                        {summary.totalSales.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
                       </div>
                     </div>
-                    <div style={{ background: currentDebt > 0 ? '#fef2f2' : '#f0fdf4', border: currentDebt > 0 ? '1px solid #fecaca' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
-                      <div style={{ fontSize: 11, color: currentDebt > 0 ? '#991b1b' : '#166534', fontWeight: 600 }}>العهدة / الدين التراكمي</div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
-                        {currentDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+
+                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '8px 10px' }}>
+                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>عمولة الموزع (10%)</div>
+                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 800, color: '#15803d', marginTop: 2 }}>
+                        {summary.distributorCommission.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '8px 10px' }}>
+                      <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600 }}>حق المدير الصافي (90%)</div>
+                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8', marginTop: 2 }}>
+                        {summary.netAdminAmount.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
                       </div>
                     </div>
                   </div>
