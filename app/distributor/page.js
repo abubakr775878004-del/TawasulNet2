@@ -17,11 +17,6 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // الحسابات المالية المطابقة لصفحة المدير والتقارير
-  const [totalAdminShare, setTotalAdminShare] = useState(0);
-  const [totalPaid, setTotalPaid] = useState(0);
-  const [calculatedDebt, setCalculatedDebt] = useState(0);
-
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
 
@@ -74,39 +69,6 @@ export default function DistributorPage() {
         .limit(10);
 
       setRecentSales(salesData || []);
-
-      // 4. الحسابات المالية التراكمية الموحدة مع صفحة المدير والتقارير:
-      const { data: soldCards } = await supabase
-        .from('cards')
-        .select('price, packages(price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold');
-
-      const totalSalesValue = (soldCards || []).reduce((sum, card) => {
-        const pPrice = Number(card.price || card.packages?.price || 0);
-        return sum + pPrice;
-      }, 0);
-
-      // حق المدير (90% من إجمالي المبيعات)
-      const netToAdmin = totalSalesValue * 0.90;
-
-      // إجمالي السدادات من جدول payments المعتمد
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('distributor_id', profile.id);
-
-      const totalPayments = (paymentsData || []).reduce(
-        (sum, p) => sum + (Number(p.amount) || 0),
-        0
-      );
-
-      // الصافي المتبقي المطلوبة تسليمه
-      const finalDebt = Math.max(0, Math.round(netToAdmin - totalPayments));
-
-      setTotalAdminShare(netToAdmin);
-      setTotalPaid(totalPayments);
-      setCalculatedDebt(finalDebt);
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -425,72 +387,6 @@ export default function DistributorPage() {
 
         {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
-
-        {/* الخانة الموحدة للعهدة والمبلغ المطلوب تسليمه (تطابق التقارير والمدير) */}
-        <div style={{
-          background: '#fff5f5',
-          border: '1.5px solid #fecaca',
-          borderRadius: 16,
-          padding: 18,
-          marginBottom: 20,
-          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.04)'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span>📊</span> العهدة / الدين التراكمي:
-            </div>
-            <span style={{
-              background: calculatedDebt > 0 ? '#fee2e2' : '#dcfce7',
-              color: calculatedDebt > 0 ? '#dc2626' : '#15803d',
-              fontSize: 11.5,
-              fontWeight: 800,
-              padding: '4px 10px',
-              borderRadius: 20
-            }}>
-              {calculatedDebt > 0 ? 'يوجد ذمة غير مسواة' : 'الحساب مصفى'}
-            </span>
-          </div>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 10,
-            background: '#ffffff',
-            padding: 12,
-            borderRadius: 12,
-            border: '1px solid #fee2e2',
-            marginBottom: 12
-          }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>إجمالي العهدة (حق المدير 90%)</div>
-              <div className="mono" style={{ fontSize: 13.5, fontWeight: 700, color: '#334155', marginTop: 3 }}>
-                {totalAdminShare.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
-              </div>
-            </div>
-
-            <div>
-              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>المبلغ المستلم من الأصل</div>
-              <div className="mono" style={{ fontSize: 13.5, fontWeight: 700, color: '#059669', marginTop: 3 }}>
-                {totalPaid.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{
-            display: 'flex',
-            justify: 'space-between',
-            alignItems: 'center',
-            background: '#fef2f2',
-            padding: '10px 14px',
-            borderRadius: 10,
-            border: '1px solid #fca5a5'
-          }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7f1d1d' }}>صافي العهدة المتبقية المطلوب تسليمها:</span>
-            <div className="mono" style={{ fontSize: 18, fontWeight: 900, color: '#dc2626' }}>
-              {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
-            </div>
-          </div>
-        </div>
 
         {profile.personal_card && (
           <div
