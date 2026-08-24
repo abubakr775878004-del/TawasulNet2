@@ -13,7 +13,7 @@ export default function DistributorsPage() {
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
-  const [salesSummary, setSalesSummary] = useState({});
+  const [adminNetBalances, setAdminNetBalances] = useState({});
 
   async function loadList() {
     // 1. جلب قائمة الموزعين
@@ -41,7 +41,7 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع المبيعات الفعلية من جدول sales_log
+    // 2. جلب جميع مبيعات الموزعين من سجل المبيعات
     const { data: sales, error: salesErr } = await supabase
       .from('sales_log')
       .select('distributor_id, price');
@@ -50,28 +50,31 @@ export default function DistributorsPage() {
       console.error('Error fetching sales_log:', salesErr);
     }
 
-    // 3. احتساب المبيعات وعمولة الموزع وحق المدير المباشر
-    const summaryMap = {};
+    // 3. جلب جميع السدادات والمقبوضات
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('distributor_id, amount');
+
+    // 4. احتساب صافي حق المدير المتبقي المطابق لشاشة الموزع
+    const netMap = {};
 
     distributors.forEach((dist) => {
-      // تجميع مبيعات الموزع من جدول sales_log
+      // إجمالي مبيعات الموزع التراكمية
       const distSales = (sales || []).filter(s => s.distributor_id === dist.id);
       const totalSales = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
 
-      // عمولة الموزع (10%)
-      const distributorCommission = totalSales * 0.10;
+      // صافي حق المدير التراكمي بعد خصم 10% عمولة الموزع
+      const totalAdminNetRequired = totalSales * 0.90;
 
-      // صافي حق المدير المطلوب (90%)
-      const netAdminAmount = totalSales * 0.90;
+      // إجمالي المبالغ المسددة فعلياً من الموزع للمدير
+      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
+      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      summaryMap[dist.id] = {
-        totalSales,
-        distributorCommission,
-        netAdminAmount
-      };
+      // المبلغ الصافي المتبقي المسجل على الموزع لصالح المدير (نفس رقم شاشة الموزع)
+      netMap[dist.id] = Math.max(0, Math.round(totalAdminNetRequired - totalPaid));
     });
 
-    setSalesSummary(summaryMap);
+    setAdminNetBalances(netMap);
   }
 
   useEffect(() => { 
@@ -190,7 +193,7 @@ export default function DistributorsPage() {
       <div className="main">
         <h1>الموزعون</h1>
         <p className="greet" style={{ marginBottom: 20 }}>
-          إدارة طلبات التسجيل والحسابات الحالية وإضافة الرصيد وعمولات الموزعين
+          إدارة طلبات التسجيل والحسابات الحالية والمستحقات النقدية الصافية
         </p>
 
         {error && <div className="error-note">{error}</div>}
@@ -257,7 +260,7 @@ export default function DistributorsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {others.map((d) => {
-              const summary = salesSummary[d.id] || { totalSales: 0, distributorCommission: 0, netAdminAmount: 0 };
+              const netAdminAmount = adminNetBalances[d.id] ?? 0;
               return (
                 <div
                   key={d.id}
@@ -292,26 +295,19 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 2. شريط عرض الأرقام: مبيعات الكروت، العمولة، وحق المدير */}
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 10px' }}>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>إجمالي مبيعات الكروت</div>
-                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                        {summary.totalSales.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
+                  {/* 2. شريط الأرقام: الرصيد الحالي + صافي حق المدير (مطابق لصفحة الموزع) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                        {Number(d.balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
-
-                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '8px 10px' }}>
-                      <div style={{ fontSize: 11, color: '#166534', fontWeight: 600 }}>عمولة الموزع (10%)</div>
-                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 800, color: '#15803d', marginTop: 2 }}>
-                        {summary.distributorCommission.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
-                      </div>
-                    </div>
-
-                    <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '8px 10px' }}>
-                      <div style={{ fontSize: 11, color: '#1e40af', fontWeight: 600 }}>حق المدير الصافي (90%)</div>
-                      <div className="mono" style={{ fontSize: 13.5, fontWeight: 900, color: '#1d4ed8', marginTop: 2 }}>
-                        {summary.netAdminAmount.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
+                    
+                    <div style={{ background: netAdminAmount > 0 ? '#eff6ff' : '#f0fdf4', border: netAdminAmount > 0 ? '1px solid #bfdbfe' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: netAdminAmount > 0 ? '#1e40af' : '#166534', fontWeight: 600 }}>المبلغ الصافي المستحق للمدير</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: netAdminAmount > 0 ? '#1d4ed8' : '#059669', marginTop: 2 }}>
+                        {netAdminAmount.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
                   </div>
@@ -336,14 +332,14 @@ export default function DistributorsPage() {
                     </button>
                   </div>
 
-                  {/* 4. قسم تسديد العهدة */}
+                  {/* 4. قسم تسديد العهدة الصافية */}
                   <div style={{ background: '#f0fdf4', padding: 10, borderRadius: 12, border: '1px solid #dcfce7', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 700 }}>تسجيل سداد نقدي من الموزع:</div>
+                    <div style={{ fontSize: 11.5, color: '#166534', fontWeight: 700 }}>تسجيل سداد نقدي مقبوض من الموزع:</div>
                     <div style={{ display: 'flex', gap: 6, width: '100%' }}>
                       <input
                         type="number"
                         min="0"
-                        placeholder="مبلغ السداد المقبوض"
+                        placeholder="المبلغ المقبوض تسليمه"
                         value={debts[d.id] || ''}
                         onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
                         style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12 }}
