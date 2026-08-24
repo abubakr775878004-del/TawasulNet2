@@ -41,13 +41,14 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب سجل المبيعات
-    const { data: sales, error: salesErr } = await supabase
-      .from('sales_log')
-      .select('distributor_id, price');
+    // 2. جلب جميع الكروت المباعة من جدول cards بنفس طريقة صفحة الموزع
+    const { data: soldCards, error: cardsErr } = await supabase
+      .from('cards')
+      .select('assigned_to, packages(price)')
+      .eq('status', 'sold');
 
-    if (salesErr) {
-      console.error('Error fetching sales_log:', salesErr);
+    if (cardsErr) {
+      console.error('Error fetching sold cards:', cardsErr);
     }
 
     // 3. جلب سجل السدادات كاملة
@@ -63,16 +64,16 @@ export default function DistributorsPage() {
     const debtMap = {};
 
     distributors.forEach((dist) => {
-      // أ) إجمالي حق المدير 90% من مبيعات الموزع
-      const distSales = (sales || []).filter(s => s.distributor_id === dist.id);
-      const totalSales = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
-      const netSalesAdmin = totalSales * 0.90;
+      // أ) حساب إجمالي مبيعات الموزع التراكمية وحق المدير 90%
+      const distSoldCards = (soldCards || []).filter(c => c.assigned_to === dist.id);
+      const totalSalesRevenue = distSoldCards.reduce((sum, c) => sum + Number(c.packages?.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90;
 
-      // ب) إجمالي السدادات والمبالغ المسددة المقبوضة من الموزع
+      // ب) إجمالي المدفوعات المقبوضة من الموزع
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
       const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // ج) المبلغ الصافي المتبقي المباشر
+      // ج) المبلغ الصافي المتبقي المباشر (مثل رقم 6,300)
       const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
 
       debtMap[dist.id] = remainingDebt;
@@ -149,7 +150,7 @@ export default function DistributorsPage() {
       return;
     }
 
-    // تحديث رصيد الدين
+    // تحديث رصيد الدين إن وجد في الـ RPC
     await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
