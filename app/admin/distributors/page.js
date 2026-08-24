@@ -41,40 +41,45 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب كل الكروت المباعة التراكمية من قاعدة البيانات (مثل استعلام صفحة الموزع)
-    const { data: soldCards } = await supabase
+    // 2. جلب جميع الكروت المباعة أو المخصصة مع بيانات الباقات للجلب الدقيق للسعر
+    const { data: soldCards, error: cardsErr } = await supabase
       .from('cards')
-      .select('assigned_to, distributor_id, price, packages(price)')
-      .eq('status', 'sold');
+      .select('id, price, assigned_to, distributor_id, sold_by, status, package_id, packages(price)')
+      .or('status.eq.sold,status.eq.used,status.eq.active');
 
-    // 3. جلب كل المقبوضات/السدادات النقدية
+    if (cardsErr) {
+      console.error('Error fetching cards:', cardsErr);
+    }
+
+    // 3. جلب كافة السدادات النقدية
     const { data: payments } = await supabase
       .from('payments')
       .select('distributor_id, amount');
 
-    // 4. احتساب الدين التراكمي بنفس معادلة الموزع تماماً (90% للمدير و10% عمولة)
+    // 4. الحساب الدقيق والمطابق لصفحة الموزع
     const debtMap = {};
 
     distributors.forEach((dist) => {
-      // شمول الكروت المسجلة بـ assigned_to أو distributor_id لمنع سقوط أي كرت
+      // فلترة جميع الكروت المباعة الخاصة بهذا الموزع بأي من المعرفات المرتبطة به
       const distSoldCards = (soldCards || []).filter(
-        c => c.assigned_to === dist.id || c.distributor_id === dist.id
+        c => c.assigned_to === dist.id || c.distributor_id === dist.id || c.sold_by === dist.id
       );
 
-      // حساب إجمالي المبيعات (سعر الكرت المباشر أو سعر الباقة المربوطة)
+      // حساب إجمالي قيم المبيعات (قراءة سعر الكرت أو سعر الباقة المربوطة)
       const totalSales = distSoldCards.reduce((sum, card) => {
         const cardPrice = Number(card.price || card.packages?.price || 0);
         return sum + cardPrice;
       }, 0);
 
-      // صافي حق المدير = 90% من إجمالي المبيعات
+      // صافي حق المدير = 90% من إجمالي المبيعات (استقطاع 10% عمولة الموزع)
+      // مثال: كرت 7,000 * 0.90 = 6,300 ريال للمدير
       const requiredNetAdmin = totalSales * 0.90;
 
-      // إجمالي ما سدده الموزع نقداً للمدير
+      // إجمالي السدادات المقبوضة نقدياً من هذا الموزع
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
       const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // العهدة / الدين التراكمي النهائي المطابق لصفحة الموزع
+      // المتبقي كعهدة على الموزع
       debtMap[dist.id] = Math.max(0, Math.round(requiredNetAdmin - totalPaid));
     });
 
@@ -138,7 +143,6 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // 1. تسجيل عملية السداد في جدول المدفوعات لتحديث الدين المحسوب آلياً
     const { error: payError } = await supabase
       .from('payments')
       .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
@@ -149,7 +153,6 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. تحديث سجل البروفايل
     await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
@@ -260,7 +263,7 @@ export default function DistributorsPage() {
 
           {others.length === 0 && (
             <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
-              لا يوجد مووزعون بعد
+              لا يوجد موزعون بعد
             </div>
           )}
 
