@@ -70,9 +70,9 @@ export default function SalesPage() {
 
   // ب. الحسابات التراكمية الشاملة (لصندوق العهدة والدين المالي المباشر)
   const totalAllTimeRevenue = sold.reduce((sum, card) => sum + (card.packages?.price || 0), 0); // كل مبيعات الموزع منذ البداية
-  const totalAllTimeNetDue = totalAllTimeRevenue * 0.90; // الصافي الكلي المطلوب للشبكة (90%)
+  const totalAllTimeNetDue = totalAllTimeRevenue * 0.90; // الصافي الكلي المطلوب تسليمه للمدير (90%)
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0); // مجموع المبالغ المسددة فعلياً
-  const cumulativeDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // الدين التراكمي المتبقي حالياً
+  const cumulativeDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // إجمالي المبلغ المتبقي المستحق للمدير
 
   const remainingInventoryValue = myCards.reduce((sum, card) => sum + (card.packages?.price || 0), 0);
 
@@ -132,25 +132,31 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 1. صندوق العهدة والدين التراكمي المباشر (مستقل ولا يتأثر بتغير الأشهر) */}
-        <div style={{ background: cumulativeDebt > 0 ? '#1E293B' : '#0F172A', color: '#FFFFFF', padding: 16, borderRadius: 18, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
+        {/* 1. صندوق العهدة المحدث: عرض صافي المستحق للترخيص والمسدد والمتبقي دقيقاً */}
+        <div style={{ background: cumulativeDebt > 0 ? '#1E293B' : '#0F172A', color: '#FFFFFF', padding: 18, borderRadius: 18, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: 10, marginBottom: 12 }}>
             <div>
               <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 700 }}>صندوق العهدة الحقيقي (التراكمي)</span>
-              <h3 style={{ margin: '2px 0 0 0', fontSize: 15, color: '#F8FAFC' }}>إجمالي الدين المطلوب تسليمه حالياً</h3>
+              <h3 style={{ margin: '2px 0 0 0', fontSize: 15, color: '#F8FAFC' }}>إجمالي الدين المطلوب تسليمه للمدير حالياً</h3>
             </div>
             <span style={{ background: cumulativeDebt > 0 ? '#EF4444' : '#10B981', color: '#FFFFFF', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20 }}>
               {cumulativeDebt > 0 ? 'يوجد ذمة غير مسواة' : 'الحساب مصفى 100%'}
             </span>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <div>
-              <div style={{ fontSize: 24, fontWeight: 900, color: cumulativeDebt > 0 ? '#F87171' : '#34D399' }}>
-                {cumulativeDebt.toLocaleString()} <span style={{ fontSize: 13, color: '#94A3B8' }}>ر.ي</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {/* المبلغ المتبقي للتسليم */}
+            <div style={{ fontSize: 26, fontWeight: 900, color: cumulativeDebt > 0 ? '#F87171' : '#34D399' }}>
+              {cumulativeDebt.toLocaleString()} <span style={{ fontSize: 13, color: '#94A3B8' }}>ر.ي</span>
+            </div>
+
+            {/* الخانة السفلية تفصّل المبلغ الكلي المسجل والسدادات الجزئية المقبوضة */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, borderTop: '1px solid #334155', paddingTop: 10, marginTop: 4, fontSize: 11.5 }}>
+              <div>
+                إجمالي مستحقات المدير (90%): <b style={{ color: '#FACC15' }}>{totalAllTimeNetDue.toLocaleString()} ر.ي</b>
               </div>
-              <div style={{ fontSize: 11, color: '#CBD5E1', marginTop: 4 }}>
-                مجموع السدادات المستلمة منك: <b style={{ color: '#38BDF8' }}>{totalPaid.toLocaleString()} ر.ي</b>
+              <div>
+                الواصل والمسدد للمدير: <b style={{ color: '#38BDF8' }}>- {totalPaid.toLocaleString()} ر.ي</b>
               </div>
             </div>
           </div>
