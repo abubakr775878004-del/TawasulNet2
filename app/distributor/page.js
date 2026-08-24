@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // الحسابات المالية المطابقة لصفحة المدير
+  // الحسابات المالية المطابقة لصفحة المدير والتقارير
   const [totalAdminShare, setTotalAdminShare] = useState(0);
   const [totalPaid, setTotalPaid] = useState(0);
   const [calculatedDebt, setCalculatedDebt] = useState(0);
@@ -75,7 +75,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. الحسابات المالية التراكمية المطابقة لصفحة المدير:
+      // 4. الحسابات المالية التراكمية الموحدة مع صفحة المدير والتقارير:
       const { data: soldCards } = await supabase
         .from('cards')
         .select('price, packages(price)')
@@ -83,16 +83,16 @@ export default function DistributorPage() {
         .eq('status', 'sold');
 
       const totalSalesValue = (soldCards || []).reduce((sum, card) => {
-        const pPrice = card.price || card.packages?.price || 0;
+        const pPrice = Number(card.price || card.packages?.price || 0);
         return sum + pPrice;
       }, 0);
 
-      // حق المدير (90% من المبيعات)
-      const netToAdmin = totalSalesValue * 0.9;
+      // حق المدير (90% من إجمالي المبيعات)
+      const netToAdmin = totalSalesValue * 0.90;
 
-      // إجمالي السدادات المقبوضة
+      // إجمالي السدادات من جدول payments المعتمد
       const { data: paymentsData } = await supabase
-        .from('distributor_payments')
+        .from('payments')
         .select('amount')
         .eq('distributor_id', profile.id);
 
@@ -101,7 +101,7 @@ export default function DistributorPage() {
         0
       );
 
-      // الصافي المتبقي
+      // الصافي المتبقي المطلوبة تسليمه
       const finalDebt = Math.max(0, Math.round(netToAdmin - totalPayments));
 
       setTotalAdminShare(netToAdmin);
@@ -426,7 +426,7 @@ export default function DistributorPage() {
         {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* الخانة المحدثة: العهدة / الدين التراكمي بتفاصيلها كاملة */}
+        {/* الخانة الموحدة للعهدة والمبلغ المطلوب تسليمه (تطابق التقارير والمدير) */}
         <div style={{
           background: '#fff5f5',
           border: '1.5px solid #fecaca',
@@ -435,7 +435,6 @@ export default function DistributorPage() {
           marginBottom: 20,
           boxShadow: '0 4px 12px rgba(220, 38, 38, 0.04)'
         }}>
-          {/* ترويسة الخانة والحالة */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
               <span>📊</span> العهدة / الدين التراكمي:
@@ -452,7 +451,6 @@ export default function DistributorPage() {
             </span>
           </div>
 
-          {/* تفاصيل العهدة والمستلم من الأصل */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
@@ -478,7 +476,6 @@ export default function DistributorPage() {
             </div>
           </div>
 
-          {/* الصافي المتبقي المطلوب باللون الأحمر البارز */}
           <div style={{
             display: 'flex',
             justify: 'space-between',
@@ -488,7 +485,7 @@ export default function DistributorPage() {
             borderRadius: 10,
             border: '1px solid #fca5a5'
           }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7f1d1d' }}>صافي العهدة المتبقية:</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7f1d1d' }}>صافي العهدة المتبقية المطلوب تسليمها:</span>
             <div className="mono" style={{ fontSize: 18, fontWeight: 900, color: '#dc2626' }}>
               {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
             </div>
