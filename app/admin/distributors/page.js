@@ -41,7 +41,7 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع الكروت المباعة من جدول cards بنفس طريقة صفحة الموزع
+    // 2. جلب جميع الكروت المباعة من جدول cards المطابق لصفحة الموزع
     const { data: soldCards, error: cardsErr } = await supabase
       .from('cards')
       .select('assigned_to, packages(price)')
@@ -150,7 +150,7 @@ export default function DistributorsPage() {
       return;
     }
 
-    // تحديث رصيد الدين إن وجد في الـ RPC
+    // تحديث رصيد الدين
     await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
@@ -312,9 +312,17 @@ export default function DistributorsPage() {
                       </div>
                     </div>
                     
-                    <div style={{ background: currentNetDebt > 0 ? '#eff6ff' : '#f0fdf4', border: currentNetDebt > 0 ? '1px solid #bfdbfe' : '1px solid #bbf7d0', borderRadius: 10, padding: '8px 12px' }}>
-                      <div style={{ fontSize: 11, color: currentNetDebt > 0 ? '#1e40af' : '#166534', fontWeight: 600 }}>المبلغ الصافي المستحق للمدير</div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#1d4ed8' : '#059669', marginTop: 2 }}>
+                    {/* الخانة التي تم تعديل ألوانها فقط (أحمر عند وجود الدين) */}
+                    <div style={{ 
+                      background: currentNetDebt > 0 ? '#fef2f2' : '#f0fdf4', 
+                      border: currentNetDebt > 0 ? '1px solid #fca5a5' : '1px solid #bbf7d0', 
+                      borderRadius: 10, 
+                      padding: '8px 12px' 
+                    }}>
+                      <div style={{ fontSize: 11, color: currentNetDebt > 0 ? '#991b1b' : '#166534', fontWeight: 700 }}>
+                        المبلغ الصافي المستحق للمدير
+                      </div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
                         {currentNetDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
