@@ -17,7 +17,9 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // العهدة / الدين التراكمي المطابق تماماً لصفحة المدير
+  // الحسابات المالية المطابقة لصفحة المدير
+  const [totalAdminShare, setTotalAdminShare] = useState(0);
+  const [totalPaid, setTotalPaid] = useState(0);
   const [calculatedDebt, setCalculatedDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -73,24 +75,22 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. نفس حسبة صفحة المدير التراكمية بالضبط:
-      // جلب جميع الكروت المباعة للتراكمي
+      // 4. الحسابات المالية التراكمية المطابقة لصفحة المدير:
       const { data: soldCards } = await supabase
         .from('cards')
         .select('price, packages(price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold');
 
-      // إجمالي قيمة الكروت المباعة (مثال: 73,200)
       const totalSalesValue = (soldCards || []).reduce((sum, card) => {
         const pPrice = card.price || card.packages?.price || 0;
         return sum + pPrice;
       }, 0);
 
-      // خصم نسبة الموزع (10%) الصافي للإدارة = 90% من المبيعات
+      // حق المدير (90% من المبيعات)
       const netToAdmin = totalSalesValue * 0.9;
 
-      // جلب إجمالي السدادات المسلمة من الموزع (مثال: 53,280)
+      // إجمالي السدادات المقبوضة
       const { data: paymentsData } = await supabase
         .from('distributor_payments')
         .select('amount')
@@ -101,10 +101,12 @@ export default function DistributorPage() {
         0
       );
 
-      // العهدة/الدين التراكمي = (الصافي المطلوب تسليمه للإدارة) - (مجموع السدادات)
-      // الحسبة: (73,200 * 0.9) - 53,280 = 65,880 - 53,280 = 12,600 ريال
-      const finalDebt = netToAdmin - totalPayments;
-      setCalculatedDebt(finalDebt > 0 ? finalDebt : 0);
+      // الصافي المتبقي
+      const finalDebt = Math.max(0, Math.round(netToAdmin - totalPayments));
+
+      setTotalAdminShare(netToAdmin);
+      setTotalPaid(totalPayments);
+      setCalculatedDebt(finalDebt);
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -118,7 +120,7 @@ export default function DistributorPage() {
       load();
     }
     const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOffline(false);
+    const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -424,79 +426,71 @@ export default function DistributorPage() {
         {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
-        {/* كرت العهدة / الدين التراكمي المطلوب سداده للإدارة بنفس التصميم والمبلغ */}
-        <div
-          style={{
-            background: '#FFF5F5',
-            border: '1px solid #FFE3E3',
-            borderRadius: '20px',
-            padding: '20px 24px',
-            marginBottom: '20px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            boxShadow: '0 4px 15px rgba(220, 38, 38, 0.03)',
-          }}
-        >
-          {calculatedDebt > 0 ? (
-            <div
-              style={{
-                background: '#FFA8A8',
-                color: '#FFFFFF',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '700',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              يوجد ذمة غير مسواة
+        {/* الخانة المحدثة: العهدة / الدين التراكمي بتفاصيلها كاملة */}
+        <div style={{
+          background: '#fff5f5',
+          border: '1.5px solid #fecaca',
+          borderRadius: 16,
+          padding: 18,
+          marginBottom: 20,
+          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.04)'
+        }}>
+          {/* ترويسة الخانة والحالة */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: '#991b1b', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span>📊</span> العهدة / الدين التراكمي:
             </div>
-          ) : (
-            <div
-              style={{
-                background: '#D1FAE5',
-                color: '#065F46',
-                padding: '6px 14px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '700',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              الحساب مصفى
-            </div>
-          )}
+            <span style={{
+              background: calculatedDebt > 0 ? '#fee2e2' : '#dcfce7',
+              color: calculatedDebt > 0 ? '#dc2626' : '#15803d',
+              fontSize: 11.5,
+              fontWeight: 800,
+              padding: '4px 10px',
+              borderRadius: 20
+            }}>
+              {calculatedDebt > 0 ? 'يوجد ذمة غير مسواة' : 'الحساب مصفى'}
+            </span>
+          </div>
 
-          <div style={{ textAlign: 'left' }}>
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '700',
-                color: '#C92A2A',
-                marginBottom: '6px',
-              }}
-            >
-              العهدة / الدين التراكمي:
+          {/* تفاصيل العهدة والمستلم من الأصل */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: 10,
+            background: '#ffffff',
+            padding: 12,
+            borderRadius: 12,
+            border: '1px solid #fee2e2',
+            marginBottom: 12
+          }}>
+            <div>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>إجمالي العهدة (حق المدير 90%)</div>
+              <div className="mono" style={{ fontSize: 13.5, fontWeight: 700, color: '#334155', marginTop: 3 }}>
+                {totalAdminShare.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
+              </div>
             </div>
-            <div
-              style={{
-                fontSize: '28px',
-                fontWeight: '900',
-                color: '#C92A2A',
-                lineHeight: 1,
-              }}
-            >
-              {calculatedDebt.toLocaleString('en-US')}{' '}
-              <span
-                style={{
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  color: '#C92A2A',
-                }}
-              >
-                ريال
-              </span>
+
+            <div>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>المبلغ المستلم من الأصل</div>
+              <div className="mono" style={{ fontSize: 13.5, fontWeight: 700, color: '#059669', marginTop: 3 }}>
+                {totalPaid.toLocaleString('en-US')} <span style={{ fontSize: 10 }}>ريال</span>
+              </div>
+            </div>
+          </div>
+
+          {/* الصافي المتبقي المطلوب باللون الأحمر البارز */}
+          <div style={{
+            display: 'flex',
+            justify: 'space-between',
+            alignItems: 'center',
+            background: '#fef2f2',
+            padding: '10px 14px',
+            borderRadius: 10,
+            border: '1px solid #fca5a5'
+          }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: '#7f1d1d' }}>صافي العهدة المتبقية:</span>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 900, color: '#dc2626' }}>
+              {calculatedDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
             </div>
           </div>
         </div>
@@ -513,7 +507,7 @@ export default function DistributorPage() {
               boxShadow:
                 '0 10px 25px rgba(124, 58, 237, 0.25)',
               display: 'flex',
-              justifyContent: 'space-between',
+              justify: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
