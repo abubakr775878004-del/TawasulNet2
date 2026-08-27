@@ -18,11 +18,17 @@ export default function DistributorsPage() {
   // حالة التحكم بصندوق التأكيد المنبثق (Modal State)
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
-    type: null, // 'balance' أو 'payment'
+    type: null,
     distributorId: null,
     distributorName: '',
     amount: 0
   });
+
+  // دالة لتنسيق الأرقام حتى 9 أرقام كحد أقصى بدون كسور أو أرقام 10 مطوّلة
+  const formatNum = (num) => {
+    const val = Math.round(Number(num) || 0);
+    return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
 
   async function loadList() {
     // 1. جلب قائمة الموزعين
@@ -332,7 +338,7 @@ export default function DistributorsPage() {
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
                       <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
                       <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                        {Number(d.balance || 0).toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                        {formatNum(d.balance)} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
                     
@@ -346,12 +352,12 @@ export default function DistributorsPage() {
                         المبلغ الصافي المستحق للمدير
                       </div>
                       <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
-                        {currentNetDebt.toLocaleString('en-US')} <span style={{ fontSize: 11 }}>ريال</span>
+                        {formatNum(currentNetDebt)} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* 3. قسم شحن المخزون (باللون الأزرق لتمييزه 📦) */}
+                  {/* 3. قسم شحن المخزون (📦) */}
                   <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
                       📦 شحن كروت ومخزون للموزع:
@@ -360,9 +366,14 @@ export default function DistributorsPage() {
                       <input
                         type="number"
                         min="0"
+                        maxLength={9}
                         placeholder="أدخل مبلغ المخزون (مثلاً 50000)"
                         value={topUps[d.id] || ''}
-                        onChange={(e) => setTopUps({ ...topUps, [d.id]: e.target.value })}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 9) {
+                            setTopUps({ ...topUps, [d.id]: e.target.value });
+                          }
+                        }}
                         style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #93c5fd', fontFamily: 'monospace', fontSize: 12.5 }}
                       />
                       <button 
@@ -375,7 +386,7 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 4. قسم تسجيل السداد النقدي (باللون الأخضر لتمييزه 💵) */}
+                  {/* 4. قسم تسجيل السداد النقدي (💵) */}
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontSize: 12, color: '#166534', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
                       💵 تسجيل سداد نقدي مقبوض (خصم دين):
@@ -384,9 +395,14 @@ export default function DistributorsPage() {
                       <input
                         type="number"
                         min="0"
+                        maxLength={9}
                         placeholder="أدخل المبلغ المقبوض كاش"
                         value={debts[d.id] || ''}
-                        onChange={(e) => setDebts({ ...debts, [d.id]: e.target.value })}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 9) {
+                            setDebts({ ...debts, [d.id]: e.target.value });
+                          }
+                        }}
                         style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12.5 }}
                       />
                       <button 
@@ -463,7 +479,7 @@ export default function DistributorsPage() {
               <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
                 هل أنت متأكد من {confirmModal.type === 'balance' ? 'إضافة رصيد مخزون بقيمة' : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
                 <strong style={{ color: confirmModal.type === 'balance' ? '#2563eb' : '#059669', fontSize: 16 }}>
-                  {confirmModal.amount.toLocaleString('en-US')} ريال
+                  {formatNum(confirmModal.amount)} ريال
                 </strong>{' '}
                 للموزع <strong>({confirmModal.distributorName})</strong>؟
               </p>
