@@ -30,13 +30,11 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // 1. جلب قائمة الموزعين والباقات
     const [{ data: distributors }, { data: packages }] = await Promise.all([
       supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
       supabase.from('packages').select('id, price')
     ]);
 
-    // 2. جلب الكروت المسندة للموزعين فقط (sold أو with_distributor) بشكل مباشر وتخطي الكروت المتوفرة العامة
     const { data: cards, error } = await supabase
       .from('cards')
       .select('id, assigned_to, status, updated_at, created_at, package_id, price')
@@ -66,13 +64,11 @@ export default function ReportsPage() {
       const cardPrice = Number(c.price || pkgMap[c.package_id] || 0);
       const cardStatus = c.status;
 
-      // 1. كروت بحوزة الموزع (غير مباعة)
       if (cardStatus === 'with_distributor') {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       }
 
-      // 2. الكروت المباعة فعلياً (تطبيق الصافي 90%)
       if (cardStatus === 'sold') {
         const soldDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
 
@@ -180,7 +176,7 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight 700 }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
                     {r.salesCount} كرت — {formatNum(r.salesValue)} ريال
                   </div>
