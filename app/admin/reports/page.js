@@ -14,54 +14,64 @@ export default function ReportsPage() {
   const [totalNetworkSalesCount, setTotalNetworkSalesCount] = useState(0);
   const [totalNetworkSalesValue, setTotalNetworkSalesValue] = useState(0);
 
+  // دالة تنسيق الأرقام حتى 9 أرقام كحد أقصى وبدون أرقام عشريّة
+  const formatNum = (num) => {
+    const val = Math.round(Number(num) || 0);
+    return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
   async function loadReport() {
     setBusy(true);
 
     let since = null;
     if (filter === 'month') {
       const d = new Date(); d.setDate(d.getDate() - 30);
-      since = d.toISOString();
+      since = d.getTime();
     } else if (filter === 'week') {
       const d = new Date(); d.setDate(d.getDate() - 7);
-      since = d.toISOString();
+      since = d.getTime();
     }
 
-    const [{ data: distributors }, { data: heldCards }, salesQuery] = await Promise.all([
+    // جلب الموزعين وجميع الكروت المرتبطة بالباقات لتوحيد المصدر مع باقي النظام
+    const [{ data: distributors }, { data: allCards }] = await Promise.all([
       supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
-      supabase.from('cards').select('assigned_to, packages(price)').eq('status', 'with_distributor'),
-      (() => {
-        let q = supabase.from('sales_log').select('distributor_id, distributor_name, price, sold_at');
-        if (since) q = q.gte('sold_at', since);
-        return q;
-      })(),
+      supabase.from('cards').select('assigned_to, status, updated_at, created_at, packages(price)'),
     ]);
-
-    const { data: sales } = salesQuery;
 
     const map = {};
     (distributors || []).forEach((d) => {
       map[d.id] = { name: d.full_name, heldCount: 0, heldValue: 0, salesCount: 0, salesValue: 0 };
     });
 
-    (heldCards || []).forEach((c) => {
-      if (!map[c.assigned_to]) return;
-      map[c.assigned_to].heldCount += 1;
-      map[c.assigned_to].heldValue += c.packages?.price || 0;
-    });
-
     let netSalesCount = 0;
     let netSalesValue = 0;
 
-    (sales || []).forEach((s) => {
-      if (!map[s.distributor_id]) {
-        map[s.distributor_id] = { name: s.distributor_name, heldCount: 0, heldValue: 0, salesCount: 0, salesValue: 0 };
-      }
-      map[s.distributor_id].salesCount += 1;
-      map[s.distributor_id].salesValue += Number(s.price);
+    (allCards || []).forEach((c) => {
+      if (!c.assigned_to || !map[c.assigned_to]) return;
 
-      // تجميع الإجمالي العام للشبكة داخل حلقة التكرار بدقة
-      netSalesCount += 1;
-      netSalesValue += Number(s.price);
+      const price = Number(c.packages?.price || 0);
+
+      // 1. الكروت المتوفرة كـ مخزون حالي عند الموزع (غير مباعة)
+      if (c.status === 'available') {
+        map[c.assigned_to].heldCount += 1;
+        map[c.assigned_to].heldValue += price;
+      }
+
+      // 2. الكروت المباعة فعلياً مع تطبيق الفلتر الزمني وحساب صافي حق المدير (90%)
+      if (c.status === 'sold') {
+        const soldDate = new Date(c.updated_at || c.created_at).getTime();
+        
+        // التحقق من تاريخ البيع حسب الفلتر
+        if (!since || soldDate >= since) {
+          const adminNetPrice = price * 0.90; // نسبة المدير 90%
+
+          map[c.assigned_to].salesCount += 1;
+          map[c.assigned_to].salesValue += adminNetPrice;
+
+          netSalesCount += 1;
+          netSalesValue += adminNetPrice;
+        }
+      }
     });
 
     setTotalNetworkSalesCount(netSalesCount);
@@ -89,7 +99,7 @@ export default function ReportsPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
           <div>
             <h1>التقارير</h1>
-            <p className="greet">مقارنة أداء الموزعين — الكروت الموجودة عندهم والمبيعات الفعلية</p>
+            <p className="greet">مقارنة أداء الموزعين — الكروت الموجودة عندهم والمبيعات الفعلية (الصافي 90%)</p>
           </div>
           <button
             onClick={handlePrintPDF}
@@ -128,8 +138,8 @@ export default function ReportsPage() {
             <div className="value" style={{ fontSize: '20px', fontWeight: 900, color: '#0F766E', marginTop: '6px' }}>{totalNetworkSalesCount} كرت</div>
           </div>
           <div className="stat" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>إجمالي المبلغ المحقق ({filterLabel[filter]})</div>
-            <div className="value mono" style={{ fontSize: '20px', fontWeight: 900, color: '#10B981', marginTop: '6px' }}>{totalNetworkSalesValue.toLocaleString('en-US')} ريال</div>
+            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>صافي المبلغ المحقق للمدير 90% ({filterLabel[filter]})</div>
+            <div className="value mono" style={{ fontSize: '20px', fontWeight: 900, color: '#10B981', marginTop: '6px' }}>{formatNum(totalNetworkSalesValue)} ريال</div>
           </div>
         </div>
 
@@ -157,13 +167,13 @@ export default function ReportsPage() {
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>كروت لديه الآن (غير مباعة)</div>
                   <div style={{ fontSize: 13.5, fontWeight: 800, marginTop: '2px' }}>
-                    {r.heldCount} كرت — {r.heldValue.toLocaleString('en-US')} ريال
+                    {r.heldCount} كرت — {formatNum(r.heldValue)} ريال
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبيعات الفعلية ({filterLabel[filter]})</div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
                   <div style={{ fontSize: 13.5, fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
-                    {r.salesCount} كرت — {r.salesValue.toLocaleString('en-US')} ريال
+                    {r.salesCount} كرت — {formatNum(r.salesValue)} ريال
                   </div>
                 </div>
               </div>
@@ -172,7 +182,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* تخصيص الطباعة لمنع الشاشة البيضاء وإخراج PDF مرتب ونظيف */}
       <style jsx global>{`
         @media print {
           body {
