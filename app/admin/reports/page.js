@@ -32,11 +32,18 @@ export default function ReportsPage() {
       since = d.getTime();
     }
 
-    // جلب الموزعين وجميع الكروت المرتبطة بالباقات لتوحيد المصدر مع باقي النظام
-    const [{ data: distributors }, { data: allCards }] = await Promise.all([
+    // 1. جلب الموزعين، الكروت، والباقات بشكل منفصل لضمان تجنب قيود RLS أو أخطاء الاستعلام المركب
+    const [{ data: distributors }, { data: allCards }, { data: allPackages }] = await Promise.all([
       supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
-      supabase.from('cards').select('assigned_to, status, updated_at, created_at, packages(price)'),
+      supabase.from('cards').select('id, assigned_to, status, updated_at, created_at, package_id, price'),
+      supabase.from('packages').select('id, price')
     ]);
+
+    // تحويل الباقات إلى خريطة سهلة الوصول [package_id -> price]
+    const pkgPriceMap = {};
+    (allPackages || []).forEach(p => {
+      pkgPriceMap[p.id] = Number(p.price || 0);
+    });
 
     const map = {};
     (distributors || []).forEach((d) => {
@@ -49,21 +56,21 @@ export default function ReportsPage() {
     (allCards || []).forEach((c) => {
       if (!c.assigned_to || !map[c.assigned_to]) return;
 
-      const price = Number(c.packages?.price || 0);
+      // تحديد سعر الكرت إما المباشر أو من الباقة
+      const cardPrice = Number(c.price || pkgPriceMap[c.package_id] || 0);
 
-      // 1. الكروت المتوفرة كـ مخزون حالي عند الموزع (غير مباعة)
-      if (c.status === 'available') {
+      // 1. الكروت المخزنة عند الموزع (غير مباعة)
+      if (c.status === 'available' || c.status === 'with_distributor') {
         map[c.assigned_to].heldCount += 1;
-        map[c.assigned_to].heldValue += price;
+        map[c.assigned_to].heldValue += cardPrice;
       }
 
-      // 2. الكروت المباعة فعلياً مع تطبيق الفلتر الزمني وحساب صافي حق المدير (90%)
+      // 2. الكروت المباعة فعلياً مع تطبيق الفلتر الصافي (90%)
       if (c.status === 'sold') {
         const soldDate = new Date(c.updated_at || c.created_at).getTime();
         
-        // التحقق من تاريخ البيع حسب الفلتر
         if (!since || soldDate >= since) {
-          const adminNetPrice = price * 0.90; // نسبة المدير 90%
+          const adminNetPrice = cardPrice * 0.90; // صافي حق المدير 90%
 
           map[c.assigned_to].salesCount += 1;
           map[c.assigned_to].salesValue += adminNetPrice;
