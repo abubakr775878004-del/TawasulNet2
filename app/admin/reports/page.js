@@ -30,11 +30,13 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
+    // جلب الموزعين والباقات
     const [{ data: distributors }, { data: packages }] = await Promise.all([
       supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
       supabase.from('packages').select('id, price')
     ]);
 
+    // جلب الكروت ذات الصلة مباشرة
     const { data: cards, error } = await supabase
       .from('cards')
       .select('id, assigned_to, status, updated_at, created_at, package_id, price')
