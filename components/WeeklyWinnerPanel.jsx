@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export default function WeeklyWinnerPanel() {
-  const [loading, setLoading] = useState(false);
   const [winner, setWinner] = useState(null);
 
   useEffect(() => {
@@ -12,7 +11,13 @@ export default function WeeklyWinnerPanel() {
 
   async function fetchCurrentWinner() {
     try {
-      const { data, error } = await supabase.from('weekly_winners').select('*').order('created_at', { ascending: false }).limit(1).single();
+      const { data, error } = await supabase
+        .from('weekly_winners')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+        
       if (!error && data) {
         setWinner(data);
       }
@@ -21,13 +26,13 @@ export default function WeeklyWinnerPanel() {
     }
   }
 
-  // 🤖 دالة إرسال التلجرام التجريبية والمستقبلية المرنة (تدعم فائز أو عدة فائزين)
+  // دالة إرسال الإشعار للتلجرام مدمجة مباشرة لتجنب أخطاء الاستيراد
   const sendToTelegram = async (winnersList) => {
     const botToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
     const chatId = process.env.NEXT_PUBLIC_TELEGRAM_ADMIN_CHAT_ID;
 
     if (!botToken || !chatId) {
-      alert('⚠️ يرجى التأكد من إعداد متغيرات التلجرام NEXT_PUBLIC_TELEGRAM_BOT_TOKEN و CHAT_ID في إعدادات Vercel');
+      alert('⚠️ يرجى التأكد من إضافة متغيرات NEXT_PUBLIC_TELEGRAM_BOT_TOKEN و CHAT_ID في Vercel');
       return;
     }
 
@@ -70,7 +75,7 @@ ${winnersText.trim()}
       });
       const result = await res.json();
       if (result.ok) {
-        alert('✅ تم إرسال رسالة السحب إلى التلجرام بنجاح!');
+        alert('✅ تم إرسال الرسالة إلى التلجرام بنجاح!');
       } else {
         alert('❌ فشل الإرسال: ' + result.description);
       }
@@ -80,14 +85,12 @@ ${winnersText.trim()}
     }
   };
 
-  // 🧪 زر تجربة إرسال فائز واحد
   const handleTestSingle = async () => {
     await sendToTelegram([
       { customer_name: "أحمد محسن (تجربة فائز)", distributor_name: "حساب التجربن" }
     ]);
   };
 
-  // 🧪 زر تجربة إرسال 3 فائزين (جاهز للمستقبل)
   const handleTestTriple = async () => {
     await sendToTelegram([
       { customer_name: "أحمد محسن (المركز الأول)", distributor_name: "حساب التجربن" },
@@ -112,7 +115,6 @@ ${winnersText.trim()}
         </div>
       )}
 
-      {/* أزرار التجربة الفورية للبوت */}
       <div style={{ display: 'flex', gap: 10, marginTop: 15, paddingTop: 12, borderTop: '1px solid #F3F0FB' }}>
         <button 
           onClick={handleTestSingle} 
