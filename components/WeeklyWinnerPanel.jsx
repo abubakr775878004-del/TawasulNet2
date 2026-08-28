@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { sendWinnersToTelegram } from '../lib/telegram';
 
 export default function DistributorWeeklyWinner() {
   const [selectedWinner, setSelectedWinner] = useState(null);
@@ -16,17 +17,39 @@ export default function DistributorWeeklyWinner() {
 
       if (!isWeekend) return;
 
-      // استدعاء الدالة الآمنة التي أنشأناها في Supabase
+      // استدعاء الدالة الآمنة في Supabase
       const { data, error } = await supabase.rpc('get_weekly_winner');
 
       if (!error && data) {
         setSelectedWinner(data);
+
+        // منع تكرار إرسال الرسالة للبوت في نفس الأسبوع
+        const weekKey = `telegram_notified_week_${today.getFullYear()}_${getWeekNumber(today)}`;
+        const hasNotified = localStorage.getItem(weekKey);
+
+        if (!hasNotified) {
+          // تحويل النتيجة إلى مصفوفة مرنة (تستوعب فائز واحد أو عدة فائزين)
+          const winnersArray = Array.isArray(data) ? data : [data];
+          
+          await sendWinnersToTelegram(winnersArray);
+          localStorage.setItem(weekKey, 'true');
+        }
       } else {
         setSelectedWinner(null);
       }
     }
+
     fetchWinner();
   }, []);
+
+  // دالة حساب رقم الأسبوع لمنع التكرار
+  function getWeekNumber(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  }
 
   return (
     <div style={{
