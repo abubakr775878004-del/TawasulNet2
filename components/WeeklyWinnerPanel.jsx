@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { sendWinnersToTelegram } from '../lib/telegram';
 
 export default function DistributorWeeklyWinner() {
   const [selectedWinner, setSelectedWinner] = useState(null);
@@ -14,14 +15,32 @@ export default function DistributorWeeklyWinner() {
       const isWeekend = (currentDay === 5 || currentDay === 6);
       setIsWeekendShowTime(isWeekend);
 
+      // الشرط الزمني: عدم التنفيذ إلا يومي الجمعة والسبت
       if (!isWeekend) return;
 
-      // استدعاء الدالة الآمنة من Supabase
+      // 1. استدعاء الفائز من Supabase
       const { data, error } = await supabase.rpc('get_weekly_winner');
 
       if (!error && data) {
         const winnerObj = Array.isArray(data) ? data[0] : data;
         setSelectedWinner(winnerObj);
+
+        // 2. شرط الإرسال التلقائي: يوم الجمعة فقط ولمرة واحدة للأسبوع الحالي
+        if (currentDay === 5) {
+          const weekKey = `telegram_notified_week_${today.getFullYear()}_${getWeekNumber(today)}`;
+          const hasNotified = localStorage.getItem(weekKey);
+
+          if (!hasNotified && winnerObj) {
+            const winnersArray = Array.isArray(data) ? data : [data];
+            
+            if (typeof sendWinnersToTelegram === 'function') {
+              const success = await sendWinnersToTelegram(winnersArray);
+              if (success) {
+                localStorage.setItem(weekKey, 'true');
+              }
+            }
+          }
+        }
       } else {
         setSelectedWinner(null);
       }
@@ -29,6 +48,15 @@ export default function DistributorWeeklyWinner() {
 
     fetchWinner();
   }, []);
+
+  // دالة حساب رقم الأسبوع لضمان عدم تكرار الإرسال في نفس الأسبوع
+  function getWeekNumber(d) {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  }
 
   return (
     <div style={{
