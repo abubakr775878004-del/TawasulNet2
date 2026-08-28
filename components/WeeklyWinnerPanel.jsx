@@ -1,166 +1,115 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { sendWinnersToTelegram } from '../lib/telegram';
 
-export default function DistributorWeeklyWinner() {
-  const [selectedWinner, setSelectedWinner] = useState(null);
-  const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
+// دالة التلجرام المدمجة مباشرة لمنع خطأ Module not found
+async function sendWinnersToTelegram(winnersList, adminPhone = '775878004') {
+  if (typeof window === 'undefined') return;
+
+  const botToken = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.NEXT_PUBLIC_TELEGRAM_ADMIN_CHAT_ID;
+
+  if (!botToken || !chatId || !winnersList || winnersList.length === 0) return;
+
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('ar-YE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
+
+  const medals = ['🥇', '🥈', '🥉', '🏅'];
+
+  let winnersText = '';
+  winnersList.forEach((w, index) => {
+    const medal = winnersList.length > 1 ? (medals[index] || '🎉') : '🎉';
+    const winnerName = w.customer_name || w.winnerName || 'غير محدد';
+    const distName = w.distributor_name || w.distributorName || 'غير محدد';
+
+    winnersText += `${medal} *الفائز${winnersList.length > 1 ? ` (المركز ${index + 1})` : ''}:* ${winnerName}\n` +
+                   `🏪 *عن طـريق المـوزع:* ${distName}\n\n`;
+  });
+
+  const message = 
+`👑 *بطـاقـة الفـائز بالـسـحـب الأسبـوعـي* 👑
+━━━━━━━━━━━━━━━━━━━━
+
+${winnersText.trim()}
+
+📅 *تـاريـخ السـحـب:* ${dateStr}
+⏰ *تـوقـيـت الاعـتمـاد:* ${timeStr}
+
+━━━━━━━━━━━━━━━━━━━━
+📞 *للاستفسار واستلام الجائزة:*
+يرجى التواصل مع إدارة الشبكة: ${adminPhone}
+━━━━━━━━━━━━━━━━━━━━
+✨ _تم السحب والاعتماد بنجاح عبر منصة تواصل_`;
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown',
+      }),
+    });
+  } catch (err) {
+    console.error('Failed to send Telegram winner alert:', err);
+  }
+}
+
+export default function WeeklyWinnerPanel() {
+  const [winner, setWinner] = useState(null);
 
   useEffect(() => {
-    async function fetchWinner() {
-      const today = new Date();
-      const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
-      const isWeekend = (currentDay === 5 || currentDay === 6);
-      setIsWeekendShowTime(isWeekend);
-
-      if (!isWeekend) return;
-
-      // استدعاء الدالة الآمنة في Supabase
-      const { data, error } = await supabase.rpc('get_weekly_winner');
-
-      if (!error && data) {
-        setSelectedWinner(data);
-
-        // منع تكرار إرسال الرسالة للبوت في نفس الأسبوع
-        const weekKey = `telegram_notified_week_${today.getFullYear()}_${getWeekNumber(today)}`;
-        const hasNotified = localStorage.getItem(weekKey);
-
-        if (!hasNotified) {
-          const winnersArray = Array.isArray(data) ? data : [data];
-          await sendWinnersToTelegram(winnersArray);
-          localStorage.setItem(weekKey, 'true');
-        }
-      } else {
-        setSelectedWinner(null);
-      }
+    async function loadWinner() {
+      const { data } = await supabase.rpc('get_weekly_winner');
+      if (data) setWinner(data);
     }
-
-    fetchWinner();
+    loadWinner();
   }, []);
 
-  function getWeekNumber(d) {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
-  }
-
-  // 🧪 دالة اختبار إرسال فائز واحد
-  const handleTestSingleWinner = async () => {
-    const singleWinner = [
+  // 🧪 زر تجربة إرسال فائز واحد
+  const handleTestSingle = async () => {
+    await sendWinnersToTelegram([
       { customer_name: "أحمد محسن (تجربة)", distributor_name: "حساب التجربن" }
-    ];
-    await sendWinnersToTelegram(singleWinner);
-    alert('✅ تم إرسال إشعار تجربة (فائز واحد) إلى التلجرام!');
+    ]);
+    alert('✅ تم إرسال إشعار تجربة فائز واحد إلى التلجرام!');
   };
 
-  // 🧪 دالة اختبار إرسال 3 فائزين
-  const handleTestTripleWinners = async () => {
-    const tripleWinners = [
+  // 🧪 زر تجربة إرسال 3 فائزين
+  const handleTestTriple = async () => {
+    await sendWinnersToTelegram([
       { customer_name: "أحمد محسن (المركز الأول)", distributor_name: "حساب التجربن" },
       { customer_name: "محمد علي (المركز الثاني)", distributor_name: "موزع الأمل" },
       { customer_name: "صالح العنسي (المركز الثالث)", distributor_name: "موزع البركة" }
-    ];
-    await sendWinnersToTelegram(tripleWinners);
-    alert('✅ تم إرسال إشعار تجربة (3 فائزين) إلى التلجرام!');
+    ]);
+    alert('✅ تم إرسال إشعار تجربة 3 فائزين إلى التلجرام!');
   };
 
   return (
-    <div style={{
-      background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
-      borderRadius: '16px',
-      padding: '20px',
-      color: '#fff',
-      boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
-      marginBottom: '20px'
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0 }}>🏆 مسابقة السحب الأسبوعي للزبائن</h3>
-        <span style={{
-          background: isWeekendShowTime ? '#10B981' : '#7C3AED',
-          color: '#fff',
-          padding: '4px 10px',
-          borderRadius: '8px',
-          fontSize: '11px',
-          fontWeight: '700'
-        }}>
-          {isWeekendShowTime ? '✨ الفائز معتمد' : '⏳ قيد التنافس'}
-        </span>
+    <div className="panel" style={{ marginBottom: 20 }}>
+      <div className="panel-head">
+        <h3>🏆 مسابقة السحب الأسبوعي (لوحة التحكم)</h3>
       </div>
-
-      {isWeekendShowTime ? (
-        selectedWinner ? (
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '12px',
-            padding: '14px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '11px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
-              🎉 الفائز في السحب الأسبوعي لهذا الأسبوع:
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>
-              {selectedWinner.customer_name}
-            </div>
-            <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '4px' }}>
-              عبر الموزع: <strong>{selectedWinner.distributor_name || 'غير محدد'}</strong>
-            </div>
-          </div>
-        ) : (
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
-            لا توجد مبيعات مسجلة للسحب هذا الأسبوع.
-          </div>
-        )
+      
+      {winner ? (
+        <div style={{ padding: '10px 0', fontSize: 14 }}>
+          الفائز الحالي: <strong>{winner.customer_name}</strong> (الموزع: {winner.distributor_name})
+        </div>
       ) : (
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.05)',
-          border: '1px dashed rgba(255, 255, 255, 0.2)',
-          borderRadius: '12px',
-          padding: '12px',
-          textAlign: 'center',
-          fontSize: '12px',
-          color: '#CBD5E1'
-        }}>
-          🔒 سيظهر اسم الفائز الثابت حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
+        <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
+          لا يوجد فائز معتمد حالياً.
         </div>
       )}
 
-      {/* 🧪 قسم أزرار التجربة السريعة للبوت */}
-      <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-        <button 
-          onClick={handleTestSingleWinner}
-          style={{
-            background: '#F59E0B',
-            color: '#fff',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
-        >
-          🧪 تجربة (فائز واحد)
+      {/* أزرار الفحص والتجربة المباشرة للتلجرام */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 15, paddingTop: 10, borderTop: '1px solid #eee' }}>
+        <button onClick={handleTestSingle} style={{ padding: '6px 12px', background: '#F59E0B', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 'bold' }}>
+          🧪 تجربة إرسال (فائز واحد)
         </button>
-
-        <button 
-          onClick={handleTestTripleWinners}
-          style={{
-            background: '#10B981',
-            color: '#fff',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            fontSize: '11px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
-        >
-          🧪 تجربة (3 فائزين)
+        <button onClick={handleTestTriple} style={{ padding: '6px 12px', background: '#10B981', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 'bold' }}>
+          🧪 تجربة إرسال (3 فائزين)
         </button>
       </div>
     </div>
