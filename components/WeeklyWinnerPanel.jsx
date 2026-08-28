@@ -2,61 +2,35 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { sendWinnersToTelegram } from '../lib/telegram';
 
 export default function DistributorWeeklyWinner() {
-  const [selectedWinner, setSelectedWinner] = useState(null);
+  const [winners, setWinners] = useState([]);
   const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
 
   useEffect(() => {
-    async function fetchWinner() {
+    async function fetchWinners() {
       const today = new Date();
       const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
       const isWeekend = (currentDay === 5 || currentDay === 6);
       setIsWeekendShowTime(isWeekend);
 
-      // الشرط الزمني: عدم التنفيذ إلا يومي الجمعة والسبت
       if (!isWeekend) return;
 
-      // 1. استدعاء الفائز من Supabase
+      // استدعاء الفائزين من Supabase (دعم حتى 3 فائزين)
       const { data, error } = await supabase.rpc('get_weekly_winner');
 
       if (!error && data) {
-        const winnerObj = Array.isArray(data) ? data[0] : data;
-        setSelectedWinner(winnerObj);
-
-        // 2. شرط الإرسال التلقائي: يوم الجمعة فقط ولمرة واحدة للأسبوع الحالي
-        if (currentDay === 5) {
-          const weekKey = `telegram_notified_week_${today.getFullYear()}_${getWeekNumber(today)}`;
-          const hasNotified = localStorage.getItem(weekKey);
-
-          if (!hasNotified && winnerObj) {
-            const winnersArray = Array.isArray(data) ? data : [data];
-            
-            if (typeof sendWinnersToTelegram === 'function') {
-              const success = await sendWinnersToTelegram(winnersArray);
-              if (success) {
-                localStorage.setItem(weekKey, 'true');
-              }
-            }
-          }
-        }
+        const winnersList = Array.isArray(data) ? data.slice(0, 3) : [data];
+        setWinners(winnersList);
       } else {
-        setSelectedWinner(null);
+        setWinners([]);
       }
     }
 
-    fetchWinner();
+    fetchWinners();
   }, []);
 
-  // دالة حساب رقم الأسبوع لضمان عدم تكرار الإرسال في نفس الأسبوع
-  function getWeekNumber(d) {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
-  }
+  const rankBadges = ['🥇 المركز الأول', '🥈 المركز الثاني', '🥉 المركز الثالث'];
 
   return (
     <div style={{
@@ -67,8 +41,8 @@ export default function DistributorWeeklyWinner() {
       boxShadow: '0 10px 25px rgba(49, 46, 129, 0.2)',
       marginBottom: '20px'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0 }}>🏆 مسابقة السحب الأسبوعي للزبائن</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+        <h3 style={{ fontSize: '15px', fontWeight: '800', margin: 0 }}>🏆 الفائزون بالسحب الأسبوعي للزبائن</h3>
         <span style={{
           background: isWeekendShowTime ? '#10B981' : '#7C3AED',
           color: '#fff',
@@ -77,28 +51,37 @@ export default function DistributorWeeklyWinner() {
           fontSize: '11px',
           fontWeight: '700'
         }}>
-          {isWeekendShowTime ? '✨ الفائز معتمد' : '⏳ قيد التنافس'}
+          {isWeekendShowTime ? '✨ الفائزون معتمدون' : '⏳ قيد التنافس'}
         </span>
       </div>
 
       {isWeekendShowTime ? (
-        selectedWinner ? (
-          <div style={{
-            background: 'rgba(255, 255, 255, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: '12px',
-            padding: '14px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '11px', color: '#34D399', fontWeight: '700', marginBottom: '4px' }}>
-              🎉 الفائز في السحب الأسبوعي لهذا الأسبوع:
-            </div>
-            <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>
-              {selectedWinner.customer_name}
-            </div>
-            <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '4px' }}>
-              عبر الموزع: <strong>{selectedWinner.distributor_name || 'غير محدد'}</strong>
-            </div>
+        winners.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {winners.map((winner, index) => (
+              <div key={index} style={{
+                background: index === 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.08)',
+                border: index === 0 ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                display: 'flex',
+                justify: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', color: index === 0 ? '#34D399' : '#A7F3D0', fontWeight: '700', marginBottom: '2px' }}>
+                    {rankBadges[index] || `فائز ${index + 1}`}
+                  </div>
+                  <div style={{ fontSize: '16px', fontWeight: '900', color: '#fff' }}>
+                    {winner.customer_name}
+                  </div>
+                </div>
+                <div style={{ fontSize: '11px', color: '#CBD5E1', textAlign: 'left' }}>
+                  الموزع: <br />
+                  <strong style={{ color: '#F1F5F9' }}>{winner.distributor_name || 'غير محدد'}</strong>
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
@@ -115,7 +98,7 @@ export default function DistributorWeeklyWinner() {
           fontSize: '12px',
           color: '#CBD5E1'
         }}>
-          🔒 سيظهر اسم الفائز الثابت حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
+          🔒 سيظهر أسماء الفائزين الثلاثة حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
         </div>
       )}
     </div>
