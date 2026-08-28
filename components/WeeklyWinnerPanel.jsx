@@ -28,9 +28,7 @@ export default function DistributorWeeklyWinner() {
         const hasNotified = localStorage.getItem(weekKey);
 
         if (!hasNotified) {
-          // تحويل النتيجة إلى مصفوفة مرنة (تستوعب فائز واحد أو عدة فائزين)
           const winnersArray = Array.isArray(data) ? data : [data];
-          
           await sendWinnersToTelegram(winnersArray);
           localStorage.setItem(weekKey, 'true');
         }
@@ -42,7 +40,6 @@ export default function DistributorWeeklyWinner() {
     fetchWinner();
   }, []);
 
-  // دالة حساب رقم الأسبوع لمنع التكرار
   function getWeekNumber(d) {
     const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
     const dayNum = date.getUTCDay() || 7;
@@ -50,6 +47,26 @@ export default function DistributorWeeklyWinner() {
     const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
     return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
   }
+
+  // 🧪 دالة اختبار إرسال فائز واحد
+  const handleTestSingleWinner = async () => {
+    const singleWinner = [
+      { customer_name: "أحمد محسن (تجربة)", distributor_name: "حساب التجربن" }
+    ];
+    await sendWinnersToTelegram(singleWinner);
+    alert('✅ تم إرسال إشعار تجربة (فائز واحد) إلى التلجرام!');
+  };
+
+  // 🧪 دالة اختبار إرسال 3 فائزين
+  const handleTestTripleWinners = async () => {
+    const tripleWinners = [
+      { customer_name: "أحمد محسن (المركز الأول)", distributor_name: "حساب التجربن" },
+      { customer_name: "محمد علي (المركز الثاني)", distributor_name: "موزع الأمل" },
+      { customer_name: "صالح العنسي (المركز الثالث)", distributor_name: "موزع البركة" }
+    ];
+    await sendWinnersToTelegram(tripleWinners);
+    alert('✅ تم إرسال إشعار تجربة (3 فائزين) إلى التلجرام!');
+  };
 
   return (
     <div style={{
@@ -111,6 +128,41 @@ export default function DistributorWeeklyWinner() {
           🔒 سيظهر اسم الفائز الثابت حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
         </div>
       )}
+
+      {/* 🧪 قسم أزرار التجربة السريعة للبوت */}
+      <div style={{ marginTop: '15px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', gap: '8px', justifyContent: 'center' }}>
+        <button 
+          onClick={handleTestSingleWinner}
+          style={{
+            background: '#F59E0B',
+            color: '#fff',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+        >
+          🧪 تجربة (فائز واحد)
+        </button>
+
+        <button 
+          onClick={handleTestTripleWinners}
+          style={{
+            background: '#10B981',
+            color: '#fff',
+            border: 'none',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: 'bold',
+            cursor: 'pointer'
+          }}
+        >
+          🧪 تجربة (3 فائزين)
+        </button>
+      </div>
     </div>
   );
 }
