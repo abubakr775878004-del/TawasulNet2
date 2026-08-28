@@ -16,15 +16,17 @@ export default function DistributorWeeklyWinner() {
 
       if (!isWeekend) return;
 
-      // استدعاء الدالة الآمنة التي أنشأناها في Supabase
+      // استدعاء الدالة الآمنة من Supabase
       const { data, error } = await supabase.rpc('get_weekly_winner');
 
       if (!error && data) {
-        setSelectedWinner(data);
+        const winnerObj = Array.isArray(data) ? data[0] : data;
+        setSelectedWinner(winnerObj);
       } else {
         setSelectedWinner(null);
       }
     }
+
     fetchWinner();
   }, []);
 
