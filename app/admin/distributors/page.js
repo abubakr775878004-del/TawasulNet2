@@ -1,493 +1,528 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import Sidebar from '../../components/Sidebar';
-import { AdSlotBar } from '../../components/AdSlot';
-import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
-import { useProfile } from '../../lib/useProfile';
-import { supabase } from '../../lib/supabase';
+import Sidebar from '../../../components/Sidebar';
+import { useProfile } from '../../../lib/useProfile';
+import { supabase } from '../../../lib/supabase';
 
-export default function DistributorPage() {
-  const { profile, loading } = useProfile('distributor');
+export default function DistributorsPage() {
+  const { profile, loading } = useProfile('admin');
+  const [list, setList] = useState([]);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState(null);
+  const [topUps, setTopUps] = useState({});
+  const [personalCards, setPersonalCards] = useState({});
+  const [debts, setDebts] = useState({});
 
-  const [myCards, setMyCards] = useState([]);
-  const [soldToday, setSoldToday] = useState(0);
-  const [recentSales, setRecentSales] = useState([]);
-  const [isOnline, setIsOnline] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // المبلغ الصافي المستحق للمدير (مطابق للوحة المدير تماماً)
-  const [netDebt, setNetDebt] = useState(0);
-
-  const [pendingPackage, setPendingPackage] = useState(null);
-  const [customerName, setCustomerName] = useState('');
-
-  const [revealedCard, setRevealedCard] = useState(null);
-  const [revealBusy, setRevealBusy] = useState(false);
-  const [revealError, setRevealError] = useState('');
-  const [copied, setCopied] = useState(false);
-
-  const [personalCopied, setPersonalCopied] = useState(false);
-
-  const [noteContent, setNoteContent] = useState('');
-  const [noteBusy, setNoteBusy] = useState(false);
-  const [noteMessage, setNoteMessage] = useState('');
+  // حالة التحكم بصندوق التأكيد المنبثق (Modal State)
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    type: null,
+    distributorId: null,
+    distributorName: '',
+    amount: 0
+  });
 
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
 
-  async function load() {
-    if (!profile) return;
-    setIsRefreshing(true);
+  async function loadList() {
+    // 1. جلب قائمة الموزعين
+    const { data: distributors, error: loadError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'distributor')
+      .order('created_at', { ascending: false });
 
-    try {
-      // 1. جلب الكروت المتاحة حالياً لدى الموزع
-      const { data } = await supabase
-        .from('cards')
-        .select('*, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'with_distributor');
-
-      setMyCards(data || []);
-
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
-
-      // 2. عدد مبيعات اليوم
-      const { count } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString());
-
-      setSoldToday(count || 0);
-
-      // 3. آخر مبيعات اليوم
-      const { data: salesData } = await supabase
-        .from('cards')
-        .select('id, code, sold_at, customer_name, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString())
-        .order('sold_at', { ascending: false })
-        .limit(10);
-
-      setRecentSales(salesData || []);
-
-      // 4. مطابقة دقيقة 100% مع محرك حسابات المدير (بالاعتماد على sales_log و payments)
-      const { data: salesLogData } = await supabase
-        .from('sales_log')
-        .select('price')
-        .eq('distributor_id', profile.id);
-
-      const totalSalesRevenue = (salesLogData || []).reduce((sum, s) => sum + Number(s.price || 0), 0);
-      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
-
-      const { data: paymentsData } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('distributor_id', profile.id);
-
-      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
-      setNetDebt(remainingDebt);
-
-    } catch (err) {
-      console.error('Error loading distributor data:', err);
-    } finally {
-      setIsRefreshing(false);
+    if (loadError) { 
+      setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); 
+      return; 
     }
-  }
 
-  useEffect(() => {
-    if (profile) {
-      load();
-    }
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [profile]);
-
-  function askReveal(pkgId, pkgName) {
-    setRevealError('');
-    setCustomerName('');
-    setPendingPackage({ id: pkgId, name: pkgName });
-  }
-
-  function cancelReveal() {
-    if (revealBusy) return;
-    setPendingPackage(null);
-    setCustomerName('');
-  }
-
-  async function confirmReveal() {
-    if (!pendingPackage || !profile || revealBusy) return;
-
-    setRevealBusy(true);
-    setRevealError('');
-
-    try {
-      const { data, error } = await supabase
-        .from('cards')
-        .select('id, code, package_id, packages(price)')
-        .eq('assigned_to', profile.id)
-        .eq('package_id', pendingPackage.id)
-        .eq('status', 'with_distributor')
-        .order('created_at', { ascending: true })
-        .limit(1);
-
-      if (error || !data || data.length === 0) {
-        setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
-        setPendingPackage(null);
-        setRevealBusy(false);
-        return;
-      }
-
-      const card = data[0];
-      const trimmedCustomerName = customerName.trim();
-      const cardPrice = Number(card.packages?.price || 0);
-      const soldAtTimestamp = new Date().toISOString();
-
-      // 1. تحديث الكرت إلى مباع
-      const { error: updateError } = await supabase
-        .from('cards')
-        .update({
-          status: 'sold',
-          sold_at: soldAtTimestamp,
-          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
-        })
-        .eq('id', card.id);
-
-      if (updateError) {
-        setRevealError('حدث خطأ أثناء حفظ بيانات البيع');
-        setRevealBusy(false);
-        return;
-      }
-
-      // 2. إدراج السجل في sales_log لضمان ظهوره الفوري في حسابات المدير
-      await supabase.from('sales_log').insert({
-        distributor_id: profile.id,
-        card_id: card.id,
-        package_id: card.package_id,
-        price: cardPrice,
-        sold_at: soldAtTimestamp
-      });
-
-      setRevealedCard({
-        code: card.code,
-        packageName: pendingPackage.name,
-      });
-
-      setPendingPackage(null);
-      setCustomerName('');
-      setCopied(false);
-
-      await load();
-    } catch (error) {
-      setRevealError('حدث خطأ غير متوقع، حاول مرة أخرى');
-    } finally {
-      setRevealBusy(false);
-    }
-  }
-
-  function closeModal() {
-    setRevealedCard(null);
-    setCopied(false);
-  }
-
-  async function copyCode() {
-    if (!revealedCard) return;
-    try {
-      await navigator.clipboard.writeText(revealedCard.code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (error) {}
-  }
-
-  async function copyPersonalCode(codeText) {
-    if (!codeText) return;
-    try {
-      await navigator.clipboard.writeText(codeText);
-      setPersonalCopied(true);
-      setTimeout(() => setPersonalCopied(false), 2000);
-    } catch (error) {}
-  }
-
-  function shareWhatsapp() {
-    if (!revealedCard) return;
-    const dailyReminders = [
-      'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
-      'سبحان الله وبحمده، سبحان الله العظيم',
-      'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
-      'اللهم صل وسلم وبارك على نبينا محمد'
-    ];
-    const dailyReminder = dailyReminders[Math.floor(Math.random() * dailyReminders.length)];
-    const now = new Date();
-    const saleDate = now.toLocaleDateString('ar-YE', { year: 'numeric', month: '2-digit', day: '2-digit' });
-    const saleTime = now.toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' });
-
-    const text = `🌐 *شبكة تواصل*\n\n🎫 *كرت الإنترنت*\n\`${revealedCard.code}\`\n\n📦 *الباقة:* ${revealedCard.packageName}\n📅 ${saleDate} | 🕐 ${saleTime}\n\n✨ ${dailyReminder}\n\n*شكرًا لاختياركم شبكة تواصل*`;
-
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-  }
-
-  async function sendNoteToAdmin(e) {
-    e.preventDefault();
-    if (!profile || noteBusy) return;
-    const content = noteContent.trim();
-    if (!content) {
-      setNoteMessage('⚠️ اكتب الرسالة أولًا');
+    if (!distributors || distributors.length === 0) {
+      setList([]);
       return;
     }
 
-    setNoteBusy(true);
-    setNoteMessage('');
+    // 2. جلب سجل المبيعات من الأرشيف الدائم sales_log
+    const { data: salesLogData, error: salesErr } = await supabase
+      .from('sales_log')
+      .select('distributor_id, price');
 
-    try {
-      await supabase.from('distributor_notes').insert({
-        distributor_id: profile.id,
-        distributor_name: profile.full_name,
-        content: content,
-      });
+    if (salesErr) {
+      console.error('Error fetching sales log:', salesErr);
+    }
 
-      try {
-        await fetch('/api/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ distributor_name: profile.full_name, content }),
-          cache: 'no-store',
-        });
-      } catch (e) {}
+    // 3. جلب سجل السدادات كاملة
+    const { data: payments, error: payErr } = await supabase
+      .from('payments')
+      .select('distributor_id, amount');
 
-      setNoteContent('');
-      setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
-      setTimeout(() => setNoteMessage(''), 4000);
-    } catch (error) {
-      setNoteMessage('❌ حدث خطأ غير متوقع');
-    } finally {
-      setNoteBusy(false);
+    if (payErr) {
+      console.error('Error fetching payments:', payErr);
+    }
+
+    // 4. حساب الدين التراكمي المحدث وتحديثه في قاعدة البيانات فوراً لكل موزع لتوحيد الرقم تماماً
+    const updatedDistributors = [];
+
+    for (const dist of distributors) {
+      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
+      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90;
+
+      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
+      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+
+      // تحديث قيمة الدين مباشرة في جدول profiles لضمان التطابق التام والثبات التراكمي
+      if (Number(dist.debt) !== remainingDebt) {
+        await supabase
+          .from('profiles')
+          .update({ debt: remainingDebt })
+          .eq('id', dist.id);
+      }
+
+      updatedDistributors.push({ ...dist, debt: remainingDebt });
+    }
+
+    setList(updatedDistributors);
+    
+    const initialCards = {};
+    const initialDebts = {};
+    updatedDistributors.forEach((d) => { 
+      initialCards[d.id] = d.personal_card || ''; 
+      initialDebts[d.id] = '';
+    });
+    setPersonalCards(initialCards);
+    setDebts(initialDebts);
+  }
+
+  useEffect(() => { 
+    if (profile) loadList(); 
+  }, [profile]);
+
+  function requestConfirmation(type, id, name, amount) {
+    const numericAmount = parseFloat(amount);
+    if (!numericAmount || numericAmount <= 0) return;
+    setConfirmModal({
+      isOpen: true,
+      type,
+      distributorId: id,
+      distributorName: name,
+      amount: numericAmount
+    });
+  }
+
+  async function handleConfirmedAction() {
+    const { type, distributorId, amount } = confirmModal;
+    setConfirmModal({ ...confirmModal, isOpen: false });
+
+    if (type === 'balance') {
+      await executeAddBalance(distributorId, amount);
+    } else if (type === 'payment') {
+      await executePayDebt(distributorId, amount);
     }
   }
 
-  if (loading || !profile) return null;
+  async function executeAddBalance(id, amount) {
+    setError(''); 
+    setBusyId(id);
+    
+    const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+      target_id: id,
+      amount: amount,
+      is_debt: false,
+      is_add: true
+    });
 
-  const byPackage = {};
-  myCards.forEach((c) => {
-    const key = c.packages?.name || 'غير محدد';
-    if (!byPackage[key]) {
-      byPackage[key] = { count: 0, packageId: c.package_id, price: c.packages?.price || 0 };
+    setBusyId(null);
+    if (updateError) { 
+      setError('تعذّرت إضافة الرصيد: ' + updateError.message); 
+      return; 
     }
-    byPackage[key].count += 1;
-  });
+    setTopUps({ ...topUps, [id]: '' });
+    loadList();
+  }
+
+  async function executePayDebt(id, amount) {
+    setError(''); 
+    setBusyId(id);
+    
+    const { error: payError } = await supabase
+      .from('payments')
+      .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
+
+    if (payError) {
+      setBusyId(null);
+      setError('تعذّر تسجيل عملية السداد: ' + payError.message);
+      return;
+    }
+
+    await supabase.rpc('modify_distributor_balance', {
+      target_id: id,
+      amount: amount,
+      is_debt: true,
+      is_add: false
+    });
+
+    setBusyId(null);
+    setDebts({ ...debts, [id]: '' });
+    loadList();
+  }
+
+  async function updateStatus(id, status) {
+    setError(''); 
+    setBusyId(id);
+    const { error: updateError } = await supabase.from('profiles').update({ status }).eq('id', id);
+    setBusyId(null);
+    if (updateError) { 
+      setError('تعذّر تنفيذ الإجراء: ' + updateError.message); 
+      return; 
+    }
+    loadList();
+  }
+
+  async function deleteDistributor(id, name) {
+    if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. متابعة؟`)) return;
+    setError(''); 
+    setBusyId(id);
+    const { error: deleteError } = await supabase.from('profiles').delete().eq('id', id);
+    setBusyId(null);
+    if (deleteError) { 
+      setError('تعذّر حذف الحساب: ' + deleteError.message); 
+      return; 
+    }
+    loadList();
+  }
+
+  async function savePersonalCard(id) {
+    setError(''); 
+    setBusyId(id);
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ personal_card: personalCards[id] || null })
+      .eq('id', id);
+    setBusyId(null);
+    if (updateError) { 
+      setError('تعذّر حفظ الكرت الشخصي: ' + updateError.message); 
+      return; 
+    }
+    loadList();
+  }
+
+  const deleteBtnStyle = {
+    backgroundColor: '#fee2e2', 
+    color: '#dc2626', 
+    opacity: 1,
+    padding: '6px 12px', 
+    borderRadius: 8, 
+    border: '1px solid #fca5a5', 
+    fontWeight: 700, 
+    fontSize: 12, 
+    cursor: 'pointer',
+  };
+
+  if (loading) return null;
+  const pending = list.filter((d) => d.status === 'pending');
+  const others = list.filter((d) => d.status !== 'pending');
 
   return (
     <div className="app">
-      <Sidebar role="distributor" active="/distributor" name={profile.full_name} />
+      <Sidebar role="admin" active="/admin/distributors" name={profile?.full_name} />
       <div className="main">
-        <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>مرحبًا، {profile.full_name} 👋</h1>
-            <div className="greet">إليك ملخص حسابك اليوم</div>
-          </div>
-          <div style={{ 
-            display: 'flex', alignItems: 'center', gap: 6, 
-            background: isOnline ? '#ECFDF5' : '#FEF2F2', 
-            color: isOnline ? '#059669' : '#DC2626', 
-            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: '800',
-            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#10B981' : '#EF4444', display: 'inline-block' }}></span>
-            {isOnline ? 'نشط' : 'خامل'}
-          </div>
-        </div>
+        <h1>الموزعون</h1>
+        <p className="greet" style={{ marginBottom: 20 }}>
+          إدارة طلبات التسجيل والحسابات الحالية والمستحقات المباشرة
+        </p>
 
-        <AdSlotBar />
-        <WeeklyWinnerPanel />
+        {error && <div className="error-note">{error}</div>}
 
-        {profile.personal_card && (
-          <div style={{
-            background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
-            borderRadius: 20, padding: '20px 24px', color: '#fff', marginBottom: 20,
-            boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 15,
-          }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: '700', marginBottom: 4 }}>⭐ كرتك الشخصي (ثابت ومميز)</div>
-              <div className="mono" style={{ fontSize: 24, fontWeight: '900', letterSpacing: 1.5 }}>{profile.personal_card}</div>
-            </div>
-            <button onClick={() => copyPersonalCode(profile.personal_card)} style={{
-              background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', color: '#fff', padding: '10px 18px', borderRadius: 12, fontWeight: '800', fontSize: 13, cursor: 'pointer',
-            }}>
-              {personalCopied ? '✓ تم النسخ' : '📋 نسخ الكرت الشخصي'}
-            </button>
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div className="balance-card" style={{ marginBottom: 0 }}>
-            <div className="lbl">رصيدك الحالي بمخزنك</div>
-            <div className="amt">{Number(profile.balance).toLocaleString('en-US')} <span>ريال</span></div>
-            <div className="foot">
-              <div style={{ fontSize: 11.5, color: '#E3D6FF' }}>كروت لديك الآن: {myCards.length}</div>
-              <Link href="/distributor/request">
-                <button className="req-btn">طلب كروت جديد</button>
-              </Link>
-            </div>
-          </div>
-
-          <div style={{
-            background: netDebt > 0 ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
-            borderRadius: 20, padding: 20, color: '#fff', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
-          }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>المبلغ الصافي المستحق للمدير</div>
-              <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
-                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
-              </div>
-            </div>
-            <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
-              {netDebt > 0 ? '⚠️ يوجد مبالغ متبقية لم تسدد بعد' : '✓ الحساب مسدد بالكامل'}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid-stats" style={{ gridTemplateColumns: 'repeat(2,1fr)' }}>
-          <div className="stat">
-            <div className="label">كروت متاحة عندي</div>
-            <div className="value">{myCards.length}</div>
-          </div>
-          <div className="stat">
-            <div className="label">مبيعات اليوم</div>
-            <div className="value">{soldToday}</div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h3>باقاتي المتاحة</h3>
-              <span className="muted">اضغط &quot;إظهار كرت&quot; عند وجود زبون</span>
-            </div>
-            <button onClick={load} disabled={isRefreshing} style={{
-              background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
-              padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '800', cursor: 'pointer'
-            }}>
-              {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
-            </button>
-          </div>
-
-          {revealError && <div className="error-note" style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>{revealError}</div>}
-
-          {Object.keys(byPackage).length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>لا توجد كروت لديك حاليًا</div>}
-
-          <div className="pkg-grid">
-            {Object.entries(byPackage).map(([name, info]) => (
-              <div className="pkg-card" key={name}>
-                <div className="pname">{name}</div>
-                <div className="pcount">{info.count} <span>كرت لديك</span></div>
-                <button className="btn-primary" style={{ marginTop: 14, width: '100%' }} onClick={() => askReveal(info.packageId, name)}>
-                  إظهار كرت
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="panel" style={{ marginTop: 20 }}>
+        {/* طلبات بانتظار الموافقة */}
+        <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-head">
-            <h3>سجل مبيعات اليوم الأخيرة</h3>
-            <span className="muted">آخر الكروت التي قمت ببيعها اليوم</span>
+            <h3>طلبات بانتظار الموافقة</h3>
+            <span className="muted">{pending.length} طلب</span>
           </div>
-          {recentSales.length === 0 ? (
-            <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لم تقم ببيع أي كرت حتى الآن اليوم.</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              {recentSales.map((sale) => (
-                <div key={sale.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
-                      {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
-                    </div>
-                    <div className="mono" style={{ fontSize: '12px', color: '#64748B' }}>{sale.code}</div>
-                  </div>
-                  <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
-                    {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              ))}
+          {pending.length === 0 && (
+            <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
+              لا توجد طلبات معلّقة حاليًا
             </div>
           )}
+          {pending.map((d) => (
+            <div key={d.id} className="req-row">
+              <div className="req-user">
+                <div className="ini">{d.full_name?.slice(0, 2)}</div>
+                <div>
+                  <div className="nm">{d.full_name}</div>
+                  <div className="em">{d.email}</div>
+                </div>
+              </div>
+              <div className="req-actions">
+                <button 
+                  className="btn-sm btn-approve" 
+                  disabled={busyId === d.id} 
+                  onClick={() => updateStatus(d.id, 'approved')}
+                >
+                  {busyId === d.id ? '...' : 'قبول'}
+                </button>
+                <button 
+                  className="btn-sm btn-reject" 
+                  disabled={busyId === d.id} 
+                  onClick={() => updateStatus(d.id, 'rejected')}
+                >
+                  رفض
+                </button>
+                <button 
+                  style={deleteBtnStyle} 
+                  disabled={busyId === d.id} 
+                  onClick={() => deleteDistributor(d.id, d.full_name)}
+                >
+                  حذف
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="panel" style={{ marginTop: 20 }}>
-          <div className="panel-head">
-            <h3>إرسال ملاحظة أو طلب للمدير</h3>
+        {/* قائمة الموزعين بالكامل */}
+        <div className="panel">
+          <div className="panel-head" style={{ marginBottom: 16 }}>
+            <h3>كل الموزعين</h3>
+            <span className="muted">{others.length}</span>
           </div>
-          <form onSubmit={sendNoteToAdmin}>
-            <textarea
-              rows={3}
-              value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
-              disabled={noteBusy}
-              placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
-              style={{ width: '100%', padding: 12, borderRadius: 10, border: '1.5px solid var(--line)', marginBottom: 10, fontSize: 13.5 }}
-            />
-            {noteMessage && <div style={{ fontSize: 12.5, fontWeight: '700', marginBottom: 10, color: noteMessage.startsWith('✓') ? '#10B981' : '#DC2626' }}>{noteMessage}</div>}
-            <button type="submit" disabled={noteBusy || !noteContent.trim()} className="btn-primary" style={{ width: 'auto', padding: '10px 20px' }}>
-              {noteBusy ? 'جاري الإرسال...' : 'إرسال للمدير'}
-            </button>
-          </form>
+
+          {others.length === 0 && (
+            <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
+              لا يوجد موزعون بعد
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {others.map((d) => {
+              // قراءة القيمة الحقيقية المحدثة مباشرة من الحقل الثابت d.debt في قاعدة البيانات
+              const currentNetDebt = Number(d.debt) || 0;
+
+              return (
+                <div
+                  key={d.id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 16,
+                    padding: 16,
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 14,
+                  }}
+                >
+                  {/* 1. ترويسة الموزع */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
+                    <div>
+                      <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
+                        {d.full_name}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
+                        {d.email}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
+                        {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
+                      </span>
+                      <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+                        حذف
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2. شريط الأرقام المالية */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
+                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
+                        {formatNum(d.balance)} <span style={{ fontSize: 11 }}>ريال</span>
+                      </div>
+                    </div>
+                    
+                    <div style={{ 
+                      background: currentNetDebt > 0 ? '#fef2f2' : '#f0fdf4', 
+                      border: currentNetDebt > 0 ? '1px solid #fca5a5' : '1px solid #bbf7d0', 
+                      borderRadius: 10, 
+                      padding: '8px 12px' 
+                    }}>
+                      <div style={{ fontSize: 11, color: currentNetDebt > 0 ? '#991b1b' : '#166534', fontWeight: 700 }}>
+                        المبلغ الصافي المستحق للمدير
+                      </div>
+                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
+                        {formatNum(currentNetDebt)} <span style={{ fontSize: 11 }}>ريال</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. قسم شحن المخزون (📦) */}
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      📦 شحن كروت ومخزون للموزع:
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        maxLength={9}
+                        placeholder="أدخل مبلغ المخزون (مثلاً 50000)"
+                        value={topUps[d.id] || ''}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 9) {
+                            setTopUps({ ...topUps, [d.id]: e.target.value });
+                          }
+                        }}
+                        style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #93c5fd', fontFamily: 'monospace', fontSize: 12.5 }}
+                      />
+                      <button 
+                        style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        disabled={busyId === d.id || !topUps[d.id]} 
+                        onClick={() => requestConfirmation('balance', d.id, d.full_name, topUps[d.id])}
+                      >
+                        إضافة رصيد مخزون
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4. قسم تسجيل السداد النقدي (💵) */}
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 12, color: '#166534', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      💵 تسجيل سداد نقدي مقبوض (خصم دين):
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        maxLength={9}
+                        placeholder="أدخل المبلغ المقبوض كاش"
+                        value={debts[d.id] || ''}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 9) {
+                            setDebts({ ...debts, [d.id]: e.target.value });
+                          }
+                        }}
+                        style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12.5 }}
+                      />
+                      <button 
+                        disabled={busyId === d.id || !debts[d.id]} 
+                        onClick={() => requestConfirmation('payment', d.id, d.full_name, debts[d.id])}
+                        style={{ background: '#059669', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        تسجيل سداد نقدي
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 5. قسم الكرت الشخصي */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
+                    <input
+                      type="text"
+                      placeholder="رمز الكرت الشخصي"
+                      value={personalCards[d.id] ?? ''}
+                      onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
+                      style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd6fe', fontFamily: 'monospace', fontSize: 12.5 }}
+                    />
+                    <button
+                      className="btn-sm btn-approve"
+                      style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}
+                      disabled={busyId === d.id}
+                      onClick={() => savePersonalCard(d.id)}
+                    >
+                      حفظ الكرت
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {pendingPackage && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 22, maxWidth: 340, width: '100%', textAlign: 'center', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
-            <div style={{ background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)', padding: '26px 20px 22px' }}>
-              <div style={{ fontSize: 12, color: '#E3D6FF', fontWeight: '700', marginBottom: 6 }}>إظهار كرت من باقة</div>
-              <div style={{ fontSize: 26, fontWeight: '900', color: '#fff' }}>{pendingPackage.name}</div>
+      {/* ⚠️ نافذة التأكيد المنبثقة (Confirmation Modal) */}
+      {confirmModal.isOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: 16
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: 20,
+            padding: 24,
+            maxWidth: 400,
+            width: '100%',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16
+          }}>
+            <div style={{ fontSize: 42, margin: '0 auto' }}>
+              {confirmModal.type === 'balance' ? '📦' : '💵'}
             </div>
-            <div style={{ padding: '20px 24px 24px', textAlign: 'right' }}>
-              <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151', fontSize: 12.5 }}>اسم الزبون (اختياري للسحب الأسبوعي):</label>
-              <input
-                type="text"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="مثال: أحمد محمد"
-                style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid var(--line)', fontSize: '13px', marginBottom: 15 }}
-              />
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={cancelReveal} disabled={revealBusy} style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: '1.5px solid var(--line)', background: '#fff', color: 'var(--ink-soft)', fontWeight: '800', cursor: 'pointer' }}>إلغاء</button>
-                <button onClick={confirmReveal} disabled={revealBusy} style={{ flex: 1, padding: '13px 0', borderRadius: 12, border: 'none', background: 'linear-gradient(120deg, #7C3AED, #DB2777)', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>{revealBusy ? 'جاري التأكيد...' : 'تأكيد البيع'}</button>
-              </div>
+            <div>
+              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>
+                تأكيد عملية {confirmModal.type === 'balance' ? 'شحن المخزون' : 'السداد النقدي'}
+              </h3>
+              <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
+                هل أنت متأكد من {confirmModal.type === 'balance' ? 'إضافة رصيد مخزون بقيمة' : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
+                <strong style={{ color: confirmModal.type === 'balance' ? '#2563eb' : '#059669', fontSize: 16 }}>
+                  {formatNum(confirmModal.amount)} ريال
+                </strong>{' '}
+                للموزع <strong>({confirmModal.distributorName})</strong>؟
+              </p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {revealedCard && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,10,40,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 24, maxWidth: 380, width: '100%', textAlign: 'center', overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }}>
-            <div style={{ background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)', padding: '18px 20px' }}>
-              <div style={{ fontSize: 12.5, color: '#E3D6FF', fontWeight: '700' }}>{revealedCard.packageName}</div>
-              <div style={{ fontSize: 12, color: '#fff', fontWeight: '900', marginTop: 2 }}>✓ تم البيع بنجاح</div>
-            </div>
-            <div style={{ padding: 26 }}>
-              <div className="mono" style={{ fontSize: 28, fontWeight: '900', margin: '4px 0 18px', direction: 'ltr', color: '#3A1D66' }}>{revealedCard.code}</div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 18 }}>
-                <button onClick={copyCode} style={{ flex: 1, padding: '11px 0', borderRadius: 12, border: '1.5px solid #DDD3F5', background: '#F3F0FB', color: '#5B21B6', fontWeight: '800', cursor: 'pointer' }}>{copied ? '✓ تم النسخ' : '📋 نسخ الكود'}</button>
-                <button onClick={shareWhatsapp} style={{ flex: 1, padding: '11px 0', borderRadius: 12, border: 'none', background: '#25D366', color: '#fff', fontWeight: '800', cursor: 'pointer' }}>واتساب</button>
-              </div>
-              <button onClick={closeModal} style={{ width: '100%', padding: '13px 0', borderRadius: 14, border: 'none', background: '#F3F0FB', color: '#5B21B6', fontWeight: '800', cursor: 'pointer' }}>إلغاء / إغلاق</button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button
+                onClick={handleConfirmedAction}
+                style={{
+                  flex: 1,
+                  background: confirmModal.type === 'balance' ? '#2563eb' : '#059669',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: 12,
+                  fontWeight: 800,
+                  fontSize: 14,
+                  cursor: 'pointer'
+                }}
+              >
+                نعم، تأكيد
+              </button>
+              <button
+                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                style={{
+                  flex: 1,
+                  background: '#f1f5f9',
+                  color: '#64748b',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  fontSize: 14,
+                  cursor: 'pointer'
+                }}
+              >
+                إلغاء
+              </button>
             </div>
           </div>
         </div>
