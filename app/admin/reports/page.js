@@ -30,28 +30,23 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // جلب جميع الموزعين، الباقات، والسدادات بدون شروط معقدة
-    const [{ data: distributors }, { data: packages }, { data: payments }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
-      supabase.from('packages').select('id, price'),
+    // 1. جلب الموزعين، الباقات، والسدادات بنفس طريقة صفحة الموزعين
+    const [{ data: distributors }, { data: payments }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name').eq('role', 'distributor').order('created_at', { ascending: false }),
       supabase.from('payments').select('distributor_id, amount')
     ]);
 
-    // جلب جميع الكروت المسندة للموزعين
+    // 2. جلب الكروت بكل حالاتها لكي نحسب الكروت الموجودة لديه (with_distributor أو available) والمبيعات (sold)
     const { data: cards, error } = await supabase
       .from('cards')
-      .select('id, assigned_to, status, updated_at, created_at, package_id, price')
+      .select('id, assigned_to, status, updated_at, created_at, packages(price)')
       .not('assigned_to', 'is', null);
 
     if (error) {
       console.error('Error fetching cards:', error);
     }
 
-    const pkgMap = {};
-    (packages || []).forEach((p) => {
-      pkgMap[p.id] = Number(p.price || 0);
-    });
-
+    // تجميع السدادات لكل موزع
     const paymentsMap = {};
     (payments || []).forEach((p) => {
       paymentsMap[p.distributor_id] = (paymentsMap[p.distributor_id] || 0) + Number(p.amount || 0);
@@ -77,15 +72,17 @@ export default function ReportsPage() {
     (cards || []).forEach((c) => {
       if (!map[c.assigned_to]) return;
 
-      const cardPrice = Number(c.price || pkgMap[c.package_id] || 0);
+      const cardPrice = Number(c.packages?.price || 0);
       const cardStatus = c.status;
 
-      if (cardStatus === 'with_distributor' || cardStatus === 'available' || !cardStatus) {
+      // الكروت الموجودة بحوزة الموزع حالياً
+      if (cardStatus === 'with_distributor' || cardStatus === 'available') {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       }
 
-      if (cardStatus === 'sold' || cardStatus === 'used') {
+      // الكروت المباعة
+      if (cardStatus === 'sold') {
         const adminNetPriceAllTime = cardPrice * 0.90;
         map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
@@ -103,6 +100,7 @@ export default function ReportsPage() {
       }
     });
 
+    // حساب الدين الصافي المتبقي لكل موزع (إجمالي المبيعات - السدادات) بدقة مطابقة تماماً
     Object.keys(map).forEach(id => {
       const dist = map[id];
       dist.remainingDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
@@ -180,7 +178,7 @@ export default function ReportsPage() {
           </div>
 
           {busy && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>جاري التحميل...</div>}
-          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات موزعين أو مبيعات متاحة</div>}
+          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات مبيعات أو موزعين متاحة</div>}
 
           {!busy && rows.map((r, i) => (
             <div
