@@ -70,11 +70,12 @@ export default function ReportsPage() {
       if (!map[c.assigned_to]) return;
 
       const cardPrice = Number(c.price || c.packages?.price || pkgMap[c.package_id] || 0);
-      const st = (c.status || '').toLowerCase();
+      const st = (c.status || '').toLowerCase().trim();
 
-      const isHeld = st === 'with_distributor' || st === 'available' || st === 'new' || st === '';
+      // تصنيف الكرت: إذا لم يكن مستخدماً أو مباعاً فهو في حوزة الموزع (مخزن)
+      const isSold = st === 'sold' || st === 'used' || st === 'expired' || st === 'active';
 
-      if (isHeld) {
+      if (!isSold) {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       } else {
@@ -173,7 +174,7 @@ export default function ReportsPage() {
             <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B', background: '#E2E8F0', padding: '4px 10px', borderRadius: '20px' }}>{rows.length} موزع</span>
           </div>
 
-          {busy && <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '14px' }}>جاري تحميل البيانات الحية بدقة...</div>}
+          {busy && <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '14px' }}>جاري تحميل البيانات والحسابات بدقة...</div>}
           {!busy && rows.length === 0 && <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '14px' }}>لا توجد بيانات متاحة للموزعين حالياً</div>}
 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
