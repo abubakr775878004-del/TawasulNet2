@@ -8,7 +8,17 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
-      <body>{children}</body>
+      <head>
+        {/* مقتطف رمز Google AdSense لإثبات ملكية الموقع */}
+        <script 
+          async 
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9528800147930991" 
+          crossOrigin="anonymous">
+        </script>
+      </head>
+      <body>
+        {children}
+      </body>
     </html>
   );
 }
