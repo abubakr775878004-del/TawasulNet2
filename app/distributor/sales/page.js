@@ -29,7 +29,7 @@ export default function SalesPage() {
   async function loadData() {
     if (!profile) return;
 
-    // 1. جلب كافة سجلات المبيعات من الأرشيف الدائم (sales_log) لضمان عدم الحذف أو التصفير
+    // 1. جلب كافة سجلات المبيعات من الأرشيف الدائم (sales_log)
     const { data: salesList } = await supabase
       .from('sales_log')
       .select('*')
@@ -37,7 +37,7 @@ export default function SalesPage() {
 
     setSalesLog((salesList || []).sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
 
-    // 2. جلب المخزون الحالي المتبقي لدى الموزع (من الكروت غير المباعة فقط)
+    // 2. جلب المخزون الحالي المتبقي لدى الموزع
     const { data: inventoryList } = await supabase
       .from('cards')
       .select('*, packages(name, price)')
@@ -46,7 +46,7 @@ export default function SalesPage() {
 
     setMyCards(inventoryList || []);
 
-    // 3. جلب كافة السدادات والمدفوعات
+    // 3. جلب كافة السدادات والمدفوعات الخاصة بهذا الموزع لضمان مطابقة العهدة
     const { data: paymentList } = await supabase
       .from('payments')
       .select('*')
@@ -61,16 +61,16 @@ export default function SalesPage() {
     return salesLog.filter(s => s.sold_at && s.sold_at.startsWith(selectedMonth));
   }, [salesLog, selectedMonth]);
 
-  // أ. حسابات التقرير الشهري المختار من الأرشيف
+  // أ. حسابات التقرير الشهري المختار
   const monthlyRevenue = filteredSales.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const monthlyCommission = monthlyRevenue * 0.10;
   const monthlyNetDue = monthlyRevenue - monthlyCommission;
 
-  // ب. الحسابات التراكمية الشاملة من الأرشيف (صندوق العهدة الحقيقي)
+  // ب. الحسابات التراكمية الشاملة (صندوق العهدة الحقيقي المطابق للمدير)
   const totalAllTimeRevenue = salesLog.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const totalAllTimeNetDue = totalAllTimeRevenue * 0.90; // مستحقات المدير 90%
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0); // مجموع المسدد
-  const remainingDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // المبلغ الصافي المتبقي حالياً
+  const remainingDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // الصافي المتبقي
 
   const remainingInventoryValue = myCards.reduce((sum, card) => sum + (card.packages?.price || 0), 0);
 
@@ -130,7 +130,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 1. بطاقة صندوق العهدة المبسطة تماماً */}
+        {/* 1. بطاقة صندوق العهدة التراكمي */}
         <div style={{ background: remainingDebt > 0 ? '#1E293B' : '#0F172A', color: '#FFFFFF', padding: 20, borderRadius: 18, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div>
@@ -159,7 +159,7 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 3. ملخص مبيعات الشهر المحدد */}
+        {/* 3. ملخص مبيعات الشهر المحدد حسب الباقات */}
         <div className="panel" style={{ marginBottom: 20 }}>
           <h3>ملخص مبيعات شهر ({selectedYear}/{selectedMonthNum})</h3>
           {Object.keys(salesByPackage).length === 0 && (
@@ -173,7 +173,7 @@ export default function SalesPage() {
           ))}
         </div>
 
-        {/* 4. بطاقة كشف حساب الشهر + قيمة المخزون الحالي */}
+        {/* 4. تقرير الشهر والمخزون المتبقي */}
         <div className="panel" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 18, padding: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', marginBottom: 20 }}>
           <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 10, marginBottom: 14 }}>
             <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#0F172A' }}>تقرير الشهر والمخزون المتبقي</h3>
@@ -209,7 +209,7 @@ export default function SalesPage() {
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا يوجد سجل مبيعات لهذا الشهر</div>
           )}
           {filteredSales.map((item) => (
-            <div className="timer-row" key={item.id || item.sold_at}>
+            <div className="timer-row" key={item.id || item.sold_at} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
               <div>
                 <div className="tpkg" style={{ fontWeight: 800, color: '#0F172A' }}>{item.package_name}</div>
                 <div style={{ fontSize: 12, color: '#64748B' }}>القيمة: {Number(item.price).toLocaleString()} ر.ي</div>
