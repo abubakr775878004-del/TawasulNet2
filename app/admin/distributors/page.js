@@ -47,28 +47,31 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب الأرشيف والسدادات لضمان حساب الدين الحقيقي وعدم ظهوره صفراً
-    const { data: salesLogData } = await supabase
-      .from('sales_log')
-      .select('distributor_id, price');
+    // 2. الحل الجذري: جلب الكروت المباعة فعلياً من جدول cards مع أسعار الباقات لجعل الحساب مطابقاً لصفحة الموزع تماماً
+    const { data: soldCardsData } = await supabase
+      .from('cards')
+      .select('assigned_to, packages(price)')
+      .eq('status', 'sold');
 
+    // 3. جلب السدادات من جدول payments لكل الموزعين
     const { data: payments } = await supabase
       .from('payments')
       .select('distributor_id, amount');
 
-    // 3. دمج الحسابات وتصحيح قيمة الدين لكل موزع لكي لا يظهر صفراً خاطئاً
+    // 4. دمج الحسابات وتصحيح قيمة الدين لكل موزع بدقة تامة مطابقة لصفحة الموزع
     const updatedDistributors = distributors.map((dist) => {
-      // إذا كان جدول profiles يحتوي على قيمة دين مخزنة وليست صفراً، نعتمدها، وإذا كانت صفراً نحسبها من المخزون/المنطق الصحيح
-      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
-      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
-      const netSalesAdmin = totalSalesRevenue * 0.90;
+      // تصفية كروت هذا الموزع المباعة وحساب إجمالي الأرباح
+      const distCards = (soldCardsData || []).filter(c => c.assigned_to === dist.id);
+      const totalSalesRevenue = distCards.reduce((sum, c) => sum + Number(c.packages?.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
 
+      // تصفية سدادات هذا الموزع
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
       const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // الدين الفعلي = المستحق من المبيعات ناقص ما سدده، أو نعتمد حقل dist.debt إذا كان محدثاً من قاعدة البيانات
+      // حساب الدين الفعلي بدقة مطابقة تماماً لصفحة الموزع
       const calculatedDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
-      const finalDebt = Number(dist.debt) > 0 ? Number(dist.debt) : calculatedDebt;
+      const finalDebt = Number(dist.debt) > 0 && calculatedDebt === 0 ? Number(dist.debt) : calculatedDebt;
 
       return {
         ...dist,
