@@ -14,7 +14,6 @@ export default function DistributorsPage() {
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
 
-  // حالة التحكم بصندوق التأكيد المنبثق (Modal State)
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     type: null,
@@ -31,7 +30,7 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
     
-    // جلب قائمة الموزعين مباشرة من جدول profiles لتتطابق تماماً مع ما يراه الموزع في صفحته
+    // 1. جلب قائمة الموزعين
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -48,11 +47,40 @@ export default function DistributorsPage() {
       return;
     }
 
-    setList(distributors);
+    // 2. جلب الأرشيف والسدادات لضمان حساب الدين الحقيقي وعدم ظهوره صفراً
+    const { data: salesLogData } = await supabase
+      .from('sales_log')
+      .select('distributor_id, price');
+
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('distributor_id, amount');
+
+    // 3. دمج الحسابات وتصحيح قيمة الدين لكل موزع لكي لا يظهر صفراً خاطئاً
+    const updatedDistributors = distributors.map((dist) => {
+      // إذا كان جدول profiles يحتوي على قيمة دين مخزنة وليست صفراً، نعتمدها، وإذا كانت صفراً نحسبها من المخزون/المنطق الصحيح
+      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
+      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90;
+
+      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
+      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      // الدين الفعلي = المستحق من المبيعات ناقص ما سدده، أو نعتمد حقل dist.debt إذا كان محدثاً من قاعدة البيانات
+      const calculatedDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+      const finalDebt = Number(dist.debt) > 0 ? Number(dist.debt) : calculatedDebt;
+
+      return {
+        ...dist,
+        debt: finalDebt
+      };
+    });
+
+    setList(updatedDistributors);
     
     const initialCards = {};
     const initialDebts = {};
-    distributors.forEach((d) => { 
+    updatedDistributors.forEach((d) => { 
       initialCards[d.id] = d.personal_card || ''; 
       initialDebts[d.id] = '';
     });
@@ -200,7 +228,6 @@ export default function DistributorsPage() {
 
         {error && <div className="error-note">{error}</div>}
 
-        {/* طلبات بانتظار الموافقة */}
         <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-head">
             <h3>طلبات بانتظار الموافقة</h3>
@@ -221,25 +248,13 @@ export default function DistributorsPage() {
                 </div>
               </div>
               <div className="req-actions">
-                <button 
-                  className="btn-sm btn-approve" 
-                  disabled={busyId === d.id} 
-                  onClick={() => updateStatus(d.id, 'approved')}
-                >
+                <button className="btn-sm btn-approve" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'approved')}>
                   {busyId === d.id ? '...' : 'قبول'}
                 </button>
-                <button 
-                  className="btn-sm btn-reject" 
-                  disabled={busyId === d.id} 
-                  onClick={() => updateStatus(d.id, 'rejected')}
-                >
+                <button className="btn-sm btn-reject" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'rejected')}>
                   رفض
                 </button>
-                <button 
-                  style={deleteBtnStyle} 
-                  disabled={busyId === d.id} 
-                  onClick={() => deleteDistributor(d.id, d.full_name)}
-                >
+                <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
                   حذف
                 </button>
               </div>
@@ -247,7 +262,6 @@ export default function DistributorsPage() {
           ))}
         </div>
 
-        {/* قائمة الموزعين بالكامل */}
         <div className="panel">
           <div className="panel-head" style={{ marginBottom: 16 }}>
             <h3>كل الموزعين</h3>
@@ -278,7 +292,6 @@ export default function DistributorsPage() {
                     gap: 14,
                   }}
                 >
-                  {/* 1. ترويسة الموزع */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
                     <div>
                       <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
@@ -298,7 +311,6 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 2. شريط الأرقام المالية */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
                       <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
@@ -322,7 +334,6 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 3. قسم شحن المخزون (📦) */}
                   <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
                       📦 شحن كروت ومخزون للموزع:
@@ -351,7 +362,6 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 4. قسم تسجيل السداد النقدي (💵) */}
                   <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ fontSize: 12, color: '#166534', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
                       💵 تسجيل سداد نقدي مقبوض (خصم دين):
@@ -380,7 +390,6 @@ export default function DistributorsPage() {
                     </div>
                   </div>
 
-                  {/* 5. قسم الكرت الشخصي */}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
                     <input
                       type="text"
@@ -406,7 +415,6 @@ export default function DistributorsPage() {
         </div>
       </div>
 
-      {/* ⚠️ نافذة التأكيد المنبثقة (Confirmation Modal) */}
       {confirmModal.isOpen && (
         <div style={{
           position: 'fixed',
