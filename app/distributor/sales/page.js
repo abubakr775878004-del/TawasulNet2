@@ -17,9 +17,7 @@ export default function SalesPage() {
   const { profile, loading } = useProfile('distributor');
   const [salesLog, setSalesLog] = useState([]);
   const [myCards, setMyCards] = useState([]);
-  const [payments, setPayments] = useState([]);
 
-  // الفلترة الزمنية للأرشيف والتقرير الشهري
   const currentDate = new Date();
   const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
   const [selectedMonthNum, setSelectedMonthNum] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
@@ -29,7 +27,7 @@ export default function SalesPage() {
   async function loadData() {
     if (!profile) return;
 
-    // 1. جلب كافة سجلات المبيعات من الأرشيف الدائم (sales_log)
+    // 1. جلب سجلات المبيعات الخاصة بالموزع
     const { data: salesList } = await supabase
       .from('sales_log')
       .select('*')
@@ -45,14 +43,6 @@ export default function SalesPage() {
       .eq('status', 'with_distributor');
 
     setMyCards(inventoryList || []);
-
-    // 3. جلب كافة السدادات والمدفوعات الخاصة بهذا الموزع لضمان مطابقة العهدة
-    const { data: paymentList } = await supabase
-      .from('payments')
-      .select('*')
-      .eq('distributor_id', profile.id);
-
-    setPayments(paymentList || []);
   }
 
   useEffect(() => { if (profile) loadData(); }, [profile]);
@@ -61,17 +51,8 @@ export default function SalesPage() {
     return salesLog.filter(s => s.sold_at && s.sold_at.startsWith(selectedMonth));
   }, [salesLog, selectedMonth]);
 
-  // أ. حسابات التقرير الشهري المختار
   const monthlyRevenue = filteredSales.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const monthlyCommission = monthlyRevenue * 0.10;
-  const monthlyNetDue = monthlyRevenue - monthlyCommission;
-
-  // ب. الحسابات التراكمية الشاملة (صندوق العهدة الحقيقي المطابق للمدير)
-  const totalAllTimeRevenue = salesLog.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-  const totalAllTimeNetDue = totalAllTimeRevenue * 0.90; // مستحقات المدير 90%
-  const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0); // مجموع المسدد
-  const remainingDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // الصافي المتبقي
-
   const remainingInventoryValue = myCards.reduce((sum, card) => sum + (card.packages?.price || 0), 0);
 
   const salesByPackage = useMemo(() => {
@@ -93,10 +74,10 @@ export default function SalesPage() {
       <div className="main">
         <h1>سجل المبيعات والتقارير</h1>
         
-        {/* اختيار الشهر والسنة للأرشيف */}
+        {/* اختيار الشهر والسنة */}
         <div style={{ marginBottom: 20, background: '#FFFFFF', padding: 14, borderRadius: 14, border: '1px solid #E2E8F0' }}>
           <label style={{ fontSize: 12, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>
-            عرض إحصائيات تقرير شهر (أرقام):
+            اختر شهر التقرير:
           </label>
           <div style={{ display: 'flex', gap: 10 }}>
             <select 
@@ -130,27 +111,10 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 1. بطاقة صندوق العهدة التراكمي */}
-        <div style={{ background: remainingDebt > 0 ? '#1E293B' : '#0F172A', color: '#FFFFFF', padding: 20, borderRadius: 18, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div>
-              <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 700 }}>صندوق العهدة الحقيقي (التراكمي من الأرشيف)</span>
-              <h3 style={{ margin: '2px 0 0 0', fontSize: 15, color: '#F8FAFC' }}>إجمالي الدين المطلوب تسليمه للمدير حالياً</h3>
-            </div>
-            <span style={{ background: remainingDebt > 0 ? '#EF4444' : '#10B981', color: '#FFFFFF', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20 }}>
-              {remainingDebt > 0 ? 'يوجد ذمة غير مسواة' : 'الحساب مصفى 100%'}
-            </span>
-          </div>
-
-          <div style={{ fontSize: 32, fontWeight: 900, color: remainingDebt > 0 ? '#F87171' : '#34D399', marginTop: 10 }}>
-            {remainingDebt.toLocaleString()} <span style={{ fontSize: 14, color: '#94A3B8' }}>ر.ي</span>
-          </div>
-        </div>
-
-        {/* 2. بطاقات الإحصائيات الشهرية */}
+        {/* بطاقات الإحصائيات الشهرية الأساسية */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
           <div style={{ background: '#F3F0FB', padding: '14px', borderRadius: 14, border: '1px solid #DDD6FE' }}>
-            <div style={{ fontSize: 11, color: '#6D28D9', fontWeight: 700 }}>مبيعات شهر ({selectedYear}/{selectedMonthNum})</div>
+            <div style={{ fontSize: 11, color: '#6D28D9', fontWeight: 700 }}>مبيعات الشهر ({selectedYear}/{selectedMonthNum})</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: '#4C1D95', marginTop: 2 }}>{monthlyRevenue.toLocaleString()} <span style={{ fontSize: 11 }}>ر.ي</span></div>
           </div>
           <div style={{ background: '#ECFDF5', padding: '14px', borderRadius: 14, border: '1px solid #A7F3D0' }}>
@@ -159,9 +123,9 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 3. ملخص مبيعات الشهر المحدد حسب الباقات */}
+        {/* ملخص مبيعات الباقات للشهر */}
         <div className="panel" style={{ marginBottom: 20 }}>
-          <h3>ملخص مبيعات شهر ({selectedYear}/{selectedMonthNum})</h3>
+          <h3>ملخص الباقات المباعة</h3>
           {Object.keys(salesByPackage).length === 0 && (
             <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا توجد مبيعات في هذا الشهر</div>
           )}
@@ -173,40 +137,20 @@ export default function SalesPage() {
           ))}
         </div>
 
-        {/* 4. تقرير الشهر والمخزون المتبقي */}
-        <div className="panel" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 18, padding: 16, boxShadow: '0 4px 12px rgba(0,0,0,0.03)', marginBottom: 20 }}>
-          <div style={{ borderBottom: '1px solid #F1F5F9', paddingBottom: 10, marginBottom: 14 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 900, color: '#0F172A' }}>تقرير الشهر والمخزون المتبقي</h3>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#F8FAFC', padding: '10px 12px', borderRadius: 10 }}>
-              <span style={{ color: '#475569', fontWeight: 600 }}>إجمالي مبيعات الشهر:</span>
-              <span style={{ fontWeight: 900, fontSize: 14, color: '#0F172A' }}>{monthlyRevenue.toLocaleString()} ر.ي</span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#ECFDF5', padding: '10px 12px', borderRadius: 10, border: '1px solid #D1FAE5' }}>
-              <span style={{ color: '#065F46', fontWeight: 700 }}>أرباحك المستقطعة للشهر (10%):</span>
-              <span style={{ fontWeight: 900, fontSize: 14, color: '#059669' }}>- {monthlyCommission.toLocaleString()} ر.ي</span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#EFF6FF', padding: '10px 12px', borderRadius: 10, border: '1px solid #BFDBFE' }}>
-              <span style={{ color: '#1E40AF', fontWeight: 700 }}>الصافي الخاص بهذا الشهر (90%):</span>
-              <span style={{ fontWeight: 900, fontSize: 14, color: '#2563EB' }}>{monthlyNetDue.toLocaleString()} ر.ي</span>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: '#64748B', background: '#FAF5FF', padding: '10px 12px', borderRadius: 10, border: '1px solid #F3E8FF', marginTop: 2 }}>
-              <span style={{ fontWeight: 600, color: '#6B21A8' }}>قيمة الكروت المتبقية بيدك ({myCards.length} كرت):</span>
-              <span style={{ fontWeight: 800, color: '#7E22CE', fontSize: 13 }}>{remainingInventoryValue.toLocaleString()} ر.ي</span>
-            </div>
+        {/* تقرير المخزون الحالي */}
+        <div className="panel" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: 18, padding: 16, marginBottom: 20 }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: 15, fontWeight: 900, color: '#0F172A' }}>حالة المخزون الحالي</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, background: '#FAF5FF', padding: '12px', borderRadius: 10, border: '1px solid #F3E8FF' }}>
+            <span style={{ fontWeight: 600, color: '#6B21A8' }}>قيمة الكروت المتبقية بيدك ({myCards.length} كرت):</span>
+            <span style={{ fontWeight: 800, color: '#7E22CE', fontSize: 14 }}>{remainingInventoryValue.toLocaleString()} ر.ي</span>
           </div>
         </div>
 
-        {/* 5. سجل المبيعات المفصل من الأرشيف */}
+        {/* سجل المبيعات المفصل */}
         <div className="panel">
-          <h3>سجل المبيعات المفصل (الأرشيف الدائم)</h3>
+          <h3>سجل المبيعات التفصيلي</h3>
           {filteredSales.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا يوجد سجل مبيعات لهذا الشهر</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا توجد عمليات مسجلة في هذا الشهر</div>
           )}
           {filteredSales.map((item) => (
             <div className="timer-row" key={item.id || item.sold_at} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #F3F4F6' }}>
