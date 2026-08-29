@@ -32,17 +32,12 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    const [{ data: distributors }, { data: packages }, { data: allCards }, { data: payments }] = await Promise.all([
+    // جلب الموزعين، جميع الكروت مع أسعار الباقات، والسدادات بناءً على الهيكل الصحيح تماماً
+    const [{ data: distributors }, { data: allCards }, { data: payments }] = await Promise.all([
       supabase.from('profiles').select('*').eq('role', 'distributor'),
-      supabase.from('packages').select('id, price'),
-      supabase.from('cards').select('id, assigned_to, status, updated_at, created_at, price, package_id, packages(price)').not('assigned_to', 'is', null),
+      supabase.from('cards').select('*, packages(price)'),
       supabase.from('payments').select('distributor_id, amount')
     ]);
-
-    const pkgMap = {};
-    (packages || []).forEach((p) => {
-      pkgMap[p.id] = Number(p.price || 0);
-    });
 
     const paymentsMap = {};
     (payments || []).forEach((p) => {
@@ -67,19 +62,19 @@ export default function ReportsPage() {
     let netSalesValue = 0;
 
     (allCards || []).forEach((c) => {
-      if (!map[c.assigned_to]) return;
+      if (!c.assigned_to || !map[c.assigned_to]) return;
 
-      const cardPrice = Number(c.price || c.packages?.price || pkgMap[c.package_id] || 0);
-      const st = (c.status || '').toLowerCase().trim();
+      const cardPrice = Number(c.price || c.packages?.price || 0);
+      const st = String(c.status || '').toLowerCase().trim();
 
-      // تصنيف الكرت: إذا لم يكن مستخدماً أو مباعاً فهو في حوزة الموزع (مخزن)
-      const isSold = st === 'sold' || st === 'used' || st === 'expired' || st === 'active';
+      // إذا لم يكن الكرت مباعاً فهو متواجد في مخزن الموزع حالياً
+      const isSold = st === 'sold';
 
       if (!isSold) {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       } else {
-        const adminNetPriceAllTime = cardPrice * 0.90;
+        const adminNetPriceAllTime = cardPrice * 0.90; // حصة المدير 90%
         map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
         const actionDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
