@@ -18,6 +18,8 @@ export default function DistributorSalesPage() {
   const { profile, loading } = useProfile('distributor');
   const [soldCards, setSoldCards] = useState([]);
   const [myCards, setMyCards] = useState([]);
+  const [netDebt, setNetDebt] = useState(0);
+  const [totalPaidAmount, setTotalPaidAmount] = useState(0);
 
   const currentDate = new Date();
   const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
@@ -28,7 +30,7 @@ export default function DistributorSalesPage() {
   async function loadData() {
     if (!profile) return;
 
-    // جلب الكروت المباعة مباشرة من جدول cards بناءً على طريقة النظام المعتمدة
+    // 1. جلب الكروت المباعة
     const { data: cardsData, error } = await supabase
       .from('cards')
       .select('id, sold_at, packages(name, price)')
@@ -48,7 +50,7 @@ export default function DistributorSalesPage() {
 
     setSoldCards(formattedSales.sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
 
-    // جلب المخزون الحالي المتبقي لدى الموزع
+    // 2. جلب المخزون الحالي المتبقي لدى الموزع
     const { data: inventoryList } = await supabase
       .from('cards')
       .select('*, packages(name, price)')
@@ -56,6 +58,27 @@ export default function DistributorSalesPage() {
       .eq('status', 'with_distributor');
 
     setMyCards(inventoryList || []);
+
+    // 3. حساب إجمالي مبيعات الموزع المالية لجزء الدين (مطابق للوحة التحكم الرئيسية)
+    const totalSalesRevenue = formattedSales.reduce((sum, c) => sum + c.price, 0);
+    const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
+
+    // 4. جلب السدادات من جدول payments للموزع
+    const { data: paymentsData, error: payErr } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('distributor_id', profile.id);
+
+    if (payErr) {
+      console.error('Error fetching payments:', payErr);
+    }
+
+    const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    setTotalPaidAmount(totalPaid);
+
+    // حساب الدين المتبقي الصافي
+    const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+    setNetDebt(remainingDebt);
   }
 
   useEffect(() => { 
@@ -143,6 +166,22 @@ export default function DistributorSalesPage() {
           <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)', padding: '16px', borderRadius: 16, border: '1px solid #A7F3D0' }}>
             <div style={{ fontSize: 12, color: '#047857', fontWeight: 800 }}>عمولتك للشهر (10%)</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#059669', marginTop: 4 }}>{monthlyCommission.toLocaleString()} <span style={{ fontSize: 12 }}>ر.ي</span></div>
+          </div>
+        </div>
+
+        {/* بطاقة السدادات والمستحقات للمدير */}
+        <div style={{ 
+          background: netDebt > 0 ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+          borderRadius: 16, padding: '16px 20px', color: '#fff', marginBottom: 20, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' 
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 4 }}>المبلغ الصافي المستحق للمدير</div>
+              <div style={{ fontSize: 22, fontWeight: '900' }}>{netDebt.toLocaleString()} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ر.ي</span></div>
+            </div>
+            <div style={{ textAlign: 'left', fontSize: 12, color: '#f8fafc', background: 'rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: 10 }}>
+              <div>إجمالي المسدد: <b>{totalPaidAmount.toLocaleString()} ر.ي</b></div>
+            </div>
           </div>
         </div>
 
