@@ -56,14 +56,13 @@ export default function DistributorsPage() {
 
     if (!distributors || distributors.length === 0) return;
 
-    // 2. جلب جميع الكروت المباعة من جدول cards المطابق لصفحة الموزع
-    const { data: soldCards, error: cardsErr } = await supabase
-      .from('cards')
-      .select('assigned_to, packages(price)')
-      .eq('status', 'sold');
+    // 2. جلب سجل المبيعات من الأرشيف الدائم sales_log بدلاً من جدول cards المؤقت
+    const { data: salesLogData, error: salesErr } = await supabase
+      .from('sales_log')
+      .select('distributor_id, price');
 
-    if (cardsErr) {
-      console.error('Error fetching sold cards:', cardsErr);
+    if (salesErr) {
+      console.error('Error fetching sales log:', salesErr);
     }
 
     // 3. جلب سجل السدادات كاملة
@@ -75,12 +74,12 @@ export default function DistributorsPage() {
       console.error('Error fetching payments:', payErr);
     }
 
-    // 4. حساب المبالغ المتبقية للذمة (الصافي المطلوب من الموزع)
+    // 4. حساب المبالغ المتبقية للذمة بناءً على الأرشيف الدائم (الصافي 90% للمدير)
     const debtMap = {};
 
     distributors.forEach((dist) => {
-      const distSoldCards = (soldCards || []).filter(c => c.assigned_to === dist.id);
-      const totalSalesRevenue = distSoldCards.reduce((sum, c) => sum + Number(c.packages?.price || 0), 0);
+      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
+      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
       const netSalesAdmin = totalSalesRevenue * 0.90;
 
       const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
