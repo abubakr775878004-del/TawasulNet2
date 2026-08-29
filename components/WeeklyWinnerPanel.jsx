@@ -12,7 +12,6 @@ export default function DistributorWeeklyWinner() {
 
   useEffect(() => {
     async function checkRoleAndWinners() {
-      // 1. التحقق من صلاحيات المدير
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
@@ -25,7 +24,6 @@ export default function DistributorWeeklyWinner() {
         }
       }
 
-      // 2. جلب الفائزين والتحقق من وقت القرعة (خلال آخر 30 ساعة)
       fetchWinnersAndCheckTime();
     }
 
@@ -41,13 +39,10 @@ export default function DistributorWeeklyWinner() {
 
     if (!error && data && data.length > 0) {
       setWinners(data);
-
-      // التحقق مما إذا كان وقت إنشاء النتائج ضمن اخر 30 ساعة
       const createdAt = new Date(data[0].created_at).getTime();
       const now = new Date().getTime();
       const hoursPassed = (now - createdAt) / (1000 * 60 * 60);
 
-      // إذا مر أقل من 30 ساعة، تظل النتائج معروضة
       if (hoursPassed <= 30) {
         setIsTimeToShow(true);
       } else {
@@ -59,35 +54,33 @@ export default function DistributorWeeklyWinner() {
     }
   }
 
-  // دالة إرسال الإشعار فقط للتيليجرام والواتساب
+  // دالة الإرسال مع دعم الاختبار الفوري في حال لم تكن هناك نتائج مخزنة
   async function handleSendNotificationOnly() {
-    if (winners.length === 0) {
-      setMessage('⚠️ لا توجد نتائج فائزين لإرسالها');
-      return;
-    }
-
     setLoading(true);
     setMessage('');
 
     try {
-      const text = `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين (عبر موقعنا وموزعينا):\n\n🥇 المركز الأول: ${winners[0]?.customer_name || '—'} (الموزع: ${winners[0]?.distributor_name || '—'})\n🥈 المركز الثاني: ${winners[1]?.customer_name || '—'} (الموزع: ${winners[1]?.distributor_name || '—'})\n🥉 المركز الثالث: ${winners[2]?.customer_name || '—'} (الموزع: ${winners[2]?.distributor_name || '—'})\n\nألف مبروك، وترقبوا السحب القادم! 🚀`;
+      const text = winners.length > 0 
+        ? `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين:\n\n🥇 الأول: ${winners[0]?.customer_name}\n🥈 الثاني: ${winners[1]?.customer_name}\n🥉 الثالث: ${winners[2]?.customer_name}`
+        : `🧪 رسالة اختبار من لوحة تحكم تواصل: نظام إشعارات تيليجرام يعمل بنجاح تام! ✅`;
 
-      try {
-        await fetch('/api/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: text }),
-        });
-      } catch (err) {
-        console.error('Telegram error:', err);
+      const res = await fetch('/api/telegram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+        setMessage('✓ تم إرسال الإشعار بنجاح!');
+      } else {
+        setMessage(`❌ فشل الإرسال: ${data.error || 'خطأ غير معروف'}`);
       }
-
-      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-
-      setMessage('✓ تم إرسال الإشعار بنجاح!');
     } catch (err) {
       console.error(err);
-      setMessage('❌ حدث خطأ أثناء إرسال الإشعار');
+      setMessage('❌ حدث خطأ أثناء الاتصال بالخادم');
     } finally {
       setLoading(false);
     }
@@ -157,7 +150,7 @@ export default function DistributorWeeklyWinner() {
                 borderRadius: '12px',
                 padding: '12px 14px',
                 display: 'flex',
-                justify: 'space-between',
+                justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
                 <div>
