@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 
 export default function DistributorWeeklyWinner() {
   const [winners, setWinners] = useState([]);
-  const [isWeekendShowTime, setIsWeekendShowTime] = useState(false);
+  const [isTimeToShow, setIsTimeToShow] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -25,20 +25,14 @@ export default function DistributorWeeklyWinner() {
         }
       }
 
-      // 2. التحقق من الوقت (الجمعة أو السبت)
-      const today = new Date();
-      const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
-      const isWeekend = (currentDay === 5 || currentDay === 6);
-      setIsWeekendShowTime(isWeekend);
-
-      // 3. جلب الفائزين الحاليين المعروضين في النظام
-      fetchCurrentWinners();
+      // 2. جلب الفائزين والتحقق من وقت القرعة (خلال آخر 30 ساعة)
+      fetchWinnersAndCheckTime();
     }
 
     checkRoleAndWinners();
   }, []);
 
-  async function fetchCurrentWinners() {
+  async function fetchWinnersAndCheckTime() {
     const { data, error } = await supabase
       .from('weekly_winners')
       .select('*')
@@ -47,11 +41,25 @@ export default function DistributorWeeklyWinner() {
 
     if (!error && data && data.length > 0) {
       setWinners(data);
-      setIsWeekendShowTime(true);
+
+      // التحقق مما إذا كان وقت إنشاء النتائج ضمن اخر 30 ساعة
+      const createdAt = new Date(data[0].created_at).getTime();
+      const now = new Date().getTime();
+      const hoursPassed = (now - createdAt) / (1000 * 60 * 60);
+
+      // إذا مر أقل من 30 ساعة، تظل النتائج معروضة
+      if (hoursPassed <= 30) {
+        setIsTimeToShow(true);
+      } else {
+        setIsTimeToShow(false);
+      }
+    } else {
+      setWinners([]);
+      setIsTimeToShow(false);
     }
   }
 
-  // دالة إرسال الإشعار فقط للتيليجرام والواتساب بناءً على الفائزين الحاليين
+  // دالة إرسال الإشعار فقط للتيليجرام والواتساب
   async function handleSendNotificationOnly() {
     if (winners.length === 0) {
       setMessage('⚠️ لا توجد نتائج فائزين لإرسالها');
@@ -62,10 +70,8 @@ export default function DistributorWeeklyWinner() {
     setMessage('');
 
     try {
-      // تجهيز النص المختصر والمقبول
       const text = `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين (عبر موقعنا وموزعينا):\n\n🥇 المركز الأول: ${winners[0]?.customer_name || '—'} (الموزع: ${winners[0]?.distributor_name || '—'})\n🥈 المركز الثاني: ${winners[1]?.customer_name || '—'} (الموزع: ${winners[1]?.distributor_name || '—'})\n🥉 المركز الثالث: ${winners[2]?.customer_name || '—'} (الموزع: ${winners[2]?.distributor_name || '—'})\n\nألف مبروك، وترقبوا السحب القادم! 🚀`;
 
-      // إرسال إلى بوت التليجرام
       try {
         await fetch('/api/telegram', {
           method: 'POST',
@@ -76,7 +82,6 @@ export default function DistributorWeeklyWinner() {
         console.error('Telegram error:', err);
       }
 
-      // فتح الواتساب للإرسال
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 
       setMessage('✓ تم إرسال الإشعار بنجاح!');
@@ -104,14 +109,14 @@ export default function DistributorWeeklyWinner() {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            background: isWeekendShowTime ? '#10B981' : '#7C3AED',
+            background: isTimeToShow ? '#10B981' : '#7C3AED',
             color: '#fff',
             padding: '4px 10px',
             borderRadius: '8px',
             fontSize: '11px',
             fontWeight: '700'
           }}>
-            {isWeekendShowTime ? '✨ الفائزون معتمدون' : '⏳ قيد التنافس'}
+            {isTimeToShow ? '✨ الفائزون معتمدون' : '⏳ قيد التنافس'}
           </span>
 
           {isAdmin && (
@@ -142,7 +147,7 @@ export default function DistributorWeeklyWinner() {
         </div>
       )}
 
-      {isWeekendShowTime || winners.length > 0 ? (
+      {isTimeToShow ? (
         winners.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {winners.map((winner, index) => (
@@ -172,7 +177,7 @@ export default function DistributorWeeklyWinner() {
           </div>
         ) : (
           <div style={{ textAlign: 'center', fontSize: '12px', color: '#CBD5E1', padding: '10px' }}>
-            لا توجد مبيعات مسجلة للسحب هذا الأسبوع.
+            لا توجد مبيعات مسجلة للسحب.
           </div>
         )
       ) : (
@@ -185,7 +190,7 @@ export default function DistributorWeeklyWinner() {
           fontSize: '12px',
           color: '#CBD5E1'
         }}>
-          🔒 سيظهر أسماء الفائزين الثلاثة حصرياً يومي <strong>الجمعة والسبت</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
+          🔒 سيظهر أسماء الفائزين الثلاثة فور إعلان القرعة ولمدة <strong>30 ساعة</strong>. استمر في بيع الكروت لزيادة فرصة زبائنك!
         </div>
       )}
     </div>
