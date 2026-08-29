@@ -12,7 +12,7 @@ export default function DistributorWeeklyWinner() {
 
   useEffect(() => {
     async function checkRoleAndWinners() {
-      // 1. التحقق مما إذا كان المستخدم مديراً (Admin)
+      // 1. التحقق من صلاحيات المدير
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
@@ -25,13 +25,13 @@ export default function DistributorWeeklyWinner() {
         }
       }
 
-      // 2. التحقق من الوقت (الجمعة أو السبت أو عرض دائم عند توفر النتائج)
+      // 2. التحقق من الوقت (الجمعة أو السبت)
       const today = new Date();
       const currentDay = today.getDay(); // 5 = الجمعة، 6 = السبت
       const isWeekend = (currentDay === 5 || currentDay === 6);
       setIsWeekendShowTime(isWeekend);
 
-      // 3. جلب الفائزين الحاليين من جدول weekly_winners أو قاعدة البيانات
+      // 3. جلب الفائزين الحاليين المعروضين في النظام
       fetchCurrentWinners();
     }
 
@@ -47,57 +47,25 @@ export default function DistributorWeeklyWinner() {
 
     if (!error && data && data.length > 0) {
       setWinners(data);
-      setIsWeekendShowTime(true); // إذا وُجدت نتائج معلنة، تظهر فوراً
+      setIsWeekendShowTime(true);
     }
   }
 
-  // دالة إجراء السحب للمدير مع إرسال التليجرام والواتساب
-  async function handleRunWeeklyDraw() {
+  // دالة إرسال الإشعار فقط للتيليجرام والواتساب بناءً على الفائزين الحاليين
+  async function handleSendNotificationOnly() {
+    if (winners.length === 0) {
+      setMessage('⚠️ لا توجد نتائج فائزين لإرسالها');
+      return;
+    }
+
     setLoading(true);
     setMessage('');
 
     try {
-      // 1. جلب الكروت المباعة التي تحتوي على اسم زبون
-      const { data: soldCards, error } = await supabase
-        .from('cards')
-        .select('customer_name, assigned_to, profiles:assigned_to(full_name)')
-        .eq('status', 'sold')
-        .not('customer_name', 'is', null);
+      // تجهيز النص المختصر والمقبول
+      const text = `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين (عبر موقعنا وموزعينا):\n\n🥇 المركز الأول: ${winners[0]?.customer_name || '—'} (الموزع: ${winners[0]?.distributor_name || '—'})\n🥈 المركز الثاني: ${winners[1]?.customer_name || '—'} (الموزع: ${winners[1]?.distributor_name || '—'})\n🥉 المركز الثالث: ${winners[2]?.customer_name || '—'} (الموزع: ${winners[2]?.distributor_name || '—'})\n\nألف مبروك، وترقبوا السحب القادم! 🚀`;
 
-      if (error || !soldCards || soldCards.length === 0) {
-        setMessage('⚠️ لا توجد أسماء زبائن كافية مسجلة في المبيعات');
-        setLoading(false);
-        return;
-      }
-
-      // 2. اختيار 3 فائزين عشوائياً بدون تكرار
-      const shuffled = [...soldCards].sort(() => 0.5 - Math.random());
-      const selectedWinners = shuffled.slice(0, 3);
-
-      const formattedWinners = selectedWinners.map((w, index) => ({
-        rank: index + 1,
-        customer_name: w.customer_name,
-        distributor_name: w.profiles?.full_name || 'موزع معتمد'
-      }));
-
-      // 3. تحديث جدول الفائزين في قاعدة البيانات
-      await supabase.from('weekly_winners').delete().neq('id', 0);
-      for (const w of formattedWinners) {
-        await supabase.from('weekly_winners').insert({
-          rank: w.rank,
-          customer_name: w.customer_name,
-          distributor_name: w.distributor_name,
-          created_at: new Date().toISOString()
-        });
-      }
-
-      setWinners(formattedWinners);
-      setIsWeekendShowTime(true);
-
-      // 4. تجهيز النص المختصر والمقبول للتليجرام والواتساب
-      const text = `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين (عبر موقعنا وموزعينا):\n\n🥇 المركز الأول: ${formattedWinners[0]?.customer_name || '—'} (الموزع: ${formattedWinners[0]?.distributor_name || '—'})\n🥈 المركز الثاني: ${formattedWinners[1]?.customer_name || '—'} (الموزع: ${formattedWinners[1]?.distributor_name || '—'})\n🥉 المركز الثالث: ${formattedWinners[2]?.customer_name || '—'} (الموزع: ${formattedWinners[2]?.distributor_name || '—'})\n\nألف مبروك، وترقبوا السحب القادم! 🚀`;
-
-      // 5. إرسال إلى بوت التليجرام
+      // إرسال إلى بوت التليجرام
       try {
         await fetch('/api/telegram', {
           method: 'POST',
@@ -108,13 +76,13 @@ export default function DistributorWeeklyWinner() {
         console.error('Telegram error:', err);
       }
 
-      // 6. فتح قناة / تطبيق الواتساب بالرسالة الجاهزة
+      // فتح الواتساب للإرسال
       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 
-      setMessage('✓ تم السحب وإرسال الإشعارات بنجاح!');
+      setMessage('✓ تم إرسال الإشعار بنجاح!');
     } catch (err) {
       console.error(err);
-      setMessage('❌ حدث خطأ أثناء إجراء السحب');
+      setMessage('❌ حدث خطأ أثناء إرسال الإشعار');
     } finally {
       setLoading(false);
     }
@@ -148,10 +116,10 @@ export default function DistributorWeeklyWinner() {
 
           {isAdmin && (
             <button
-              onClick={handleRunWeeklyDraw}
+              onClick={handleSendNotificationOnly}
               disabled={loading}
               style={{
-                background: 'linear-gradient(120deg, #10B981, #059669)',
+                background: 'linear-gradient(120deg, #3B82F6, #1D4ED8)',
                 border: 'none',
                 color: '#fff',
                 padding: '5px 12px',
@@ -162,7 +130,7 @@ export default function DistributorWeeklyWinner() {
                 opacity: loading ? 0.7 : 1
               }}
             >
-              {loading ? 'جاري السحب...' : '🎲 إجراء السحب'}
+              {loading ? 'جاري الإرسال...' : '📢 إرسال إشعار النتائج'}
             </button>
           )}
         </div>
