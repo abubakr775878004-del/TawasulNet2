@@ -29,15 +29,7 @@ export default function DistributorsPage() {
   };
 
   async function loadList() {
-    setError('');
-    
-    // 1. استدعاء دالة إعادة الحساب في قاعدة البيانات أولاً لتحديث الأرقام بدقة تامة بناءً على الأرشيف
-    const { error: rpcErr } = await supabase.rpc('recalculate_all_distributors_finances');
-    if (rpcErr) {
-      console.error('Error recalculating finances:', rpcErr);
-    }
-
-    // 2. جلب قائمة الموزعين المحدثة مباشرة من جدول profiles
+    // 1. جلب قائمة الموزعين
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -54,11 +46,45 @@ export default function DistributorsPage() {
       return;
     }
 
-    setList(distributors);
+    // 2. جلب سجل المبيعات من الأرشيف الدائم sales_log
+    const { data: salesLogData, error: salesErr } = await supabase
+      .from('sales_log')
+      .select('distributor_id, price');
+
+    if (salesErr) {
+      console.error('Error fetching sales log:', salesErr);
+    }
+
+    // 3. جلب سجل السدادات كاملة
+    const { data: payments, error: payErr } = await supabase
+      .from('payments')
+      .select('distributor_id, amount');
+
+    if (payErr) {
+      console.error('Error fetching payments:', payErr);
+    }
+
+    // 4. حساب الدين التراكمي المحدث بناءً على الأرشيف الفعلي لكل موزع
+    const updatedDistributors = [];
+
+    for (const dist of distributors) {
+      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
+      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90;
+
+      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
+      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+
+      updatedDistributors.push({ ...dist, debt: remainingDebt });
+    }
+
+    setList(updatedDistributors);
     
     const initialCards = {};
     const initialDebts = {};
-    distributors.forEach((d) => { 
+    updatedDistributors.forEach((d) => { 
       initialCards[d.id] = d.personal_card || ''; 
       initialDebts[d.id] = '';
     });
