@@ -29,7 +29,15 @@ export default function DistributorsPage() {
   };
 
   async function loadList() {
-    // 1. جلب قائمة الموزعين
+    setError('');
+    
+    // 1. استدعاء دالة إعادة الحساب في قاعدة البيانات أولاً لتحديث الأرقام بدقة تامة بناءً على الأرشيف
+    const { error: rpcErr } = await supabase.rpc('recalculate_all_distributors_finances');
+    if (rpcErr) {
+      console.error('Error recalculating finances:', rpcErr);
+    }
+
+    // 2. جلب قائمة الموزعين المحدثة مباشرة من جدول profiles
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -46,53 +54,11 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب سجل المبيعات من الأرشيف الدائم sales_log
-    const { data: salesLogData, error: salesErr } = await supabase
-      .from('sales_log')
-      .select('distributor_id, price');
-
-    if (salesErr) {
-      console.error('Error fetching sales log:', salesErr);
-    }
-
-    // 3. جلب سجل السدادات كاملة
-    const { data: payments, error: payErr } = await supabase
-      .from('payments')
-      .select('distributor_id, amount');
-
-    if (payErr) {
-      console.error('Error fetching payments:', payErr);
-    }
-
-    // 4. حساب الدين التراكمي المحدث وتحديثه في قاعدة البيانات فوراً لكل موزع لتوحيد الرقم تماماً
-    const updatedDistributors = [];
-
-    for (const dist of distributors) {
-      const distSales = (salesLogData || []).filter(s => s.distributor_id === dist.id);
-      const totalSalesRevenue = distSales.reduce((sum, s) => sum + Number(s.price || 0), 0);
-      const netSalesAdmin = totalSalesRevenue * 0.90;
-
-      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
-      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
-
-      // تحديث قيمة الدين مباشرة في جدول profiles لضمان التطابق التام والثبات التراكمي
-      if (Number(dist.debt) !== remainingDebt) {
-        await supabase
-          .from('profiles')
-          .update({ debt: remainingDebt })
-          .eq('id', dist.id);
-      }
-
-      updatedDistributors.push({ ...dist, debt: remainingDebt });
-    }
-
-    setList(updatedDistributors);
+    setList(distributors);
     
     const initialCards = {};
     const initialDebts = {};
-    updatedDistributors.forEach((d) => { 
+    distributors.forEach((d) => { 
       initialCards[d.id] = d.personal_card || ''; 
       initialDebts[d.id] = '';
     });
@@ -302,7 +268,6 @@ export default function DistributorsPage() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {others.map((d) => {
-              // قراءة القيمة الحقيقية المحدثة مباشرة من الحقل الثابت d.debt في قاعدة البيانات
               const currentNetDebt = Number(d.debt) || 0;
 
               return (
