@@ -32,7 +32,6 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // جلب الموزعين، جميع الكروت مع أسعار الباقات، والسدادات بناءً على الهيكل الصحيح تماماً
     const [{ data: distributors }, { data: allCards }, { data: payments }] = await Promise.all([
       supabase.from('profiles').select('*').eq('role', 'distributor'),
       supabase.from('cards').select('*, packages(price)'),
@@ -66,15 +65,13 @@ export default function ReportsPage() {
 
       const cardPrice = Number(c.price || c.packages?.price || 0);
       const st = String(c.status || '').toLowerCase().trim();
-
-      // إذا لم يكن الكرت مباعاً فهو متواجد في مخزن الموزع حالياً
       const isSold = st === 'sold';
 
       if (!isSold) {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       } else {
-        const adminNetPriceAllTime = cardPrice * 0.90; // حصة المدير 90%
+        const adminNetPriceAllTime = cardPrice * 0.90;
         map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
         const actionDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
@@ -192,25 +189,40 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', background: '#F8FAFC', padding: '14px 18px', borderRadius: '14px', border: '1px solid #F1F5F9' }}>
+                {/* تصميم شبكي محسّن وبارز وواضح لكل حقل */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
                   
-                  <div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>كروت لديه الآن (في المخزن)</div>
-                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
-                      {r.heldCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>كرت</span> — <span style={{ color: '#0F766E' }}>{formatNum(r.heldValue)} ريال</span>
+                  {/* كروت المخزن */}
+                  <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 16px' }}>
+                    <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, marginBottom: '6px' }}>📦 كروت لديه الآن (في المخزن)</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                      <span style={{ color: '#0F766E', fontWeight: 900 }}>{r.heldCount}</span> <span style={{ fontSize: '11px', color: '#64748B' }}>كرت</span>
+                      <span style={{ fontSize: '12px', color: '#CBD5E1' }}>|</span>
+                      <span style={{ color: '#0F766E', fontSize: '13px' }}>{formatNum(r.heldValue)} ريال</span>
                     </div>
                   </div>
 
-                  <div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
-                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#10B981' }}>
-                      {r.salesCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>كرت</span> — {formatNum(r.salesValue)} ريال
+                  {/* المبيعات الفعلية */}
+                  <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', padding: '12px 16px' }}>
+                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, marginBottom: '6px' }}>📈 المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: '#10B981', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                      <span style={{ fontWeight: 900 }}>{r.salesCount}</span> <span style={{ fontSize: '11px', color: '#64748B' }}>كرت</span>
+                      <span style={{ fontSize: '12px', color: '#86EFAC' }}>|</span>
+                      <span style={{ fontSize: '14px', fontWeight: 900 }}>{formatNum(r.salesValue)} ريال</span>
                     </div>
                   </div>
 
-                  <div>
-                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>المبلغ الصافي المتبقي (الدين)</div>
-                    <div style={{ fontSize: '14.5px', fontWeight: 900, color: r.remainingDebt > 0 ? '#DC2626' : '#059669' }}>
+                  {/* المبلغ الصافي المتبقي (الدين) - تم جعله أكثر بروزاً ووضوحاً */}
+                  <div style={{ 
+                    background: r.remainingDebt > 0 ? '#FEF2F2' : '#F8FAFC', 
+                    border: r.remainingDebt > 0 ? '1px solid #FCA5A5' : '1px solid #E2E8F0', 
+                    borderRadius: '12px', 
+                    padding: '12px 16px' 
+                  }}>
+                    <div style={{ fontSize: '11px', color: r.remainingDebt > 0 ? '#991B1B' : '#64748B', fontWeight: 800, marginBottom: '6px' }}>
+                      💰 المبلغ الصافي المتبقي (الدين)
+                    </div>
+                    <div style={{ fontSize: '16px', fontWeight: 900, color: r.remainingDebt > 0 ? '#DC2626' : '#059669', display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                       {formatNum(r.remainingDebt)} <span style={{ fontSize: '12px', fontWeight: 700 }}>ريال</span>
                     </div>
                   </div>
