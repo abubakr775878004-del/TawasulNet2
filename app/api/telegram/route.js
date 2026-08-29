@@ -14,93 +14,70 @@ function escapeHtml(value = '') {
 
 export async function POST(req) {
   try {
-    // === سطر الفحص المؤقت لمعرفة حالة المتغيرات في Vercel Logs ===
     const rawToken = process.env.TELEGRAM_BOT_TOKEN;
     const rawChatId = process.env.TELEGRAM_CHAT_ID;
 
-    console.log("CHECK_ENV -> TOKEN:", rawToken ? "EXISTS (" + rawToken.length + " chars)" : "MISSING");
-    console.log("CHECK_ENV -> CHAT_ID:", rawChatId ? "EXISTS (" + rawChatId + ")" : "MISSING");
-    // ===============================================================
-
-    // قراءة البيانات
+    // قراءة البيانات المرسلة
     const body = await req.json();
 
+    // التحقق هل الرسالة عبارة عن نص سحب أسبوعي جاهز أو رسالة موزع تقليدية
+    const customMessage = String(body?.message || '').trim();
     const distributorName = String(body?.distributor_name || '').trim();
     const content = String(body?.content || '').trim();
 
-    // التحقق من البيانات
-    if (!distributorName) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'اسم الموزع مطلوب',
-        },
-        { status: 400 }
-      );
+    let finalMessage = '';
+
+    if (customMessage) {
+      // إذا تم إرسال نص جاهز (مثل نتائج السحب الأسبوعي)
+      finalMessage = customMessage;
+    } else {
+      // الطريقة التقليدية (رسائل وملاحظات الموزعين)
+      if (!distributorName || !content) {
+        return NextResponse.json(
+          { success: false, error: 'اسم الموزع ومحتوى الرسالة مطلوبان' },
+          { status: 400 }
+        );
+      }
+
+      const safeDistributorName = escapeHtml(distributorName);
+      const safeContent = escapeHtml(content);
+
+      finalMessage = [
+        '🚨 <b>طلب جديد من موزع</b>',
+        '',
+        `👤 <b>الموزع:</b> ${safeDistributorName}`,
+        '',
+        `💬 <b>الرسالة:</b>`,
+        safeContent,
+        '',
+        '⚡ <b>نظام إدارة شبكة تواصل</b>',
+      ].join('\n');
     }
 
-    if (!content) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'محتوى الرسالة مطلوب',
-        },
-        { status: 400 }
-      );
-    }
-
-    // تنظيف متغيرات البيئة
     const botToken = rawToken?.trim();
     const chatId = rawChatId?.trim();
 
     if (!botToken || !chatId) {
       console.error('Telegram environment variables are missing');
-
       return NextResponse.json(
-        {
-          success: false,
-          error: 'إعدادات تيليجرام غير موجودة في Environment Variables',
-        },
+        { success: false, error: 'إعدادات تيليجرام غير موجودة في Environment Variables' },
         { status: 500 }
       );
     }
 
-    // حماية النص من HTML
-    const safeDistributorName = escapeHtml(distributorName);
-    const safeContent = escapeHtml(content);
-
-    // رسالة تيليجرام
-    const message = [
-      '🚨 <b>طلب جديد من موزع</b>',
-      '',
-      `👤 <b>الموزع:</b> ${safeDistributorName}`,
-      '',
-      `💬 <b>الرسالة:</b>`,
-      safeContent,
-      '',
-      '⚡ <b>نظام إدارة شبكة تواصل</b>',
-    ].join('\n');
-
     const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
 
-    // مهلة 15 ثانية
     const controller = new AbortController();
-
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, 15000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
     let response;
-
     try {
       response = await fetch(telegramUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chat_id: chatId,
-          text: message,
+          text: finalMessage,
           parse_mode: 'HTML',
           disable_web_page_preview: true,
         }),
@@ -112,35 +89,23 @@ export async function POST(req) {
     }
 
     let data;
-
     try {
       data = await response.json();
     } catch {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'تعذر قراءة استجابة Telegram',
-        },
+        { success: false, error: 'تعذر قراءة استجابة Telegram' },
         { status: 502 }
       );
     }
 
-    // Telegram API أعاد خطأ
     if (!response.ok || !data?.ok) {
       console.error('Telegram API error:', data);
-
       return NextResponse.json(
-        {
-          success: false,
-          error:
-            data?.description ||
-            `Telegram HTTP error ${response.status}`,
-        },
+        { success: false, error: data?.description || `Telegram HTTP error ${response.status}` },
         { status: 502 }
       );
     }
 
-    // نجاح
     return NextResponse.json(
       {
         success: true,
@@ -154,19 +119,13 @@ export async function POST(req) {
 
     if (error?.name === 'AbortError') {
       return NextResponse.json(
-        {
-          success: false,
-          error: 'انتهت مهلة الاتصال بخوادم Telegram',
-        },
+        { success: false, error: 'انتهت مهلة الاتصال بخوادم Telegram' },
         { status: 504 }
       );
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: error?.message || 'حدث خطأ غير معروف',
-      },
+      { success: false, error: error?.message || 'حدث خطأ غير معروف' },
       { status: 500 }
     );
   }
