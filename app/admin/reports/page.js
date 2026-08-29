@@ -30,13 +30,14 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // جلب الموزعين والباقات
-    const [{ data: distributors }, { data: packages }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
-      supabase.from('packages').select('id, price')
+    // 1. جلب الموزعين، الباقات، والسدادات لجميع الموزعين
+    const [{ data: distributors }, { data: packages }, { data: payments }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name').eq('role', 'distributor').eq('status', 'approved'),
+      supabase.from('packages').select('id, price'),
+      supabase.from('payments').select('distributor_id, amount')
     ]);
 
-    // جلب الكروت ذات الصلة مباشرة
+    // 2. جلب الكروت ذات الصلة مباشرة
     const { data: cards, error } = await supabase
       .from('cards')
       .select('id, assigned_to, status, updated_at, created_at, package_id, price')
@@ -52,9 +53,24 @@ export default function ReportsPage() {
       pkgMap[p.id] = Number(p.price || 0);
     });
 
+    // تجميع السدادات لكل موزع (لكل الأوقات)
+    const paymentsMap = {};
+    (payments || []).forEach((p) => {
+      paymentsMap[p.distributor_id] = (paymentsMap[p.distributor_id] || 0) + Number(p.amount || 0);
+    });
+
     const map = {};
     (distributors || []).forEach((d) => {
-      map[d.id] = { name: d.full_name, heldCount: 0, heldValue: 0, salesCount: 0, salesValue: 0 };
+      map[d.id] = { 
+        name: d.full_name, 
+        heldCount: 0, 
+        heldValue: 0, 
+        salesCount: 0, 
+        salesValue: 0,
+        totalSalesAllTime: 0,
+        totalPaid: paymentsMap[d.id] || 0,
+        remainingDebt: 0
+      };
     });
 
     let netSalesCount = 0;
@@ -72,6 +88,10 @@ export default function ReportsPage() {
       }
 
       if (cardStatus === 'sold') {
+        // حساب إجمالي المبيعات الكلي (لكل الأوقات) لكل موزع لحساب الدين بدقة مطابقة لصفحة الموزعين
+        const adminNetPriceAllTime = cardPrice * 0.90;
+        map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
+
         const soldDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
 
         if (!filterTime || soldDate >= filterTime) {
@@ -84,6 +104,12 @@ export default function ReportsPage() {
           netSalesValue += adminNetPrice;
         }
       }
+    });
+
+    // حساب الدين الصافي المتبقي لكل موزع (إجمالي صافي مبيعات الإدارة - إجمالي السدادات المقبوضة)
+    Object.keys(map).forEach(id => {
+      const dist = map[id];
+      dist.remainingDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
     });
 
     setTotalNetworkSalesCount(netSalesCount);
@@ -108,8 +134,8 @@ export default function ReportsPage() {
       <div className="main">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
           <div>
-            <h1>التقارير</h1>
-            <p className="greet">مقارنة أداء الموزعين — الكروت الموجودة عندهم والمبيعات الفعلية (الصافي 90%)</p>
+            <h1>التقارير الشاملة</h1>
+            <p className="greet">مقارنة أداء الموزعين — الكروت الموجودة عندهم، المبيعات الفعلية، والمستحقات (الدين الصافي)</p>
           </div>
           <button
             onClick={() => window.print()}
@@ -153,7 +179,7 @@ export default function ReportsPage() {
 
         <div className="panel">
           <div className="panel-head">
-            <h3>مقارنة أداء الموزعين</h3>
+            <h3>مقارنة أداء الموزعين والمستحقات المالية</h3>
             <span className="muted">{rows.length} موزع</span>
           </div>
 
@@ -169,18 +195,24 @@ export default function ReportsPage() {
                 display: 'flex', flexDirection: 'column', gap: 8,
               }}
             >
-              <div style={{ fontWeight: 800, fontSize: 14.5 }}>{r.name}</div>
-              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+              <div style={{ fontWeight: 800, fontSize: 14.5, color: '#1e1b4b' }}>{r.name}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>كروت لديه الآن (غير مباعة)</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, marginTop: '2px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, marginTop: '2px' }}>
                     {r.heldCount} كرت — {formatNum(r.heldValue)} ريال
                   </div>
                 </div>
                 <div>
                   <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
                     {r.salesCount} كرت — {formatNum(r.salesValue)} ريال
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبلغ الصافي المتبقي (الدين)</div>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: r.remainingDebt > 0 ? '#dc2626' : '#059669', marginTop: '2px' }}>
+                    {formatNum(r.remainingDebt)} ريال
                   </div>
                 </div>
               </div>
