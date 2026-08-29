@@ -104,7 +104,7 @@ export default function DistributorPage() {
 
       const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // حساب الدين المتبقي الصافي (المدفوعات ناقص إجمالي حصة المدير من مبيعات الأرشيف الدائم)
+      // حساب الدين المتبقي الصافي (إجمالي حصة المدير من مبيعات الأرشيف الدائم ناقص المدفوعات)
       const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
       setNetDebt(remainingDebt);
 
@@ -492,7 +492,7 @@ export default function DistributorPage() {
           </div>
         )}
 
-        {/* بطاقات الأرصدة والمستحقات المضافة حديثاً للموزع */}
+        {/* بطاقات الأرصدة والمستحقات */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
           <div className="balance-card" style={{ marginBottom: 0 }}>
             <div className="lbl">
