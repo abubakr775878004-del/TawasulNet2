@@ -30,23 +30,29 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // 1. جلب الموزعين، الباقات، والسدادات بنفس طريقة صفحة الموزعين
-    const [{ data: distributors }, { data: payments }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').eq('role', 'distributor').order('created_at', { ascending: false }),
-      supabase.from('payments').select('distributor_id, amount')
-    ]);
+    // 1. جلب الموزعين بنفس شرط صفحة الموزعين
+    const { data: distributors } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'distributor');
 
-    // 2. جلب الكروت بكل حالاتها لكي نحسب الكروت الموجودة لديه (with_distributor أو available) والمبيعات (sold)
-    const { data: cards, error } = await supabase
+    // 2. جلب الكروت المباعة مع أسعار الباقات تماماً مثل كود الموزعين
+    const { data: soldCardsData } = await supabase
       .from('cards')
-      .select('id, assigned_to, status, updated_at, created_at, packages(price)')
+      .select('assigned_to, status, updated_at, created_at, packages(price)')
+      .eq('status', 'sold');
+
+    // 3. جلب جميع الكروت لحساب الكروت الموجودة لديه (غير المباعة)
+    const { data: allAssignedCards } = await supabase
+      .from('cards')
+      .select('assigned_to, status, packages(price)')
       .not('assigned_to', 'is', null);
 
-    if (error) {
-      console.error('Error fetching cards:', error);
-    }
+    // 4. جلب السدادات من جدول payments
+    const { data: payments } = await supabase
+      .from('payments')
+      .select('distributor_id, amount');
 
-    // تجميع السدادات لكل موزع
     const paymentsMap = {};
     (payments || []).forEach((p) => {
       paymentsMap[p.distributor_id] = (paymentsMap[p.distributor_id] || 0) + Number(p.amount || 0);
@@ -62,48 +68,49 @@ export default function ReportsPage() {
         salesValue: 0,
         totalSalesAllTime: 0,
         totalPaid: paymentsMap[d.id] || 0,
-        remainingDebt: 0
+        remainingDebt: Number(d.debt) || 0
       };
+    });
+
+    // حساب الكروت الموجودة حالياً عند الموزع
+    (allAssignedCards || []).forEach((c) => {
+      if (!map[c.assigned_to]) return;
+      if (c.status === 'with_distributor' || c.status === 'available') {
+        map[c.assigned_to].heldCount += 1;
+        map[c.assigned_to].heldValue += Number(c.packages?.price || 0);
+      }
     });
 
     let netSalesCount = 0;
     let netSalesValue = 0;
 
-    (cards || []).forEach((c) => {
+    // حساب المبيعات الفعلية والديون بناءً على الكروت المباعة
+    (soldCardsData || []).forEach((c) => {
       if (!map[c.assigned_to]) return;
 
       const cardPrice = Number(c.packages?.price || 0);
-      const cardStatus = c.status;
+      const adminNetPriceAllTime = cardPrice * 0.90;
 
-      // الكروت الموجودة بحوزة الموزع حالياً
-      if (cardStatus === 'with_distributor' || cardStatus === 'available') {
-        map[c.assigned_to].heldCount += 1;
-        map[c.assigned_to].heldValue += cardPrice;
-      }
+      map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
-      // الكروت المباعة
-      if (cardStatus === 'sold') {
-        const adminNetPriceAllTime = cardPrice * 0.90;
-        map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
+      const soldDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
 
-        const soldDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
+      if (!filterTime || soldDate >= filterTime) {
+        map[c.assigned_to].salesCount += 1;
+        map[c.assigned_to].salesValue += adminNetPriceAllTime;
 
-        if (!filterTime || soldDate >= filterTime) {
-          const adminNetPrice = cardPrice * 0.90;
-
-          map[c.assigned_to].salesCount += 1;
-          map[c.assigned_to].salesValue += adminNetPrice;
-
-          netSalesCount += 1;
-          netSalesValue += adminNetPrice;
-        }
+        netSalesCount += 1;
+        netSalesValue += adminNetPriceAllTime;
       }
     });
 
-    // حساب الدين الصافي المتبقي لكل موزع (إجمالي المبيعات - السدادات) بدقة مطابقة تماماً
+    // مطابقة حساب الدين الصافي تماماً لمنطق صفحة الموزعين
     Object.keys(map).forEach(id => {
       const dist = map[id];
-      dist.remainingDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
+      const calculatedDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
+      if (dist.remainingDebt === 0 && calculatedDebt > 0) {
+        dist.remainingDebt = calculatedDebt;
+      }
     });
 
     setTotalNetworkSalesCount(netSalesCount);
@@ -178,7 +185,7 @@ export default function ReportsPage() {
           </div>
 
           {busy && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>جاري التحميل...</div>}
-          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات مبيعات أو موزعين متاحة</div>}
+          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات متاحة</div>}
 
           {!busy && rows.map((r, i) => (
             <div
