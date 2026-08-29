@@ -15,7 +15,7 @@ function formatNumericDate(dateString) {
 
 export default function SalesPage() {
   const { profile, loading } = useProfile('distributor');
-  const [sold, setSold] = useState([]);
+  const [salesLog, setSalesLog] = useState([]);
   const [myCards, setMyCards] = useState([]);
   const [payments, setPayments] = useState([]);
 
@@ -29,16 +29,15 @@ export default function SalesPage() {
   async function loadData() {
     if (!profile) return;
 
-    // 1. جلب كافة الكروت المباعة للموزع
-    const { data: soldList } = await supabase
-      .from('cards')
-      .select('*, packages(name, price)')
-      .eq('assigned_to', profile.id)
-      .eq('status', 'sold');
+    // 1. جلب كافة سجلات المبيعات من الأرشيف الدائم (sales_log) لضمان عدم الحذف أو التصفير
+    const { data: salesList } = await supabase
+      .from('sales_log')
+      .select('*')
+      .eq('distributor_id', profile.id);
 
-    setSold((soldList || []).sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
+    setSalesLog((salesList || []).sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
 
-    // 2. جلب المخزون الحالي المتبقي لدى الموزع
+    // 2. جلب المخزون الحالي المتبقي لدى الموزع (من الكروت غير المباعة فقط)
     const { data: inventoryList } = await supabase
       .from('cards')
       .select('*, packages(name, price)')
@@ -58,17 +57,17 @@ export default function SalesPage() {
 
   useEffect(() => { if (profile) loadData(); }, [profile]);
 
-  const filteredSold = useMemo(() => {
-    return sold.filter(c => c.sold_at && c.sold_at.startsWith(selectedMonth));
-  }, [sold, selectedMonth]);
+  const filteredSales = useMemo(() => {
+    return salesLog.filter(s => s.sold_at && s.sold_at.startsWith(selectedMonth));
+  }, [salesLog, selectedMonth]);
 
-  // أ. حسابات التقرير الشهري المختار
-  const monthlyRevenue = filteredSold.reduce((sum, card) => sum + (card.packages?.price || 0), 0);
+  // أ. حسابات التقرير الشهري المختار من الأرشيف
+  const monthlyRevenue = filteredSales.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const monthlyCommission = monthlyRevenue * 0.10;
   const monthlyNetDue = monthlyRevenue - monthlyCommission;
 
-  // ب. الحسابات التراكمية الشاملة (المبلغ الصافي المتبقي)
-  const totalAllTimeRevenue = sold.reduce((sum, card) => sum + (card.packages?.price || 0), 0);
+  // ب. الحسابات التراكمية الشاملة من الأرشيف (صندوق العهدة الحقيقي)
+  const totalAllTimeRevenue = salesLog.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
   const totalAllTimeNetDue = totalAllTimeRevenue * 0.90; // مستحقات المدير 90%
   const totalPaid = payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0); // مجموع المسدد
   const remainingDebt = Math.max(0, totalAllTimeNetDue - totalPaid); // المبلغ الصافي المتبقي حالياً
@@ -77,14 +76,14 @@ export default function SalesPage() {
 
   const salesByPackage = useMemo(() => {
     const data = {};
-    filteredSold.forEach((c) => {
-      const name = c.packages?.name || 'غير محدد';
+    filteredSales.forEach((item) => {
+      const name = item.package_name || 'غير محدد';
       if (!data[name]) data[name] = { count: 0, revenue: 0 };
       data[name].count += 1;
-      data[name].revenue += (c.packages?.price || 0);
+      data[name].revenue += (Number(item.price) || 0);
     });
     return data;
-  }, [filteredSold]);
+  }, [filteredSales]);
 
   if (loading) return null;
 
@@ -135,7 +134,7 @@ export default function SalesPage() {
         <div style={{ background: remainingDebt > 0 ? '#1E293B' : '#0F172A', color: '#FFFFFF', padding: 20, borderRadius: 18, marginBottom: 20, boxShadow: '0 4px 14px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div>
-              <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 700 }}>صندوق العهدة الحقيقي (التراكمي)</span>
+              <span style={{ fontSize: 12, color: '#94A3B8', fontWeight: 700 }}>صندوق العهدة الحقيقي (التراكمي من الأرشيف)</span>
               <h3 style={{ margin: '2px 0 0 0', fontSize: 15, color: '#F8FAFC' }}>إجمالي الدين المطلوب تسليمه للمدير حالياً</h3>
             </div>
             <span style={{ background: remainingDebt > 0 ? '#EF4444' : '#10B981', color: '#FFFFFF', fontSize: 11, fontWeight: 800, padding: '4px 10px', borderRadius: 20 }}>
@@ -143,7 +142,6 @@ export default function SalesPage() {
             </span>
           </div>
 
-          {/* الرقم المتبقي الصافي المباشر فقط */}
           <div style={{ fontSize: 32, fontWeight: 900, color: remainingDebt > 0 ? '#F87171' : '#34D399', marginTop: 10 }}>
             {remainingDebt.toLocaleString()} <span style={{ fontSize: 14, color: '#94A3B8' }}>ر.ي</span>
           </div>
@@ -204,20 +202,20 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* 5. سجل المبيعات المفصل بالتواريخ الرقمية */}
+        {/* 5. سجل المبيعات المفصل من الأرشيف */}
         <div className="panel">
-          <h3>سجل المبيعات المفصل</h3>
-          {filteredSold.length === 0 && (
-            <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا يوجد سجل مبيعات</div>
+          <h3>سجل المبيعات المفصل (الأرشيف الدائم)</h3>
+          {filteredSales.length === 0 && (
+            <div style={{ fontSize: 13, color: 'var(--ink-soft)', padding: '10px 0' }}>لا يوجد سجل مبيعات لهذا الشهر</div>
           )}
-          {filteredSold.map((c) => (
-            <div className="timer-row" key={c.id}>
+          {filteredSales.map((item) => (
+            <div className="timer-row" key={item.id || item.sold_at}>
               <div>
-                <div className="tcode mono">{c.code}</div>
-                <div className="tpkg">{c.packages?.name}</div>
+                <div className="tpkg" style={{ fontWeight: 800, color: '#0F172A' }}>{item.package_name}</div>
+                <div style={{ fontSize: 12, color: '#64748B' }}>القيمة: {Number(item.price).toLocaleString()} ر.ي</div>
               </div>
               <div className="tleft mono" style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>
-                {formatNumericDate(c.sold_at)}
+                {formatNumericDate(item.sold_at)}
               </div>
             </div>
           ))}
