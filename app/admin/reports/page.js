@@ -30,19 +30,18 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    // 1. جلب الموزعين، الباقات، والسدادات لجميع الموزعين
+    // جلب جميع الموزعين، الباقات، والسدادات بدون شروط معقدة
     const [{ data: distributors }, { data: packages }, { data: payments }] = await Promise.all([
-      supabase.from('profiles').select('id, full_name').eq('role', 'distributor').eq('status', 'approved'),
+      supabase.from('profiles').select('id, full_name').eq('role', 'distributor'),
       supabase.from('packages').select('id, price'),
       supabase.from('payments').select('distributor_id, amount')
     ]);
 
-    // 2. جلب الكروت ذات الصلة مباشرة
+    // جلب جميع الكروت المسندة للموزعين
     const { data: cards, error } = await supabase
       .from('cards')
       .select('id, assigned_to, status, updated_at, created_at, package_id, price')
-      .not('assigned_to', 'is', null)
-      .in('status', ['sold', 'with_distributor']);
+      .not('assigned_to', 'is', null);
 
     if (error) {
       console.error('Error fetching cards:', error);
@@ -53,7 +52,6 @@ export default function ReportsPage() {
       pkgMap[p.id] = Number(p.price || 0);
     });
 
-    // تجميع السدادات لكل موزع (لكل الأوقات)
     const paymentsMap = {};
     (payments || []).forEach((p) => {
       paymentsMap[p.distributor_id] = (paymentsMap[p.distributor_id] || 0) + Number(p.amount || 0);
@@ -82,13 +80,12 @@ export default function ReportsPage() {
       const cardPrice = Number(c.price || pkgMap[c.package_id] || 0);
       const cardStatus = c.status;
 
-      if (cardStatus === 'with_distributor') {
+      if (cardStatus === 'with_distributor' || cardStatus === 'available' || !cardStatus) {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
       }
 
-      if (cardStatus === 'sold') {
-        // حساب إجمالي المبيعات الكلي (لكل الأوقات) لكل موزع لحساب الدين بدقة مطابقة لصفحة الموزعين
+      if (cardStatus === 'sold' || cardStatus === 'used') {
         const adminNetPriceAllTime = cardPrice * 0.90;
         map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
@@ -106,7 +103,6 @@ export default function ReportsPage() {
       }
     });
 
-    // حساب الدين الصافي المتبقي لكل موزع (إجمالي صافي مبيعات الإدارة - إجمالي السدادات المقبوضة)
     Object.keys(map).forEach(id => {
       const dist = map[id];
       dist.remainingDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
@@ -184,7 +180,7 @@ export default function ReportsPage() {
           </div>
 
           {busy && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>جاري التحميل...</div>}
-          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات مبيعات خلال هذه الفترة</div>}
+          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات موزعين أو مبيعات متاحة</div>}
 
           {!busy && rows.map((r, i) => (
             <div
