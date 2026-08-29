@@ -32,11 +32,17 @@ export default function ReportsPage() {
       filterTime = d.getTime();
     }
 
-    const [{ data: distributors }, { data: allCards }, { data: payments }] = await Promise.all([
+    const [{ data: distributors }, { data: packages }, { data: allCards }, { data: payments }] = await Promise.all([
       supabase.from('profiles').select('*').eq('role', 'distributor'),
-      supabase.from('cards').select('assigned_to, status, updated_at, created_at, packages(price)').not('assigned_to', 'is', null),
+      supabase.from('packages').select('id, price'),
+      supabase.from('cards').select('id, assigned_to, status, updated_at, created_at, price, package_id, packages(price)').not('assigned_to', 'is', null),
       supabase.from('payments').select('distributor_id, amount')
     ]);
+
+    const pkgMap = {};
+    (packages || []).forEach((p) => {
+      pkgMap[p.id] = Number(p.price || 0);
+    });
 
     const paymentsMap = {};
     (payments || []).forEach((p) => {
@@ -45,15 +51,15 @@ export default function ReportsPage() {
 
     const map = {};
     (distributors || []).forEach((d) => {
-      map[d.id] = { 
-        name: d.full_name, 
-        heldCount: 0, 
-        heldValue: 0, 
-        salesCount: 0, 
+      map[d.id] = {
+        name: d.full_name || 'موزع',
+        heldCount: 0,
+        heldValue: 0,
+        salesCount: 0,
         salesValue: 0,
         totalSalesAllTime: 0,
         totalPaid: paymentsMap[d.id] || 0,
-        remainingDebt: Number(d.debt) || 0
+        remainingDebt: 0
       };
     });
 
@@ -63,21 +69,21 @@ export default function ReportsPage() {
     (allCards || []).forEach((c) => {
       if (!map[c.assigned_to]) return;
 
-      const cardPrice = Number(c.packages?.price || 0);
+      const cardPrice = Number(c.price || c.packages?.price || pkgMap[c.package_id] || 0);
       const st = (c.status || '').toLowerCase();
 
-      if (st === 'with_distributor' || st === 'available' || st === '') {
+      const isHeld = st === 'with_distributor' || st === 'available' || st === 'new' || st === '';
+
+      if (isHeld) {
         map[c.assigned_to].heldCount += 1;
         map[c.assigned_to].heldValue += cardPrice;
-      }
-
-      if (st === 'sold' || st === 'used' || st === 'expired' || st === 'active') {
+      } else {
         const adminNetPriceAllTime = cardPrice * 0.90;
         map[c.assigned_to].totalSalesAllTime += adminNetPriceAllTime;
 
-        const soldDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
+        const actionDate = new Date(c.updated_at || c.created_at || Date.now()).getTime();
 
-        if (!filterTime || soldDate >= filterTime) {
+        if (filter === 'all' || !filterTime || actionDate >= filterTime) {
           map[c.assigned_to].salesCount += 1;
           map[c.assigned_to].salesValue += adminNetPriceAllTime;
 
@@ -90,9 +96,7 @@ export default function ReportsPage() {
     Object.keys(map).forEach(id => {
       const dist = map[id];
       const calculatedDebt = Math.max(0, Math.round(dist.totalSalesAllTime - dist.totalPaid));
-      if (calculatedDebt > 0) {
-        dist.remainingDebt = calculatedDebt;
-      }
+      dist.remainingDebt = calculatedDebt;
     });
 
     setTotalNetworkSalesCount(netSalesCount);
@@ -114,34 +118,37 @@ export default function ReportsPage() {
   return (
     <div className="app">
       <Sidebar role="admin" active="/admin/reports" name={profile?.full_name} />
-      <div className="main">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
+      <div className="main" style={{ paddingBottom: '40px' }}>
+        
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
           <div>
-            <h1>التقارير الشاملة</h1>
-            <p className="greet">مقارنة أداء الموزعين — الكروت الموجودة عندهم، المبيعات الفعلية، والمستحقات (الدين الصافي)</p>
+            <h1 style={{ fontSize: '24px', fontWeight: 900, color: '#0F172A', marginBottom: '4px' }}>التقارير الشاملة</h1>
+            <p style={{ fontSize: '13.5px', color: '#64748B', fontWeight: 600 }}>مقارنة أداء الموزعين، الكروت الحالية، المبيعات الفعلية، والمستحقات المالية بدقة تامة</p>
           </div>
           <button
             onClick={() => window.print()}
             className="no-print"
             style={{
-              padding: '10px 18px', borderRadius: '12px', border: '1.5px solid var(--line)',
-              background: '#fff', color: 'var(--ink)', fontWeight: 800, fontSize: '13px',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: 'var(--shadow)'
+              padding: '10px 18px', borderRadius: '12px', border: '1px solid #CBD5E1',
+              background: '#FFFFFF', color: '#0F172A', fontWeight: 800, fontSize: '13px',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
             }}
           >
             🖨️ طباعة / حفظ PDF
           </button>
         </div>
 
-        <div className="no-print" style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <div className="no-print" style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
           {['all', 'month', 'week'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               style={{
-                padding: '9px 18px', borderRadius: 12, border: 'none', fontWeight: 800, fontSize: 12.5, cursor: 'pointer',
-                background: filter === f ? 'linear-gradient(120deg, #0F766E, #14B8A6)' : '#F3F8F6',
-                color: filter === f ? '#fff' : '#0F766E',
+                padding: '10px 20px', borderRadius: '12px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer',
+                background: filter === f ? 'linear-gradient(135deg, #0F766E, #14B8A6)' : '#F1F5F9',
+                color: filter === f ? '#FFFFFF' : '#475569',
+                boxShadow: filter === f ? '0 4px 12px rgba(20, 184, 166, 0.25)' : 'none',
+                transition: 'all 0.2s ease'
               }}
             >
               {filterLabel[f]}
@@ -149,59 +156,75 @@ export default function ReportsPage() {
           ))}
         </div>
 
-        <div className="grid-stats" style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-          <div className="stat" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>إجمالي الكروت المباعة ({filterLabel[filter]})</div>
-            <div className="value" style={{ fontSize: '20px', fontWeight: 900, color: '#0F766E', marginTop: '6px' }}>{totalNetworkSalesCount} كرت</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>إجمالي الكروت المباعة ({filterLabel[filter]})</div>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F766E' }}>{totalNetworkSalesCount} <span style={{ fontSize: '15px', fontWeight: 700 }}>كرت</span></div>
           </div>
-          <div className="stat" style={{ background: '#fff', padding: '16px', borderRadius: '12px', border: '1px solid var(--line)' }}>
-            <div className="label" style={{ fontSize: '12px', color: 'var(--ink-soft)', fontWeight: 700 }}>صافي المبلغ المحقق للمدير 90% ({filterLabel[filter]})</div>
-            <div className="value mono" style={{ fontSize: '20px', fontWeight: 900, color: '#10B981', marginTop: '6px' }}>{formatNum(totalNetworkSalesValue)} ريال</div>
+          <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>صافي المبلغ المحقق للمدير 90% ({filterLabel[filter]})</div>
+            <div style={{ fontSize: '24px', fontWeight: 900, color: '#10B981' }}>{formatNum(totalNetworkSalesValue)} <span style={{ fontSize: '15px', fontWeight: 700 }}>ريال</span></div>
           </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-head">
-            <h3>مقارنة أداء الموزعين والمستحقات المالية</h3>
-            <span className="muted">{rows.length} موزع</span>
+        <div style={{ background: '#FFFFFF', borderRadius: '20px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)', overflow: 'hidden' }}>
+          <div style={{ padding: '18px 24px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 900, color: '#0F172A', margin: 0 }}>مقارنة أداء الموزعين والمستحقات المالية</h3>
+            <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#64748B', background: '#E2E8F0', padding: '4px 10px', borderRadius: '20px' }}>{rows.length} موزع</span>
           </div>
 
-          {busy && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>جاري التحميل...</div>}
-          {!busy && rows.length === 0 && <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>لا توجد بيانات متاحة</div>}
+          {busy && <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '14px' }}>جاري تحميل البيانات الحية بدقة...</div>}
+          {!busy && rows.length === 0 && <div style={{ padding: '30px', textAlign: 'center', color: '#64748B', fontWeight: 700, fontSize: '14px' }}>لا توجد بيانات متاحة للموزعين حالياً</div>}
 
-          {!busy && rows.map((r, i) => (
-            <div
-              key={i}
-              style={{
-                borderTop: i !== 0 ? '1px solid var(--line)' : 'none',
-                padding: '14px 4px',
-                display: 'flex', flexDirection: 'column', gap: 8,
-              }}
-            >
-              <div style={{ fontWeight: 800, fontSize: 14.5, color: '#1e1b4b' }}>{r.name}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>كروت لديه الآن (غير مباعة)</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, marginTop: '2px' }}>
-                    {r.heldCount} كرت — {formatNum(r.heldValue)} ريال
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {!busy && rows.map((r, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: '20px 24px',
+                  borderTop: i !== 0 ? '1px solid #F1F5F9' : 'none',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  background: '#FFFFFF'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontWeight: 900, fontSize: '16px', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#0F766E', display: 'inline-block' }}></span>
+                    {r.name}
                   </div>
                 </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#10B981', marginTop: '2px' }}>
-                    {r.salesCount} كرت — {formatNum(r.salesValue)} ريال
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px', background: '#F8FAFC', padding: '14px 18px', borderRadius: '14px', border: '1px solid #F1F5F9' }}>
+                  
+                  <div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>كروت لديه الآن (في المخزن)</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#0F172A' }}>
+                      {r.heldCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>كرت</span> — <span style={{ color: '#0F766E' }}>{formatNum(r.heldValue)} ريال</span>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--ink-soft)', fontWeight: 700 }}>المبلغ الصافي المتبقي (الدين)</div>
-                  <div style={{ fontSize: 13, fontWeight: 900, color: r.remainingDebt > 0 ? '#dc2626' : '#059669', marginTop: '2px' }}>
-                    {formatNum(r.remainingDebt)} ريال
+
+                  <div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
+                    <div style={{ fontSize: '14px', fontWeight: 800, color: '#10B981' }}>
+                      {r.salesCount} <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B' }}>كرت</span> — {formatNum(r.salesValue)} ريال
+                    </div>
                   </div>
+
+                  <div>
+                    <div style={{ fontSize: '11.5px', color: '#64748B', fontWeight: 700, marginBottom: '4px' }}>المبلغ الصافي المتبقي (الدين)</div>
+                    <div style={{ fontSize: '14.5px', fontWeight: 900, color: r.remainingDebt > 0 ? '#DC2626' : '#059669' }}>
+                      {formatNum(r.remainingDebt)} <span style={{ fontSize: '12px', fontWeight: 700 }}>ريال</span>
+                    </div>
+                  </div>
+
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+
       </div>
     </div>
   );
