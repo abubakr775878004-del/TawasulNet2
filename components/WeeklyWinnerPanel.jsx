@@ -12,6 +12,7 @@ export default function DistributorWeeklyWinner() {
 
   useEffect(() => {
     async function checkRoleAndWinners() {
+      // 1. التحقق من صلاحيات المدير
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
@@ -24,6 +25,7 @@ export default function DistributorWeeklyWinner() {
         }
       }
 
+      // 2. جلب الفائزين والتحقق من وقت القرعة (خلال آخر 30 ساعة)
       fetchWinnersAndCheckTime();
     }
 
@@ -54,15 +56,18 @@ export default function DistributorWeeklyWinner() {
     }
   }
 
-  // دالة الإرسال مع دعم الاختبار الفوري في حال لم تكن هناك نتائج مخزنة
+  // دالة إرسال إشعار النتائج الرسمية للفائزين
   async function handleSendNotificationOnly() {
+    if (winners.length === 0) {
+      setMessage('⚠️ لا توجد نتائج فائزين لإرسالها حالياً');
+      return;
+    }
+
     setLoading(true);
     setMessage('');
 
     try {
-      const text = winners.length > 0 
-        ? `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين:\n\n🥇 الأول: ${winners[0]?.customer_name}\n🥈 الثاني: ${winners[1]?.customer_name}\n🥉 الثالث: ${winners[2]?.customer_name}`
-        : `🧪 رسالة اختبار من لوحة تحكم تواصل: نظام إشعارات تيليجرام يعمل بنجاح تام! ✅`;
+      const text = `🎉🏆 نتائج السحب الأسبوعي - تواصل\n\nمبروك لعملائنا الفائزين (عبر موقعنا وموزعينا):\n\n🥇 المركز الأول: ${winners[0]?.customer_name || '—'} (الموزع: ${winners[0]?.distributor_name || '—'})\n🥈 المركز الثاني: ${winners[1]?.customer_name || '—'} (الموزع: ${winners[1]?.distributor_name || '—'})\n🥉 المركز الثالث: ${winners[2]?.customer_name || '—'} (الموزع: ${winners[2]?.distributor_name || '—'})\n\nألف مبروك، وترقبوا السحب القادم! 🚀`;
 
       const res = await fetch('/api/telegram', {
         method: 'POST',
@@ -80,7 +85,7 @@ export default function DistributorWeeklyWinner() {
       }
     } catch (err) {
       console.error(err);
-      setMessage('❌ حدث خطأ أثناء الاتصال بالخادم');
+      setMessage('❌ حدث خطأ أثناء إرسال الإشعار');
     } finally {
       setLoading(false);
     }
