@@ -14,7 +14,7 @@ function formatNumericDate(dateString) {
   return `${year}/${month}/${day}`;
 }
 
-export default function SalesPage() {
+export default function DistributorSalesPage() {
   const { profile, loading } = useProfile('distributor');
   const [soldCards, setSoldCards] = useState([]);
   const [myCards, setMyCards] = useState([]);
@@ -28,50 +28,39 @@ export default function SalesPage() {
   async function loadData() {
     if (!profile) return;
 
-    // 1. جلب الكروت المباعة مباشرة من جدول cards (المصدر الأساسي للمبيعات)
-    const { data: cardsData } = await supabase
+    // جلب الكروت المباعة مباشرة من جدول cards بناءً على طريقة النظام المعتمدة
+    const { data: cardsData, error } = await supabase
       .from('cards')
-      .select('id, updated_at, status, assigned_to, packages(name, price)')
+      .select('id, sold_at, packages(name, price)')
       .eq('assigned_to', profile.id)
       .eq('status', 'sold');
 
-    // 2. جلب سجلات الأرشيف (sales_log) كاحتياطي دائم
-    const { data: salesList } = await supabase
-      .from('sales_log')
-      .select('*')
-      .eq('distributor_id', profile.id);
-
-    // دمج البيانات لضمان عدم ظهور أصفار أبداً وتوحيد شكل العرض
-    let combinedSales = [];
-    if (cardsData && cardsData.length > 0) {
-      combinedSales = cardsData.map(c => ({
-        id: c.id,
-        package_name: c.packages?.name || 'باقة كرت',
-        price: Number(c.packages?.price || 0),
-        sold_at: c.updated_at || new Date().toISOString()
-      }));
-    } else if (salesList && salesList.length > 0) {
-      combinedSales = salesList.map(s => ({
-        id: s.id,
-        package_name: s.package_name || 'باقة كرت',
-        price: Number(s.price || 0),
-        sold_at: s.sold_at || s.created_at || new Date().toISOString()
-      }));
+    if (error) {
+      console.error('Error loading sold cards:', error);
     }
 
-    setSoldCards(combinedSales.sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
+    const formattedSales = (cardsData || []).map(c => ({
+      id: c.id,
+      package_name: c.packages?.name || 'باقة كرت',
+      price: Number(c.packages?.price || 0),
+      sold_at: c.sold_at || new Date().toISOString()
+    }));
 
-    // 3. جلب المخزون الحالي (الكروت المتبقية بعهدتك غير المباعة)
+    setSoldCards(formattedSales.sort((a, b) => new Date(b.sold_at) - new Date(a.sold_at)));
+
+    // جلب المخزون الحالي المتبقي لدى الموزع
     const { data: inventoryList } = await supabase
       .from('cards')
       .select('*, packages(name, price)')
       .eq('assigned_to', profile.id)
-      .in('status', ['with_distributor', 'assigned']);
+      .eq('status', 'with_distributor');
 
     setMyCards(inventoryList || []);
   }
 
-  useEffect(() => { if (profile) loadData(); }, [profile]);
+  useEffect(() => { 
+    if (profile) loadData(); 
+  }, [profile]);
 
   const filteredSales = useMemo(() => {
     return soldCards.filter(s => {
@@ -80,29 +69,34 @@ export default function SalesPage() {
     });
   }, [soldCards, selectedMonth]);
 
-  const monthlyRevenue = filteredSales.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-  const monthlyCommission = monthlyRevenue * 0.10;
-  const remainingInventoryValue = myCards.reduce((sum, card) => sum + (Number(card.packages?.price) || 0), 0);
+  const monthlyRevenue = filteredSales.reduce((sum, item) => sum + item.price, 0);
+  const monthlyCommission = monthlyRevenue * 0.10; // عمولة الموزع 10%
+  const remainingInventoryValue = myCards.reduce((sum, card) => sum + Number(card.packages?.price || 0), 0);
 
   const salesByPackage = useMemo(() => {
     const data = {};
     filteredSales.forEach((item) => {
-      const name = item.package_name || 'غير محدد';
+      const name = item.package_name;
       if (!data[name]) data[name] = { count: 0, revenue: 0 };
       data[name].count += 1;
-      data[name].revenue += Number(item.price || 0);
+      data[name].revenue += item.price;
     });
     return data;
   }, [filteredSales]);
 
-  if (loading) return null;
+  if (loading || !profile) return null;
 
   return (
     <div className="app">
-      <Sidebar role="distributor" active="/distributor/sales" name={profile?.full_name} />
+      <Sidebar role="distributor" active="/distributor/sales" name={profile.full_name} />
       <div className="main">
-        <h1>سجل المبيعات والتقارير</h1>
-        
+        <div className="topbar">
+          <div>
+            <h1>سجل المبيعات والتقارير</h1>
+            <div className="greet">متابعة أرباحك ومبيعاتك الشهرية بدقة</div>
+          </div>
+        </div>
+
         {/* اختيار الشهر والسنة */}
         <div style={{ marginBottom: 20, background: '#FFFFFF', padding: 16, borderRadius: 16, border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
           <label style={{ fontSize: 13, fontWeight: 800, color: '#334155', display: 'block', marginBottom: 8 }}>
@@ -142,11 +136,11 @@ export default function SalesPage() {
 
         {/* بطاقات الإحصائيات الشهرية */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div style={{ background: 'linear-gradient(135deg, #F3F0FB 0%, #EDE9FE 100%)', padding: '16px', borderRadius: 16, border: '1px solid #DDD6FE', boxShadow: '0 2px 8px rgba(109,40,217,0.05)' }}>
+          <div style={{ background: 'linear-gradient(135deg, #F3F0FB 0%, #EDE9FE 100%)', padding: '16px', borderRadius: 16, border: '1px solid #DDD6FE' }}>
             <div style={{ fontSize: 12, color: '#6D28D9', fontWeight: 800 }}>مبيعات شهر ({selectedYear}/{selectedMonthNum})</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#4C1D95', marginTop: 4 }}>{monthlyRevenue.toLocaleString()} <span style={{ fontSize: 12 }}>ر.ي</span></div>
           </div>
-          <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)', padding: '16px', borderRadius: 16, border: '1px solid #A7F3D0', boxShadow: '0 2px 8px rgba(5,150,105,0.05)' }}>
+          <div style={{ background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)', padding: '16px', borderRadius: 16, border: '1px solid #A7F3D0' }}>
             <div style={{ fontSize: 12, color: '#047857', fontWeight: 800 }}>عمولتك للشهر (10%)</div>
             <div style={{ fontSize: 20, fontWeight: 900, color: '#059669', marginTop: 4 }}>{monthlyCommission.toLocaleString()} <span style={{ fontSize: 12 }}>ر.ي</span></div>
           </div>
