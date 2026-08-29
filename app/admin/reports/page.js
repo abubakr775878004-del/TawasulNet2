@@ -20,16 +20,33 @@ export default function ReportsPage() {
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
 
+  // دالة مساعدة لتنسيق التاريخ بشكل هجري أو ميلادي (سنة-شهر-يوم)
+  const formatDateString = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // حساب التواريخ الفعلية المعروضة على الأزرار لتوضيح النطاق بدقة
+  const now = new Date();
+  const date30DaysAgo = new Date(); date30DaysAgo.setDate(now.getDate() - 30);
+  const date7DaysAgo = new Date(); date7DaysAgo.setDate(now.getDate() - 7);
+
+  const filterConfig = {
+    all: { label: 'جميع الأوقات (الكل)', sub: 'من البداية حتى اليوم' },
+    month: { label: 'آخر 30 يوماً', sub: `${formatDateString(date30DaysAgo)} إلى ${formatDateString(now)}` },
+    week: { label: 'آخر 7 أيام', sub: `${formatDateString(date7DaysAgo)} إلى ${formatDateString(now)}` }
+  };
+
   async function loadReport() {
     setBusy(true);
 
     let filterTime = null;
     if (filter === 'month') {
-      const d = new Date(); d.setDate(d.getDate() - 30);
-      filterTime = d.getTime();
+      filterTime = date30DaysAgo.getTime();
     } else if (filter === 'week') {
-      const d = new Date(); d.setDate(d.getDate() - 7);
-      filterTime = d.getTime();
+      filterTime = date7DaysAgo.getTime();
     }
 
     const [{ data: distributors }, { data: allCards }, { data: payments }] = await Promise.all([
@@ -106,8 +123,6 @@ export default function ReportsPage() {
 
   if (loading) return null;
 
-  const filterLabel = { all: 'الكل', month: 'آخر 30 يومًا', week: 'آخر 7 أيام' };
-
   return (
     <div className="app">
       <Sidebar role="admin" active="/admin/reports" name={profile?.full_name} />
@@ -131,31 +146,37 @@ export default function ReportsPage() {
           </button>
         </div>
 
-        <div className="no-print" style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {/* خانة الأزرار العلوية المحسنة بتصميم يوضح التواريخ والفترات بدقة */}
+        <div className="no-print" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '24px' }}>
           {['all', 'month', 'week'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
               style={{
-                padding: '10px 20px', borderRadius: '12px', border: 'none', fontWeight: 800, fontSize: '13px', cursor: 'pointer',
-                background: filter === f ? 'linear-gradient(135deg, #0F766E, #14B8A6)' : '#F1F5F9',
-                color: filter === f ? '#FFFFFF' : '#475569',
-                boxShadow: filter === f ? '0 4px 12px rgba(20, 184, 166, 0.25)' : 'none',
+                padding: '12px 16px', borderRadius: '14px', border: filter === f ? '2px solid #0F766E' : '1px solid #E2E8F0',
+                textAlign: 'right', cursor: 'pointer',
+                background: filter === f ? 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' : '#FFFFFF',
+                boxShadow: filter === f ? '0 4px 12px rgba(15, 118, 110, 0.1)' : '0 1px 2px rgba(0,0,0,0.02)',
                 transition: 'all 0.2s ease'
               }}
             >
-              {filterLabel[f]}
+              <div style={{ fontSize: '14px', fontWeight: 900, color: filter === f ? '#0F766E' : '#0F172A', marginBottom: '4px' }}>
+                {filterConfig[f].label}
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: filter === f ? '#115E59' : '#64748B', fontFamily: 'monospace' }}>
+                {filterConfig[f].sub}
+              </div>
             </button>
           ))}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
           <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>إجمالي الكروت المباعة ({filterLabel[filter]})</div>
+            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>إجمالي الكروت المباعة ({filterConfig[filter].label})</div>
             <div style={{ fontSize: '24px', fontWeight: 900, color: '#0F766E' }}>{totalNetworkSalesCount} <span style={{ fontSize: '15px', fontWeight: 700 }}>كرت</span></div>
           </div>
           <div style={{ background: '#FFFFFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>صافي المبلغ المحقق للمدير 90% ({filterLabel[filter]})</div>
+            <div style={{ fontSize: '12.5px', color: '#64748B', fontWeight: 700, marginBottom: '8px' }}>صافي المبلغ المحقق للمدير 90% ({filterConfig[filter].label})</div>
             <div style={{ fontSize: '24px', fontWeight: 900, color: '#10B981' }}>{formatNum(totalNetworkSalesValue)} <span style={{ fontSize: '15px', fontWeight: 700 }}>ريال</span></div>
           </div>
         </div>
@@ -189,10 +210,8 @@ export default function ReportsPage() {
                   </div>
                 </div>
 
-                {/* تصميم شبكي محسّن وبارز وواضح لكل حقل */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px' }}>
                   
-                  {/* كروت المخزن */}
                   <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '12px 16px' }}>
                     <div style={{ fontSize: '11px', color: '#64748B', fontWeight: 700, marginBottom: '6px' }}>📦 كروت لديه الآن (في المخزن)</div>
                     <div style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
@@ -202,9 +221,8 @@ export default function ReportsPage() {
                     </div>
                   </div>
 
-                  {/* المبيعات الفعلية */}
                   <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', padding: '12px 16px' }}>
-                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, marginBottom: '6px' }}>📈 المبيعات الفعلية / الصافي ({filterLabel[filter]})</div>
+                    <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, marginBottom: '6px' }}>📈 المبيعات الفعلية ({filterConfig[filter].label})</div>
                     <div style={{ fontSize: '15px', fontWeight: 800, color: '#10B981', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
                       <span style={{ fontWeight: 900 }}>{r.salesCount}</span> <span style={{ fontSize: '11px', color: '#64748B' }}>كرت</span>
                       <span style={{ fontSize: '12px', color: '#86EFAC' }}>|</span>
@@ -212,7 +230,6 @@ export default function ReportsPage() {
                     </div>
                   </div>
 
-                  {/* المبلغ الصافي المتبقي (الدين) - تم جعله أكثر بروزاً ووضوحاً */}
                   <div style={{ 
                     background: r.remainingDebt > 0 ? '#FEF2F2' : '#F8FAFC', 
                     border: r.remainingDebt > 0 ? '1px solid #FCA5A5' : '1px solid #E2E8F0', 
