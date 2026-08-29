@@ -79,17 +79,21 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. جلب مبيعات الموزع من الأرشيف الدائم (sales_log) لحساب الدين المستحق للمدير بدقة
-      const { data: salesLogData, error: salesErr } = await supabase
-        .from('sales_log')
-        .select('price')
-        .eq('distributor_id', profile.id);
+      // 4. الحل الجذري: جلب جميع الكروت المباعة فعلياً من جدول cards لهذا الموزع لحساب إجمالي المبيعات الصحيح ودون الاعتماد على sales_log المفقود
+      const { data: soldCardsData, error: soldErr } = await supabase
+        .from('cards')
+        .select('packages(price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold');
 
-      if (salesErr) {
-        console.error('Error fetching sales log:', salesErr);
+      if (soldErr) {
+        console.error('Error fetching sold cards:', soldErr);
       }
 
-      const totalSalesRevenue = (salesLogData || []).reduce((sum, s) => sum + Number(s.price || 0), 0);
+      const totalSalesRevenue = (soldCardsData || []).reduce((sum, c) => {
+        return sum + Number(c.packages?.price || 0);
+      }, 0);
+
       const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
 
       // 5. جلب سدادات هذا الموزع المسجلة في جدول payments
@@ -104,7 +108,7 @@ export default function DistributorPage() {
 
       const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // حساب الدين المتبقي الصافي (إجمالي حصة المدير من مبيعات الأرشيف الدائم ناقص المدفوعات)
+      // حساب الدين المتبقي الصافي بدقة تامة من جدول cards المباشر
       const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
       setNetDebt(remainingDebt);
 
@@ -153,7 +157,7 @@ export default function DistributorPage() {
     try {
       const { data, error } = await supabase
         .from('cards')
-        .select('id, code')
+        .select('id, code, package_id, packages(price)')
         .eq('assigned_to', profile.id)
         .eq('package_id', pendingPackage.id)
         .eq('status', 'with_distributor')
@@ -169,12 +173,16 @@ export default function DistributorPage() {
 
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
+      const cardPrice = Number(card.packages?.price || 0);
 
+      const soldAtTimestamp = new Date().toISOString();
+
+      // 1. تحديث الكرت إلى مباع في جدول cards
       const { error: updateError } = await supabase
         .from('cards')
         .update({
           status: 'sold',
-          sold_at: new Date().toISOString(),
+          sold_at: soldAtTimestamp,
           customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
         })
         .eq('id', card.id);
@@ -185,6 +193,15 @@ export default function DistributorPage() {
         setRevealBusy(false);
         return;
       }
+
+      // 2. الحل الجذري المزدوج: إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة
+      await supabase.from('sales_log').insert({
+        distributor_id: profile.id,
+        card_id: card.id,
+        package_id: card.package_id,
+        price: cardPrice,
+        sold_at: soldAtTimestamp
+      });
 
       setRevealedCard({
         code: card.code,
