@@ -17,6 +17,9 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // حالة لتخزين المبلغ الصافي المستحق للمدير
+  const [netDebt, setNetDebt] = useState(0);
+
   const [pendingPackage, setPendingPackage] = useState(null);
   const [customerName, setCustomerName] = useState('');
 
@@ -30,6 +33,12 @@ export default function DistributorPage() {
   const [noteContent, setNoteContent] = useState('');
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
+
+  // دالة تنسيق الأرقام
+  const formatNum = (num) => {
+    const val = Math.round(Number(num) || 0);
+    return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
 
   async function load() {
     if (!profile) return;
@@ -69,6 +78,35 @@ export default function DistributorPage() {
         .limit(10);
 
       setRecentSales(salesData || []);
+
+      // 4. جلب مبيعات الموزع من الأرشيف الدائم (sales_log) لحساب الدين المستحق للمدير بدقة
+      const { data: salesLogData, error: salesErr } = await supabase
+        .from('sales_log')
+        .select('price')
+        .eq('distributor_id', profile.id);
+
+      if (salesErr) {
+        console.error('Error fetching sales log:', salesErr);
+      }
+
+      const totalSalesRevenue = (salesLogData || []).reduce((sum, s) => sum + Number(s.price || 0), 0);
+      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
+
+      // 5. جلب سدادات هذا الموزع المسجلة في جدول payments
+      const { data: paymentsData, error: payErr } = await supabase
+        .from('payments')
+        .select('amount')
+        .eq('distributor_id', profile.id);
+
+      if (payErr) {
+        console.error('Error fetching payments:', payErr);
+      }
+
+      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      // حساب الدين المتبقي الصافي (المدفوعات ناقص إجمالي حصة المدير من مبيعات الأرشيف الدائم)
+      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+      setNetDebt(remainingDebt);
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -454,33 +492,60 @@ export default function DistributorPage() {
           </div>
         )}
 
-        <div className="balance-card">
-          <div className="lbl">
-            رصيدك الحالي
-          </div>
-
-          <div className="amt">
-            {Number(profile.balance).toLocaleString(
-              'en-US'
-            )}{' '}
-            <span>ريال</span>
-          </div>
-
-          <div className="foot">
-            <div
-              style={{
-                fontSize: 11.5,
-                color: '#E3D6FF',
-              }}
-            >
-              كروت لديك الآن: {myCards.length}
+        {/* بطاقات الأرصدة والمستحقات المضافة حديثاً للموزع */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div className="balance-card" style={{ marginBottom: 0 }}>
+            <div className="lbl">
+              رصيدك الحالي بمخزنك
             </div>
 
-            <Link href="/distributor/request">
-              <button className="req-btn">
-                طلب كروت جديد
-              </button>
-            </Link>
+            <div className="amt">
+              {Number(profile.balance).toLocaleString(
+                'en-US'
+              )}{' '}
+              <span>ريال</span>
+            </div>
+
+            <div className="foot">
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: '#E3D6FF',
+                }}
+              >
+                كروت لديك الآن: {myCards.length}
+              </div>
+
+              <Link href="/distributor/request">
+                <button className="req-btn">
+                  طلب كروت جديد
+                </button>
+              </Link>
+            </div>
+          </div>
+
+          {/* بطاقة المبلغ الصافي المستحق للمدير */}
+          <div style={{
+            background: netDebt > 0 ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+            borderRadius: 20,
+            padding: 20,
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
+          }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
+                المبلغ الصافي المستحق للمدير
+              </div>
+              <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
+                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
+              {netDebt > 0 ? '⚠️ يوجد مبالغ متبقية لم تسدد بعد' : '✓ الحساب مسدد بالكامل'}
+            </div>
           </div>
         </div>
 
