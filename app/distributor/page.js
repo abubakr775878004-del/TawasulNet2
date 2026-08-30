@@ -74,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // حساب إجمالي الكروت المباعة مع خصم نسبة 10% للموزع
+      // 1. حساب إجمالي الكروت المباعة مع خصم نسبة 10%
       const { data: soldCardsData } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -85,10 +85,22 @@ export default function DistributorPage() {
         return sum + Number(item.packages?.price || 0);
       }, 0);
 
-      // تطبيق خصم 10% (صافي المبلغ للمدير بعد نسبة الموزع)
-      const discountedValue = totalSoldValue * 0.9;
+      const grossDebt = totalSoldValue * 0.9;
 
-      setNetDebt(Math.round(discountedValue));
+      // 2. جلب إجمالي المبالغ المسددة نقدياً من جدول السداد المرتبط بالمدير
+      const { data: paymentsData } = await supabase
+        .from('distributor_payments')
+        .select('amount')
+        .eq('distributor_id', profile.id);
+
+      const totalPaid = (paymentsData || []).reduce((sum, item) => {
+        return sum + Number(item.amount || 0);
+      }, 0);
+
+      // 3. الصافي المستحق الفعلي بعد خصم السدادات النقدية
+      const currentNetDebt = Math.max(0, Math.round(grossDebt - totalPaid));
+
+      setNetDebt(currentNetDebt);
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
