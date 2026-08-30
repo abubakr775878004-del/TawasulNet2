@@ -127,7 +127,7 @@ export default function DistributorPage() {
     setRevealError('');
 
     try {
-      // 1. جلب أول كرت متاح من هذه الباقة للموزع
+      // 1. جلب أول كرت متاح من هذه الباقة للموزع مع جلب سعر الباقة بشكل مضمون
       const { data, error } = await supabase
         .from('cards')
         .select('id, code, package_id, packages(price)')
@@ -148,7 +148,7 @@ export default function DistributorPage() {
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
       
-      // الحسبة: 90% للمدير (دين) و 10% للموزع
+      // الحسبة بدقة: 90% للمدير (دين) و 10% للموزع
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
@@ -169,24 +169,30 @@ export default function DistributorPage() {
         return;
       }
 
-      // 3. تحديث دين المدير مباشرة في جدول profiles (زيادة الدين بنسبة 90%)
-      const currentDebt = Number(netDebt || 0);
-      const newDebt = currentDebt + managerShare;
+      // 3. قراءة الدين الحالي مباشرة من قاعدة البيانات لضمان عدم حدوث تضارب في القيمة
+      const { data: currentDistProfile } = await supabase
+        .from('profiles')
+        .select('debt_balance, debt')
+        .eq('id', profile.id)
+        .single();
 
+      const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
+      const newTotalDebt = existingDebt + managerShare;
+
+      // تحديث الدين المباشر (زيادة الدين بمقدار حصة المدير 90%)
       const { error: profileError } = await supabase
         .from('profiles')
-        .update({ debt_balance: newDebt })
+        .update({ debt_balance: newTotalDebt })
         .eq('id', profile.id);
 
       if (profileError) {
-        // محاولة احتياطية في حال كان اسم العمود debt فقط
         await supabase
           .from('profiles')
-          .update({ debt: newDebt })
+          .update({ debt: newTotalDebt })
           .eq('id', profile.id);
       }
 
-      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ الحصص
+      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ الحصص بدقة
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
