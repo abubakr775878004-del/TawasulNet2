@@ -29,17 +29,18 @@ export default function DistributorsPage() {
 
   async function loadList() {
     setError('');
-    
-    // جلب قائمة الموزعين مع الحقول المستقلة تماماً (balance للرصيد و debt/debt_balance للدين)
+
+    // جلب قائمة الموزعين مع الحقول المستقلة تماماً
+    // balance للرصيد و debt/debt_balance للدين
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
       .eq('role', 'distributor')
       .order('created_at', { ascending: false });
 
-    if (loadError) { 
-      setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message); 
-      return; 
+    if (loadError) {
+      setError('تعذّر تحميل قائمة الموزعين: ' + loadError.message);
+      return;
     }
 
     if (!distributors || distributors.length === 0) {
@@ -56,7 +57,9 @@ export default function DistributorsPage() {
           .eq('status', 'with_distributor');
 
         // فصل الدين الصافي عن الرصيد بشكل قاطع
-        const permanentNetDebt = Number(dist.debt_balance ?? dist.debt ?? 0);
+        const permanentNetDebt = Number(
+          dist.debt_balance ?? dist.debt ?? 0
+        );
 
         return {
           ...dist,
@@ -68,24 +71,28 @@ export default function DistributorsPage() {
     );
 
     setList(listWithDetails);
-    
+
     const initialCards = {};
     const initialDebts = {};
-    listWithDetails.forEach((d) => { 
-      initialCards[d.id] = d.personal_card || ''; 
+
+    listWithDetails.forEach((d) => {
+      initialCards[d.id] = d.personal_card || '';
       initialDebts[d.id] = '';
     });
+
     setPersonalCards(initialCards);
     setDebts(initialDebts);
   }
 
-  useEffect(() => { 
-    if (profile) loadList(); 
+  useEffect(() => {
+    if (profile) loadList();
   }, [profile]);
 
   function requestConfirmation(type, id, name, amount) {
     const numericAmount = parseFloat(amount);
+
     if (!numericAmount || numericAmount <= 0) return;
+
     setConfirmModal({
       isOpen: true,
       type,
@@ -97,7 +104,11 @@ export default function DistributorsPage() {
 
   async function handleConfirmedAction() {
     const { type, distributorId, amount } = confirmModal;
-    setConfirmModal({ ...confirmModal, isOpen: false });
+
+    setConfirmModal({
+      ...confirmModal,
+      isOpen: false
+    });
 
     if (type === 'balance') {
       await executeAddBalance(distributorId, amount);
@@ -108,9 +119,9 @@ export default function DistributorsPage() {
 
   // تعديل شحن المخزون ليؤثر على الرصيد (balance) فقط بشكل مستقل
   async function executeAddBalance(id, amount) {
-    setError(''); 
+    setError('');
     setBusyId(id);
-    
+
     try {
       const { data: targetDist, error: fetchErr } = await supabase
         .from('profiles')
@@ -133,177 +144,374 @@ export default function DistributorsPage() {
 
       if (updateError) throw updateError;
 
-      setTopUps({ ...topUps, [id]: '' });
+      setTopUps({
+        ...topUps,
+        [id]: ''
+      });
+
       await loadList();
+
       alert('✓ تمت إضافة رصيد المخزون للموزع بنجاح');
 
     } catch (err) {
       console.error('Add balance error:', err);
-      setError('تعذّرت إضافة الرصيد: ' + (err.message || 'خطأ غير معروف'));
+
+      setError(
+        'تعذّرت إضافة الرصيد: ' +
+        (err.message || 'خطأ غير معروف')
+      );
     } finally {
       setBusyId(null);
     }
   }
 
-  // سداد الدين يؤثر على الدين (debt / debt_balance) فقط
-  async function executePayDebt(id, amount) {
-    setError(''); 
-    setBusyId(id);
-    
-    try {
-      const { data: targetDist, error: fetchErr } = await supabase
-        .from('profiles')
-        .select('debt_balance, debt')
-        .eq('id', id)
-        .single();
+  // =====================================================
+  // السداد النقدي
+  // =====================================================
+  // مهم:
+  // لا يتم تعديل profiles.debt مباشرة من الواجهة.
+  // يتم تسجيل السداد عبر RPC الرسمي:
+  // record_distributor_payment()
+  //
+  // الدالة تقوم داخلياً بـ:
+  // 1. تسجيل السداد في distributor_debt_transactions
+  // 2. تحديث debt
+  // 3. تحديث debt_balance
+  // =====================================================
 
-      if (fetchErr || !targetDist) {
-        throw new Error('تعذّر العثور على بيانات الموزع');
+  async function executePayDebt(id, amount) {
+    setError('');
+    setBusyId(id);
+
+    try {
+      const numericAmount = Number(amount);
+
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+        throw new Error('مبلغ السداد يجب أن يكون أكبر من صفر');
       }
 
-      const currentDebt = Number(targetDist.debt_balance ?? targetDist.debt ?? 0);
-      const newDebt = Math.max(0, currentDebt - amount);
+      // الحصول على المستخدم الحالي من جلسة Supabase
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
 
-      const { error: payError } = await supabase
-        .from('profiles')
-        .update({ 
-          debt_balance: newDebt,
-          debt: newDebt 
-        })
-        .eq('id', id);
+      if (userError || !user) {
+        throw new Error('يجب تسجيل الدخول قبل تسجيل السداد');
+      }
 
-      if (payError) throw payError;
+      // تسجيل السداد عبر الدالة المالية الرسمية
+      const { error: payError } = await supabase.rpc(
+        'record_distributor_payment',
+        {
+          p_distributor_id: id,
+          p_amount: numericAmount,
+          p_admin_id: user.id,
+          p_notes: 'سداد نقدي من لوحة الأدمن'
+        }
+      );
 
-      setDebts({ ...debts, [id]: '' });
+      if (payError) {
+        throw payError;
+      }
+
+      setDebts({
+        ...debts,
+        [id]: ''
+      });
+
       await loadList();
-      alert('✓ تم تسجيل السداد النقدي وخصمه من الدين بنجاح');
+
+      alert(
+        '✓ تم تسجيل السداد النقدي وتحديث الدين والدفتر المالي بنجاح'
+      );
 
     } catch (err) {
       console.error('Pay debt error:', err);
-      setError('تعذّر تسجيل عملية السداد: ' + (err.message || 'خطأ غير معروف'));
+
+      setError(
+        'تعذّر تسجيل عملية السداد: ' +
+        (err?.message || 'خطأ غير معروف')
+      );
     } finally {
       setBusyId(null);
     }
   }
 
   async function updateStatus(id, status) {
-    setError(''); 
+    setError('');
     setBusyId(id);
-    const { error: updateError } = await supabase.from('profiles').update({ status }).eq('id', id);
+
+    const { error: updateError } = await supabase
+      .from('profiles')
+      .update({ status })
+      .eq('id', id);
+
     setBusyId(null);
-    if (updateError) { 
-      setError('تعذّر تنفيذ الإجراء: ' + updateError.message); 
-      return; 
+
+    if (updateError) {
+      setError(
+        'تعذّر تنفيذ الإجراء: ' +
+        updateError.message
+      );
+
+      return;
     }
+
     loadList();
   }
 
   async function deleteDistributor(id, name) {
-    if (!window.confirm(`سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. متابعة؟`)) return;
-    setError(''); 
-    setBusyId(id);
-    const { error: deleteError } = await supabase.from('profiles').delete().eq('id', id);
-    setBusyId(null);
-    if (deleteError) { 
-      setError('تعذّر حذف الحساب: ' + deleteError.message); 
-      return; 
+    if (
+      !window.confirm(
+        `سيتم حذف حساب "${name}" نهائيًا من التطبيق مع كل بياناته. متابعة؟`
+      )
+    ) {
+      return;
     }
+
+    setError('');
+    setBusyId(id);
+
+    const { error: deleteError } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('id', id);
+
+    setBusyId(null);
+
+    if (deleteError) {
+      setError(
+        'تعذّر حذف الحساب: ' +
+        deleteError.message
+      );
+
+      return;
+    }
+
     loadList();
   }
 
   async function savePersonalCard(id) {
-    setError(''); 
+    setError('');
     setBusyId(id);
+
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ personal_card: personalCards[id] || null })
+      .update({
+        personal_card: personalCards[id] || null
+      })
       .eq('id', id);
+
     setBusyId(null);
-    if (updateError) { 
-      setError('تعذّر حفظ الكرت الشخصي: ' + updateError.message); 
-      return; 
+
+    if (updateError) {
+      setError(
+        'تعذّر حفظ الكرت الشخصي: ' +
+        updateError.message
+      );
+
+      return;
     }
+
     loadList();
   }
 
   const deleteBtnStyle = {
-    backgroundColor: '#fee2e2', 
-    color: '#dc2626', 
+    backgroundColor: '#fee2e2',
+    color: '#dc2626',
     opacity: 1,
-    padding: '6px 12px', 
-    borderRadius: 8, 
-    border: '1px solid #fca5a5', 
-    fontWeight: 700, 
-    fontSize: 12, 
+    padding: '6px 12px',
+    borderRadius: 8,
+    border: '1px solid #fca5a5',
+    fontWeight: 700,
+    fontSize: 12,
     cursor: 'pointer',
   };
 
   if (loading) return null;
-  const pending = list.filter((d) => d.status === 'pending');
-  const others = list.filter((d) => d.status !== 'pending');
+
+  const pending = list.filter(
+    (d) => d.status === 'pending'
+  );
+
+  const others = list.filter(
+    (d) => d.status !== 'pending'
+  );
 
   return (
     <div className="app">
-      <Sidebar role="admin" active="/admin/distributors" name={profile?.full_name} />
+
+      <Sidebar
+        role="admin"
+        active="/admin/distributors"
+        name={profile?.full_name}
+      />
+
       <div className="main">
+
         <h1>الموزعون</h1>
-        <p className="greet" style={{ marginBottom: 20 }}>
+
+        <p
+          className="greet"
+          style={{ marginBottom: 20 }}
+        >
           إدارة طلبات التسجيل والحسابات الحالية والمستحقات المباشرة
         </p>
 
-        {error && <div className="error-note" style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '10px', marginBottom: '16px', border: '1px solid #fca5a5', fontSize: '13px', fontWeight: 'bold' }}>{error}</div>}
-
-        <div className="panel" style={{ marginBottom: 24 }}>
-          <div className="panel-head">
-            <h3>طلبات بانتظار الموافقة</h3>
-            <span className="muted">{pending.length} طلب</span>
+        {error && (
+          <div
+            className="error-note"
+            style={{
+              background: '#fef2f2',
+              color: '#dc2626',
+              padding: '12px',
+              borderRadius: '10px',
+              marginBottom: '16px',
+              border: '1px solid #fca5a5',
+              fontSize: '13px',
+              fontWeight: 'bold'
+            }}
+          >
+            {error}
           </div>
+        )}
+
+        <div
+          className="panel"
+          style={{ marginBottom: 24 }}
+        >
+
+          <div className="panel-head">
+
+            <h3>طلبات بانتظار الموافقة</h3>
+
+            <span className="muted">
+              {pending.length} طلب
+            </span>
+
+          </div>
+
           {pending.length === 0 && (
-            <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
+            <div
+              style={{
+                color: 'var(--ink-soft)',
+                fontSize: 13
+              }}
+            >
               لا توجد طلبات معلّقة حاليًا
             </div>
           )}
+
           {pending.map((d) => (
-            <div key={d.id} className="req-row">
+            <div
+              key={d.id}
+              className="req-row"
+            >
+
               <div className="req-user">
-                <div className="ini">{d.full_name?.slice(0, 2)}</div>
-                <div>
-                  <div className="nm">{d.full_name}</div>
-                  <div className="em">{d.email}</div>
+
+                <div className="ini">
+                  {d.full_name?.slice(0, 2)}
                 </div>
+
+                <div>
+
+                  <div className="nm">
+                    {d.full_name}
+                  </div>
+
+                  <div className="em">
+                    {d.email}
+                  </div>
+
+                </div>
+
               </div>
+
               <div className="req-actions">
-                <button className="btn-sm btn-approve" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'approved')}>
+
+                <button
+                  className="btn-sm btn-approve"
+                  disabled={busyId === d.id}
+                  onClick={() =>
+                    updateStatus(d.id, 'approved')
+                  }
+                >
                   {busyId === d.id ? '...' : 'قبول'}
                 </button>
-                <button className="btn-sm btn-reject" disabled={busyId === d.id} onClick={() => updateStatus(d.id, 'rejected')}>
+
+                <button
+                  className="btn-sm btn-reject"
+                  disabled={busyId === d.id}
+                  onClick={() =>
+                    updateStatus(d.id, 'rejected')
+                  }
+                >
                   رفض
                 </button>
-                <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+
+                <button
+                  style={deleteBtnStyle}
+                  disabled={busyId === d.id}
+                  onClick={() =>
+                    deleteDistributor(
+                      d.id,
+                      d.full_name
+                    )
+                  }
+                >
                   حذف
                 </button>
+
               </div>
+
             </div>
           ))}
+
         </div>
 
         <div className="panel">
-          <div className="panel-head" style={{ marginBottom: 16 }}>
+
+          <div
+            className="panel-head"
+            style={{ marginBottom: 16 }}
+          >
+
             <h3>كل الموزعين</h3>
-            <span className="muted">{others.length}</span>
+
+            <span className="muted">
+              {others.length}
+            </span>
+
           </div>
 
           {others.length === 0 && (
-            <div style={{ color: 'var(--ink-soft)', fontSize: 13 }}>
+            <div
+              style={{
+                color: 'var(--ink-soft)',
+                fontSize: 13
+              }}
+            >
               لا يوجد موزعون بعد
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16
+            }}
+          >
+
             {others.map((d) => {
-              const currentNetDebt = Number(d.debt) || 0;
+
+              const currentNetDebt =
+                Number(d.debt) || 0;
 
               return (
+
                 <div
                   key={d.id}
                   style={{
@@ -311,60 +519,237 @@ export default function DistributorsPage() {
                     border: '1px solid #e2e8f0',
                     borderRadius: 16,
                     padding: 16,
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
+                    boxShadow:
+                      '0 4px 12px rgba(0, 0, 0, 0.03)',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 14,
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #f1f5f9', paddingBottom: 10 }}>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      borderBottom:
+                        '1px solid #f1f5f9',
+                      paddingBottom: 10
+                    }}
+                  >
+
                     <div>
-                      <div style={{ fontWeight: 900, fontSize: 16, color: '#1e1b4b', letterSpacing: '-0.2px' }}>
+
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 16,
+                          color: '#1e1b4b',
+                          letterSpacing: '-0.2px'
+                        }}
+                      >
                         {d.full_name}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, fontWeight: 500 }}>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#64748b',
+                          marginTop: 2,
+                          fontWeight: 500
+                        }}
+                      >
                         {d.email}
                       </div>
+
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className={`pill ${d.status === 'approved' ? 'green' : 'red'}`} style={{ fontSize: 11, padding: '4px 8px' }}>
-                        {d.status === 'approved' ? 'مقبول' : 'مرفوض'}
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                      }}
+                    >
+
+                      <span
+                        className={`pill ${
+                          d.status === 'approved'
+                            ? 'green'
+                            : 'red'
+                        }`}
+                        style={{
+                          fontSize: 11,
+                          padding: '4px 8px'
+                        }}
+                      >
+                        {d.status === 'approved'
+                          ? 'مقبول'
+                          : 'مرفوض'}
                       </span>
-                      <button style={deleteBtnStyle} disabled={busyId === d.id} onClick={() => deleteDistributor(d.id, d.full_name)}>
+
+                      <button
+                        style={deleteBtnStyle}
+                        disabled={busyId === d.id}
+                        onClick={() =>
+                          deleteDistributor(
+                            d.id,
+                            d.full_name
+                          )
+                        }
+                      >
                         حذف
                       </button>
+
                     </div>
+
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '8px 12px' }}>
-                      <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>الرصيد المتبقي بمخزنه</div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                        {formatNum(d.balance)} <span style={{ fontSize: 11 }}>ريال</span>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        '1fr 1fr',
+                      gap: 10
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border:
+                          '1px solid #e2e8f0',
+                        borderRadius: 10,
+                        padding: '8px 12px'
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#64748b',
+                          fontWeight: 600
+                        }}
+                      >
+                        الرصيد المتبقي بمخزنه
                       </div>
-                      <div style={{ fontSize: 10.5, color: '#94A3B8', marginTop: 2 }}>عدد الكروت لديه: {d.myCardsCount}</div>
+
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          marginTop: 2
+                        }}
+                      >
+                        {formatNum(d.balance)}
+                        <span
+                          style={{ fontSize: 11 }}
+                        >
+                          {' '}ريال
+                        </span>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 10.5,
+                          color: '#94A3B8',
+                          marginTop: 2
+                        }}
+                      >
+                        عدد الكروت لديه: {d.myCardsCount}
+                      </div>
+
                     </div>
-                    
-                    <div style={{ 
-                      background: currentNetDebt > 0 ? '#fef2f2' : '#f0fdf4', 
-                      border: currentNetDebt > 0 ? '1px solid #fca5a5' : '1px solid #bbf7d0', 
-                      borderRadius: 10, 
-                      padding: '8px 12px' 
-                    }}>
-                      <div style={{ fontSize: 11, color: currentNetDebt > 0 ? '#991b1b' : '#166534', fontWeight: 700 }}>
+
+                    <div
+                      style={{
+                        background:
+                          currentNetDebt > 0
+                            ? '#fef2f2'
+                            : '#f0fdf4',
+                        border:
+                          currentNetDebt > 0
+                            ? '1px solid #fca5a5'
+                            : '1px solid #bbf7d0',
+                        borderRadius: 10,
+                        padding: '8px 12px'
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color:
+                            currentNetDebt > 0
+                              ? '#991b1b'
+                              : '#166534',
+                          fontWeight: 700
+                        }}
+                      >
                         المبلغ الصافي المستحق للمدير (ثابت)
                       </div>
-                      <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
-                        {formatNum(currentNetDebt)} <span style={{ fontSize: 11 }}>ريال</span>
+
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 900,
+                          color:
+                            currentNetDebt > 0
+                              ? '#dc2626'
+                              : '#059669',
+                          marginTop: 2
+                        }}
+                      >
+                        {formatNum(currentNetDebt)}
+                        <span
+                          style={{ fontSize: 11 }}
+                        >
+                          {' '}ريال
+                        </span>
                       </div>
+
                     </div>
+
                   </div>
 
-                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div
+                    style={{
+                      background: '#eff6ff',
+                      border:
+                        '1px solid #bfdbfe',
+                      borderRadius: 12,
+                      padding: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#1e40af',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
                       📦 شحن كروت ومخزون للموزع:
                     </div>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: '100%' }}>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        alignItems: 'center',
+                        width: '100%'
+                      }}
+                    >
+
                       <input
                         type="number"
                         min="0"
@@ -372,27 +757,93 @@ export default function DistributorsPage() {
                         placeholder="أدخل مبلغ المخزون (مثلاً 50000)"
                         value={topUps[d.id] || ''}
                         onChange={(e) => {
-                          if (e.target.value.length <= 9) {
-                            setTopUps({ ...topUps, [d.id]: e.target.value });
+                          if (
+                            e.target.value.length <= 9
+                          ) {
+                            setTopUps({
+                              ...topUps,
+                              [d.id]:
+                                e.target.value
+                            });
                           }
                         }}
-                        style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #93c5fd', fontFamily: 'monospace', fontSize: 12.5 }}
+                        style={{
+                          flex: 1,
+                          padding: '9px 12px',
+                          borderRadius: 10,
+                          border:
+                            '1.5px solid #93c5fd',
+                          fontFamily: 'monospace',
+                          fontSize: 12.5
+                        }}
                       />
-                      <button 
-                        style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        disabled={busyId === d.id || !topUps[d.id]} 
-                        onClick={() => requestConfirmation('balance', d.id, d.full_name, topUps[d.id])}
+
+                      <button
+                        style={{
+                          background: '#2563eb',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '9px 14px',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                        disabled={
+                          busyId === d.id ||
+                          !topUps[d.id]
+                        }
+                        onClick={() =>
+                          requestConfirmation(
+                            'balance',
+                            d.id,
+                            d.full_name,
+                            topUps[d.id]
+                          )
+                        }
                       >
                         إضافة رصيد مخزون
                       </button>
+
                     </div>
+
                   </div>
 
-                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 12, color: '#166534', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div
+                    style={{
+                      background: '#f0fdf4',
+                      border:
+                        '1px solid #bbf7d0',
+                      borderRadius: 12,
+                      padding: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8
+                    }}
+                  >
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#166534',
+                        fontWeight: 800,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4
+                      }}
+                    >
                       💵 تسجيل سداد نقدي مقبوض (خصم دين):
                     </div>
-                    <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 8,
+                        width: '100%'
+                      }}
+                    >
+
                       <input
                         type="number"
                         min="0"
@@ -400,95 +851,241 @@ export default function DistributorsPage() {
                         placeholder="أدخل المبلغ المقبوض كاش"
                         value={debts[d.id] || ''}
                         onChange={(e) => {
-                          if (e.target.value.length <= 9) {
-                            setDebts({ ...debts, [d.id]: e.target.value });
+                          if (
+                            e.target.value.length <= 9
+                          ) {
+                            setDebts({
+                              ...debts,
+                              [d.id]:
+                                e.target.value
+                            });
                           }
                         }}
-                        style={{ flex: 1, padding: '9px 12px', borderRadius: 10, border: '1.5px solid #86efac', fontFamily: 'monospace', fontSize: 12.5 }}
+                        style={{
+                          flex: 1,
+                          padding: '9px 12px',
+                          borderRadius: 10,
+                          border:
+                            '1.5px solid #86efac',
+                          fontFamily: 'monospace',
+                          fontSize: 12.5
+                        }}
                       />
-                      <button 
-                        disabled={busyId === d.id || !debts[d.id]} 
-                        onClick={() => requestConfirmation('payment', d.id, d.full_name, debts[d.id])}
-                        style={{ background: '#059669', color: '#fff', border: 'none', padding: '9px 14px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+
+                      <button
+                        disabled={
+                          busyId === d.id ||
+                          !debts[d.id]
+                        }
+                        onClick={() =>
+                          requestConfirmation(
+                            'payment',
+                            d.id,
+                            d.full_name,
+                            debts[d.id]
+                          )
+                        }
+                        style={{
+                          background: '#059669',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '9px 14px',
+                          borderRadius: 10,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
                       >
                         تسجيل سداد نقدي
                       </button>
+
                     </div>
+
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f5f3ff', padding: 10, borderRadius: 12, border: '1px solid #ede9fe' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'center',
+                      background: '#f5f3ff',
+                      padding: 10,
+                      borderRadius: 12,
+                      border:
+                        '1px solid #ede9fe'
+                    }}
+                  >
+
                     <input
                       type="text"
                       placeholder="رمز الكرت الشخصي"
-                      value={personalCards[d.id] ?? ''}
-                      onChange={(e) => setPersonalCards({ ...personalCards, [d.id]: e.target.value })}
-                      style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd6fe', fontFamily: 'monospace', fontSize: 12.5 }}
+                      value={
+                        personalCards[d.id] ?? ''
+                      }
+                      onChange={(e) =>
+                        setPersonalCards({
+                          ...personalCards,
+                          [d.id]:
+                            e.target.value
+                        })
+                      }
+                      style={{
+                        flex: 1,
+                        padding: '8px 10px',
+                        borderRadius: 8,
+                        border:
+                          '1.5px solid #ddd6fe',
+                        fontFamily: 'monospace',
+                        fontSize: 12.5
+                      }}
                     />
+
                     <button
                       className="btn-sm btn-approve"
-                      style={{ padding: '8px 14px', whiteSpace: 'nowrap' }}
-                      disabled={busyId === d.id}
-                      onClick={() => savePersonalCard(d.id)}
+                      style={{
+                        padding: '8px 14px',
+                        whiteSpace: 'nowrap'
+                      }}
+                      disabled={
+                        busyId === d.id
+                      }
+                      onClick={() =>
+                        savePersonalCard(d.id)
+                      }
                     >
                       حفظ الكرت
                     </button>
+
                   </div>
 
                 </div>
               );
             })}
+
           </div>
+
         </div>
+
       </div>
 
       {confirmModal.isOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(15, 23, 42, 0.65)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 99999,
-          padding: 16
-        }}>
-          <div style={{
-            background: '#ffffff',
-            borderRadius: 20,
-            padding: 24,
-            maxWidth: 400,
-            width: '100%',
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
-            textAlign: 'center',
+
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background:
+              'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
-            flexDirection: 'column',
-            gap: 16
-          }}>
-            <div style={{ fontSize: 42, margin: '0 auto' }}>
-              {confirmModal.type === 'balance' ? '📦' : '💵'}
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: 16
+          }}
+        >
+
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 20,
+              padding: 24,
+              maxWidth: 400,
+              width: '100%',
+              boxShadow:
+                '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16
+            }}
+          >
+
+            <div
+              style={{
+                fontSize: 42,
+                margin: '0 auto'
+              }}
+            >
+              {confirmModal.type === 'balance'
+                ? '📦'
+                : '💵'}
             </div>
+
             <div>
-              <h3 style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', marginBottom: 6 }}>
-                تأكيد عملية {confirmModal.type === 'balance' ? 'شحن المخزون' : 'السداد النقدي'}
+
+              <h3
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  marginBottom: 6
+                }}
+              >
+                تأكيد عملية{' '}
+                {confirmModal.type === 'balance'
+                  ? 'شحن المخزون'
+                  : 'السداد النقدي'}
               </h3>
-              <p style={{ fontSize: 14, color: '#475569', lineHeight: 1.5 }}>
-                هل أنت متأكد من {confirmModal.type === 'balance' ? 'إضافة رصيد مخزون بقيمة' : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
-                <strong style={{ color: confirmModal.type === 'balance' ? '#2563eb' : '#059669', fontSize: 16 }}>
-                  {formatNum(confirmModal.amount)} ريال
+
+              <p
+                style={{
+                  fontSize: 14,
+                  color: '#475569',
+                  lineHeight: 1.5
+                }}
+              >
+                هل أنت متأكد من{' '}
+                {confirmModal.type === 'balance'
+                  ? 'إضافة رصيد مخزون بقيمة'
+                  : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
+
+                <strong
+                  style={{
+                    color:
+                      confirmModal.type ===
+                      'balance'
+                        ? '#2563eb'
+                        : '#059669',
+                    fontSize: 16
+                  }}
+                >
+                  {formatNum(
+                    confirmModal.amount
+                  )}{' '}
+                  ريال
                 </strong>{' '}
-                للموزع <strong>({confirmModal.distributorName})</strong>؟
+
+                للموزع{' '}
+                <strong>
+                  ({confirmModal.distributorName})
+                </strong>
+                ؟
               </p>
+
             </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                marginTop: 8
+              }}
+            >
+
               <button
                 onClick={handleConfirmedAction}
                 style={{
                   flex: 1,
-                  background: confirmModal.type === 'balance' ? '#2563eb' : '#059669',
+                  background:
+                    confirmModal.type ===
+                    'balance'
+                      ? '#2563eb'
+                      : '#059669',
                   color: '#ffffff',
                   border: 'none',
                   padding: '12px',
@@ -500,8 +1097,14 @@ export default function DistributorsPage() {
               >
                 نعم، تأكيد
               </button>
+
               <button
-                onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                onClick={() =>
+                  setConfirmModal({
+                    ...confirmModal,
+                    isOpen: false
+                  })
+                }
                 style={{
                   flex: 1,
                   background: '#f1f5f9',
@@ -516,10 +1119,15 @@ export default function DistributorsPage() {
               >
                 إلغاء
               </button>
+
             </div>
+
           </div>
+
         </div>
+
       )}
+
     </div>
   );
 }
