@@ -79,7 +79,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. قراءة الحركات المالية حصراً من جدول الدفتر المستقل (distributor_ledger) لضمان ثبات الدين وعدم تأثره بحذف الكروت
+      // 4. قراءة الحركات المالية من جدول الدفتر المستقل (distributor_ledger) لحساب صافي الدين بدقة
       const { data: ledgerData, error: ledgerError } = await supabase
         .from('distributor_ledger')
         .select('amount, type')
@@ -92,7 +92,7 @@ export default function DistributorPage() {
       let calculatedDebt = 0;
       (ledgerData || []).forEach(item => {
         const amt = Number(item.amount) || 0;
-        if (item.type === 'shipment') {
+        if (item.type === 'shipment' || item.type === 'sale_debt') {
           calculatedDebt += amt;
         } else if (item.type === 'payment') {
           calculatedDebt -= amt;
@@ -164,6 +164,7 @@ export default function DistributorPage() {
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
+      const netAdminShare = cardPrice * 0.90; // حساب حصة المدير تلقائياً (90% أو الخصم المطلوب)
 
       const soldAtTimestamp = new Date().toISOString();
 
@@ -184,13 +185,22 @@ export default function DistributorPage() {
         return;
       }
 
-      // 2. إدراج السجل في sales_log
+      // 2. تسجيل السجل في sales_log للتوافق
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
         package_id: card.package_id,
         price: cardPrice,
         sold_at: soldAtTimestamp
+      });
+
+      // 3. الإضافة التلقائية لمديونية المبيعات في جدول الدفتر المالي (distributor_ledger)
+      // بحيث ينحسب الدين تلقائياً فور بيع الكرت (مثلاً 6300 من أصل 7000) وبشكل مستقل لا يتأثر بالحذف
+      await supabase.from('distributor_ledger').insert({
+        distributor_id: profile.id,
+        type: 'sale_debt',
+        amount: netAdminShare,
+        note: `مبيعات كرت باقة (${pendingPackage.name}) - سعر الكرت: ${cardPrice}`
       });
 
       setRevealedCard({
