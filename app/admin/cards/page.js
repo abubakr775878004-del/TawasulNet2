@@ -12,7 +12,7 @@ export default function CardsPage() {
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [previewDate, setPreviewDate] = useState('');
-  const [previewPackageId, setPreviewPackageId] = useState(''); // الحالة الإضافية المخصصة لاختيار الباقة في التصفية
+  const [previewPackageId, setPreviewPackageId] = useState('');
 
   const [code, setCode] = useState('');
   const [packageId, setPackageId] = useState('');
@@ -22,6 +22,7 @@ export default function CardsPage() {
   const [bulkPackageId, setBulkPackageId] = useState('');
   const [bulkError, setBulkError] = useState('');
   const [bulkDone, setBulkDone] = useState('');
+  const [deletingId, setDeletingId] = useState(null); // حالة لتحميل الحذف الفردي
 
   async function loadAll() {
     const oneDayAgo = new Date();
@@ -38,18 +39,15 @@ export default function CardsPage() {
 
   useEffect(() => { if (profile) loadAll(); }, [profile]);
 
-  // التصفية المزدوجة (حسب التاريخ وحسب الباقة في نفس الوقت)
+  // التصفية المزدوجة (حسب التاريخ وحسب الباقة في نفس الوقت) مع الترتيب من الأحدث للأقدم
   const filteredCards = cards.filter(c => {
-    // فلترة التاريخ
     const cardDate = c.created_at ? c.created_at.split('T')[0] : '';
     const matchDate = !previewDate || cardDate === previewDate;
-
-    // فلترة الباقة
     const matchPackage = !previewPackageId || c.package_id === previewPackageId;
-
     return matchDate && matchPackage;
   });
 
+  // تحديد المفلتر فقط لحماية المخزون القديم وغير الظاهر
   function toggleAll() {
     if (selected.size === filteredCards.length && filteredCards.length > 0) {
       setSelected(new Set());
@@ -86,11 +84,29 @@ export default function CardsPage() {
     loadAll();
   }
 
+  // حذف فردي آمن وسريع لكل كرت عبر زر سلة المهملات
+  async function deleteSingleCard(id) {
+    if (!confirm('هل أنت متأكد من حذف هذا الكرت نهائياً؟')) return;
+    setDeletingId(id);
+    const { error } = await supabase.from('cards').delete().eq('id', id);
+    setDeletingId(null);
+    if (error) {
+      alert('فشل حذف الكرت: ' + error.message);
+    } else {
+      loadAll();
+    }
+  }
+
+  // الحذف الجماعي للمحدد في الفلترة فقط
   async function deleteSelected() {
-    if (selected.size === 0 || !confirm('هل أنت متأكد من الحذف؟')) return;
-    await supabase.from('cards').delete().in('id', Array.from(selected));
-    setSelected(new Set());
-    loadAll();
+    if (selected.size === 0 || !confirm(`هل أنت متأكد من حذف ${selected.size} كرت المحددة نهائياً؟`)) return;
+    const { error } = await supabase.from('cards').delete().in('id', Array.from(selected));
+    if (error) {
+      alert('فشل الحذف الجماعي: ' + error.message);
+    } else {
+      setSelected(new Set());
+      loadAll();
+    }
   }
 
   if (loading) return null;
@@ -171,7 +187,7 @@ export default function CardsPage() {
             <thead>
               <tr>
                 <th><input type="checkbox" checked={selected.size === filteredCards.length && filteredCards.length > 0} onChange={toggleAll} /></th>
-                <th>الكود</th><th>الباقة</th><th>التاريخ</th><th>الحالة</th>
+                <th>الكود</th><th>الباقة</th><th>التاريخ</th><th>الحالة</th><th>الإجراءات</th>
               </tr>
             </thead>
             <tbody>
@@ -182,6 +198,16 @@ export default function CardsPage() {
                   <td>{c.packages?.name}</td>
                   <td>{new Date(c.created_at).toLocaleDateString('ar')}</td>
                   <td><span className={`pill ${statusLabel[c.status]?.[1]}`}>{statusLabel[c.status]?.[0]}</span></td>
+                  <td>
+                    {/* زر حذف فردي مباشر بجانب كل كرت */}
+                    <button 
+                      onClick={() => deleteSingleCard(c.id)}
+                      disabled={deletingId === c.id}
+                      style={{ background: '#EF4444', color: 'white', border: 'none', padding: '4px 10px', borderRadius: 6, fontSize: '12px', cursor: 'pointer' }}
+                    >
+                      {deletingId === c.id ? '...' : 'حذف'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -189,7 +215,7 @@ export default function CardsPage() {
           
           {selected.size > 0 && (
             <div style={{ marginTop: 15, background: '#FEE2E2', padding: 12, borderRadius: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 'bold' }}>تم تحديد {selected.size} كرت</span>
+              <span style={{ fontWeight: 'bold' }}>تم تحديد {selected.size} كرت من النتائج الحالية</span>
               <button onClick={deleteSelected} style={{ background: '#DC2626', color: 'white', padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer' }}>حذف المحدد نهائياً</button>
             </div>
           )}
