@@ -17,6 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // حالة لتخزين المبلغ الصافي المستحق للمدير
   const [netDebt, setNetDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -33,6 +34,7 @@ export default function DistributorPage() {
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
 
+  // دالة تنسيق الأرقام
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -43,6 +45,7 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
+      // 1. جلب الكروت المتاحة حالياً لدى الموزع
       const { data } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -54,48 +57,61 @@ export default function DistributorPage() {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      const { data: soldCardsData, error: soldError } = await supabase
+      // 2. عدد مبيعات اليوم
+      const { count } = await supabase
+        .from('cards')
+        .select('*', { count: 'exact', head: true })
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte('sold_at', since.toISOString());
+
+      setSoldToday(count || 0);
+
+      // 3. آخر مبيعات اليوم
+      const { data: salesData } = await supabase
         .from('cards')
         .select('id, code, sold_at, customer_name, packages(name, price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
         .gte('sold_at', since.toISOString())
-        .order('sold_at', { ascending: false });
+        .order('sold_at', { ascending: false })
+        .limit(10);
 
-      if (!soldError && soldCardsData) {
-        setSoldToday(soldCardsData.length);
-        setRecentSales(soldCardsData.slice(0, 10));
+      setRecentSales(salesData || []);
+
+      // 4. الحل الجذري: جلب جميع الكروت المباعة فعلياً من جدول cards لهذا الموزع لحساب إجمالي المبيعات الصحيح ودون الاعتماد على sales_log المفقود
+      const { data: soldCardsData, error: soldErr } = await supabase
+        .from('cards')
+        .select('packages(price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold');
+
+      if (soldErr) {
+        console.error('Error fetching sold cards:', soldErr);
       }
 
-      let calculatedDebt = 0;
-      const { data: ledgerData, error: ledgerError } = await supabase
-        .from('distributor_ledger')
-        .select('*')
+      const totalSalesRevenue = (soldCardsData || []).reduce((sum, c) => {
+        return sum + Number(c.packages?.price || 0);
+      }, 0);
+
+      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
+
+      // 5. جلب سدادات هذا الموزع المسجلة في جدول payments
+      const { data: paymentsData, error: payErr } = await supabase
+        .from('payments')
+        .select('amount')
         .eq('distributor_id', profile.id);
 
-      if (!ledgerError && ledgerData && ledgerData.length > 0) {
-        ledgerData.forEach((row) => {
-          const amount = Number(row.amount || 0);
-          if (
-            row.type === 'shipment' ||
-            row.type === 'sale_debt' ||
-            row.type === 'debt'
-          ) {
-            calculatedDebt += amount;
-          } else if (row.type === 'payment' || row.type === 'credit') {
-            calculatedDebt -= amount;
-          }
-        });
+      if (payErr) {
+        console.error('Error fetching payments:', payErr);
       }
 
-      if (calculatedDebt === 0 && soldCardsData && soldCardsData.length > 0) {
-        soldCardsData.forEach((card) => {
-          const cardPrice = Number(card.packages?.price || 0);
-          calculatedDebt += cardPrice;
-        });
-      }
+      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      setNetDebt(Math.round(calculatedDebt));
+      // حساب الدين المتبقي الصافي بدقة تامة من جدول cards المباشر
+      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+      setNetDebt(remainingDebt);
+
     } catch (err) {
       console.error('Error loading distributor data:', err);
     } finally {
@@ -158,15 +174,16 @@ export default function DistributorPage() {
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
+
       const soldAtTimestamp = new Date().toISOString();
 
+      // 1. تحديث الكرت إلى مباع في جدول cards
       const { error: updateError } = await supabase
         .from('cards')
         .update({
           status: 'sold',
           sold_at: soldAtTimestamp,
-          customer_name:
-            trimmedCustomerName !== '' ? trimmedCustomerName : null,
+          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
         })
         .eq('id', card.id);
 
@@ -177,26 +194,14 @@ export default function DistributorPage() {
         return;
       }
 
-      await supabase
-        .from('distributor_ledger')
-        .insert({
-          distributor_id: profile.id,
-          amount: cardPrice,
-          type: 'sale_debt',
-          notes: `بيع كرت باقة بمبلغ ${cardPrice}`,
-        })
-        .catch((err) => console.log('Ledger insert error:', err));
-
-      await supabase
-        .from('sales_log')
-        .insert({
-          distributor_id: profile.id,
-          card_id: card.id,
-          package_id: card.package_id,
-          price: cardPrice,
-          sold_at: soldAtTimestamp,
-        })
-        .catch((err) => console.log('Sales log error:', err));
+      // 2. الحل الجذري المزدوج: إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة
+      await supabase.from('sales_log').insert({
+        distributor_id: profile.id,
+        card_id: card.id,
+        package_id: card.package_id,
+        price: cardPrice,
+        sold_at: soldAtTimestamp
+      });
 
       setRevealedCard({
         code: card.code,
@@ -261,23 +266,25 @@ export default function DistributorPage() {
       'الحمد لله على كل نعمة',
       'اتقِ الله واجعل الخير طريقك دائمًا',
       'اللهم اجعل يومكم خيرًا وبركة',
-      'من توكل على الله كفاه',
+      'من توكل على الله كفاه'
     ];
 
     const dailyReminder =
-      dailyReminders[Math.floor(Math.random() * dailyReminders.length)];
+      dailyReminders[
+        Math.floor(Math.random() * dailyReminders.length)
+      ];
 
     const now = new Date();
 
     const saleDate = now.toLocaleDateString('ar-YE', {
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit',
+      day: '2-digit'
     });
 
     const saleTime = now.toLocaleTimeString('ar-YE', {
       hour: '2-digit',
-      minute: '2-digit',
+      minute: '2-digit'
     });
 
     const text = `🌐 *شبكة تواصل*
@@ -293,7 +300,10 @@ export default function DistributorPage() {
 
 *شكرًا لاختياركم شبكة تواصل*`;
 
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      '_blank'
+    );
   }
 
   async function sendNoteToAdmin(e) {
@@ -363,6 +373,7 @@ export default function DistributorPage() {
       setTimeout(() => {
         setNoteMessage('');
       }, 4000);
+
     } catch (error) {
       setNoteMessage('❌ حدث خطأ غير متوقع، حاول مرة أخرى');
     } finally {
@@ -399,50 +410,37 @@ export default function DistributorPage() {
       />
 
       <div className="main">
-        <div
-          className="topbar"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
+        <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h1>مرحبًا، {profile.full_name} 👋</h1>
+            <h1>
+              مرحبًا، {profile.full_name} 👋
+            </h1>
 
-            <div className="greet">إليك ملخص حسابك اليوم</div>
+            <div className="greet">
+              إليك ملخص حسابك اليوم
+            </div>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              background: isOnline ? '#ECFDF5' : '#FEF2F2',
-              color: isOnline ? '#059669' : '#DC2626',
-              padding: '6px 12px',
-              borderRadius: 20,
-              fontSize: 11.5,
-              fontWeight: '800',
-              border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`,
-            }}
-          >
-            <span
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: '50%',
-                background: isOnline ? '#10B981' : '#EF4444',
-                display: 'inline-block',
-                boxShadow: isOnline ? '0 0 6px #10B981' : 'none',
-              }}
-            ></span>
+          <div style={{ 
+            display: 'flex', alignItems: 'center', gap: 6, 
+            background: isOnline ? '#ECFDF5' : '#FEF2F2', 
+            color: isOnline ? '#059669' : '#DC2626', 
+            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: '800',
+            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
+          }}>
+            <span style={{ 
+              width: 7, height: 7, borderRadius: '50%', 
+              background: isOnline ? '#10B981' : '#EF4444',
+              display: 'inline-block',
+              boxShadow: isOnline ? '0 0 6px #10B981' : 'none'
+            }}></span>
             {isOnline ? 'نشط' : 'خامل'}
           </div>
         </div>
 
         <AdSlotBar />
 
+        {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
         {profile.personal_card && (
@@ -454,9 +452,10 @@ export default function DistributorPage() {
               padding: '20px 24px',
               color: '#fff',
               marginBottom: 20,
-              boxShadow: '0 10px 25px rgba(124, 58, 237, 0.25)',
+              boxShadow:
+                '0 10px 25px rgba(124, 58, 237, 0.25)',
               display: 'flex',
-              justifyContent: 'space-between',
+              justify: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
@@ -487,10 +486,14 @@ export default function DistributorPage() {
             </div>
 
             <button
-              onClick={() => copyPersonalCode(profile.personal_card)}
+              onClick={() =>
+                copyPersonalCode(profile.personal_card)
+              }
               style={{
-                background: 'rgba(255,255,255,0.2)',
-                border: '1px solid rgba(255,255,255,0.4)',
+                background:
+                  'rgba(255,255,255,0.2)',
+                border:
+                  '1px solid rgba(255,255,255,0.4)',
                 color: '#fff',
                 padding: '10px 18px',
                 borderRadius: 12,
@@ -499,24 +502,24 @@ export default function DistributorPage() {
                 cursor: 'pointer',
               }}
             >
-              {personalCopied ? '✓ تم النسخ' : '📋 نسخ الكرت الشخصي'}
+              {personalCopied
+                ? '✓ تم النسخ'
+                : '📋 نسخ الكرت الشخصي'}
             </button>
           </div>
         )}
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 12,
-            marginBottom: 20,
-          }}
-        >
+        {/* بطاقات الأرصدة والمستحقات */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
           <div className="balance-card" style={{ marginBottom: 0 }}>
-            <div className="lbl">رصيدك الحالي بمخزنك</div>
+            <div className="lbl">
+              رصيدك الحالي بمخزنك
+            </div>
 
             <div className="amt">
-              {Number(profile.balance).toLocaleString('en-US')}{' '}
+              {Number(profile.balance).toLocaleString(
+                'en-US'
+              )}{' '}
               <span>ريال</span>
             </div>
 
@@ -531,60 +534,34 @@ export default function DistributorPage() {
               </div>
 
               <Link href="/distributor/request">
-                <button className="req-btn">طلب كروت جديد</button>
+                <button className="req-btn">
+                  طلب كروت جديد
+                </button>
               </Link>
             </div>
           </div>
 
-          <div
-            style={{
-              background:
-                netDebt > 0
-                  ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)'
-                  : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
-              borderRadius: 20,
-              padding: 20,
-              color: '#fff',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between',
-              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-            }}
-          >
+          {/* بطاقة المبلغ الصافي المستحق للمدير */}
+          <div style={{
+            background: netDebt > 0 ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+            borderRadius: 20,
+            padding: 20,
+            color: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
+          }}>
             <div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#f1f5f9',
-                  fontWeight: '700',
-                  marginBottom: 6,
-                }}
-              >
+              <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
                 المبلغ الصافي المستحق للمدير
               </div>
-              <div
-                className="mono"
-                style={{
-                  fontSize: 26,
-                  fontWeight: '900',
-                  letterSpacing: 0.5,
-                }}
-              >
-                {formatNum(netDebt)}{' '}
-                <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
+              <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
+                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
               </div>
             </div>
-            <div
-              style={{
-                fontSize: 11.5,
-                color: '#f8fafc',
-                marginTop: 10,
-                opacity: 0.9,
-              }}
-            >
-              {netDebt > 0
-                ? '⚠️ إجمالي المستحقات المالية الحالية'
-                : '✓ الحساب مسدد بالكامل'}
+            <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
+              {netDebt > 0 ? '⚠️ يوجد مبالغ متبقية لم تسدد بعد' : '✓ الحساب مسدد بالكامل'}
             </div>
           </div>
         </div>
@@ -592,31 +569,33 @@ export default function DistributorPage() {
         <div
           className="grid-stats"
           style={{
-            gridTemplateColumns: 'repeat(2,1fr)',
+            gridTemplateColumns:
+              'repeat(2,1fr)',
           }}
         >
           <div className="stat">
-            <div className="label">كروت متاحة عندي</div>
+            <div className="label">
+              كروت متاحة عندي
+            </div>
 
-            <div className="value">{myCards.length}</div>
+            <div className="value">
+              {myCards.length}
+            </div>
           </div>
 
           <div className="stat">
-            <div className="label">مبيعات اليوم</div>
+            <div className="label">
+              مبيعات اليوم
+            </div>
 
-            <div className="value">{soldToday}</div>
+            <div className="value">
+              {soldToday}
+            </div>
           </div>
         </div>
 
         <div className="panel">
-          <div
-            className="panel-head"
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
+          <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3>باقاتي المتاحة</h3>
 
@@ -625,47 +604,22 @@ export default function DistributorPage() {
               </span>
             </div>
 
-            <button
-              onClick={load}
+            <button 
+              onClick={load} 
               disabled={isRefreshing}
               style={{
-                background: '#F3F0FB',
-                border: '1px solid #DDD3F5',
-                color: '#5B21B6',
-                padding: '6px 12px',
-                borderRadius: '10px',
-                fontSize: '12px',
-                fontWeight: '800',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px',
+                background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
+                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '800',
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
               }}
             >
-              <span
-                style={{
-                  display: 'inline-block',
-                  transform: isRefreshing ? 'rotate(360deg)' : 'none',
-                  transition: 'transform 0.5s',
-                }}
-              >
-                🔄
-              </span>
+              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
               {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
             </button>
           </div>
 
           {revealError && (
-            <div
-              style={{
-                color: '#DC2626',
-                background: '#FEF2F2',
-                padding: '10px',
-                borderRadius: '8px',
-                marginBottom: '10px',
-                fontSize: '13px',
-              }}
-            >
+            <div className="error-note" style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
               {revealError}
             </div>
           )}
@@ -682,26 +636,39 @@ export default function DistributorPage() {
           )}
 
           <div className="pkg-grid">
-            {Object.entries(byPackage).map(([name, info]) => (
-              <div className="pkg-card" key={name}>
-                <div className="pname">{name}</div>
-
-                <div className="pcount">
-                  {info.count} <span>كرت لديك</span>
-                </div>
-
-                <button
-                  className="btn-primary"
-                  style={{
-                    marginTop: 14,
-                    width: '100%',
-                  }}
-                  onClick={() => askReveal(info.packageId, name)}
+            {Object.entries(byPackage).map(
+              ([name, info]) => (
+                <div
+                  className="pkg-card"
+                  key={name}
                 >
-                  إظهار كرت
-                </button>
-              </div>
-            ))}
+                  <div className="pname">
+                    {name}
+                  </div>
+
+                  <div className="pcount">
+                    {info.count}{' '}
+                    <span>كرت لديك</span>
+                  </div>
+
+                  <button
+                    className="btn-primary"
+                    style={{
+                      marginTop: 14,
+                      width: '100%',
+                    }}
+                    onClick={() =>
+                      askReveal(
+                        info.packageId,
+                        name
+                      )
+                    }
+                  >
+                    إظهار كرت
+                  </button>
+                </div>
+              )
+            )}
           </div>
         </div>
 
@@ -712,67 +679,27 @@ export default function DistributorPage() {
           </div>
 
           {recentSales.length === 0 ? (
-            <div
-              style={{
-                color: 'var(--ink-soft)',
-                fontSize: 13,
-                padding: '10px 0',
-              }}
-            >
+            <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
               لم تقم ببيع أي كرت حتى الآن اليوم.
             </div>
           ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                marginTop: '10px',
-              }}
-            >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
               {recentSales.map((sale) => (
-                <div
-                  key={sale.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    background: '#F8FAFC',
-                    padding: '10px 14px',
-                    borderRadius: '12px',
-                    border: '1px solid #E2E8F0',
-                  }}
-                >
+                <div key={sale.id} style={{ 
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                  background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' 
+                }}>
                   <div>
-                    <div
-                      style={{
-                        fontSize: '13px',
-                        fontWeight: '800',
-                        color: '#1E293B',
-                      }}
-                    >
-                      {sale.packages?.name || 'باقة'}{' '}
-                      {sale.customer_name
-                        ? `(الزبون: ${sale.customer_name})`
-                        : ''}
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
+                      {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
                     </div>
-                    <div
-                      className="mono"
-                      style={{
-                        fontSize: '12px',
-                        color: '#64748B',
-                        letterSpacing: '0.5px',
-                      }}
-                    >
+                    <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
                       {sale.code}
                     </div>
                   </div>
                   <div style={{ textAlign: 'left' }}>
                     <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
-                      {new Date(sale.sold_at).toLocaleTimeString('ar-YE', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
                 </div>
@@ -788,21 +715,28 @@ export default function DistributorPage() {
           }}
         >
           <div className="panel-head">
-            <h3>إرسال ملاحظة أو طلب للمدير</h3>
+            <h3>
+              إرسال ملاحظة أو طلب للمدير
+            </h3>
           </div>
 
           <form onSubmit={sendNoteToAdmin}>
             <textarea
               rows={3}
               value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
+              onChange={(e) =>
+                setNoteContent(
+                  e.target.value
+                )
+              }
               disabled={noteBusy}
               placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
               style={{
                 width: '100%',
                 padding: 12,
                 borderRadius: 10,
-                border: '1.5px solid var(--line)',
+                border:
+                  '1.5px solid var(--line)',
                 marginBottom: 10,
                 fontSize: 13.5,
                 resize: 'vertical',
@@ -816,11 +750,14 @@ export default function DistributorPage() {
                   fontSize: 12.5,
                   fontWeight: '700',
                   marginBottom: 10,
-                  color: noteMessage.startsWith('✓')
-                    ? '#10B981'
-                    : noteMessage.startsWith('⚠️')
-                    ? '#D97706'
-                    : '#DC2626',
+                  color:
+                    noteMessage.startsWith('✓')
+                      ? '#10B981'
+                      : noteMessage.startsWith(
+                          '⚠️'
+                        )
+                      ? '#D97706'
+                      : '#DC2626',
                 }}
               >
                 {noteMessage}
@@ -829,17 +766,29 @@ export default function DistributorPage() {
 
             <button
               type="submit"
-              disabled={noteBusy || !noteContent.trim()}
+              disabled={
+                noteBusy ||
+                !noteContent.trim()
+              }
               className="btn-primary"
               style={{
                 width: 'auto',
                 padding: '10px 20px',
-                opacity: noteBusy || !noteContent.trim() ? 0.65 : 1,
+                opacity:
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 0.65
+                    : 1,
                 cursor:
-                  noteBusy || !noteContent.trim() ? 'not-allowed' : 'pointer',
+                  noteBusy ||
+                  !noteContent.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
             >
-              {noteBusy ? 'جاري الإرسال...' : 'إرسال للمدير'}
+              {noteBusy
+                ? 'جاري الإرسال...'
+                : 'إرسال للمدير'}
             </button>
           </form>
         </div>
@@ -850,7 +799,8 @@ export default function DistributorPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(20,10,40,0.6)',
+            background:
+              'rgba(20,10,40,0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -866,14 +816,17 @@ export default function DistributorPage() {
               maxWidth: 340,
               width: '100%',
               textAlign: 'center',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
               overflow: 'hidden',
             }}
           >
             <div
               style={{
-                background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
-                padding: '26px 20px 22px',
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                padding:
+                  '26px 20px 22px',
               }}
             >
               <div
@@ -909,17 +862,10 @@ export default function DistributorPage() {
                   fontSize: 12.5,
                   color: 'var(--ink-soft)',
                   marginBottom: 15,
-                  textAlign: 'right',
+                  textAlign: 'right'
                 }}
               >
-                <label
-                  style={{
-                    display: 'block',
-                    marginBottom: 6,
-                    fontWeight: '700',
-                    color: '#374151',
-                  }}
-                >
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
                   اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
                 <input
@@ -933,18 +879,10 @@ export default function DistributorPage() {
                     borderRadius: 10,
                     border: '1.5px solid var(--line)',
                     fontSize: '13px',
-                    outline: 'none',
+                    outline: 'none'
                   }}
                 />
-                <span
-                  style={{
-                    fontSize: '11px',
-                    color: '#7C3AED',
-                    display: 'block',
-                    marginTop: 4,
-                    fontWeight: '600',
-                  }}
-                >
+                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: '600' }}>
                   💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
                 </span>
               </div>
@@ -972,9 +910,11 @@ export default function DistributorPage() {
                     flex: 1,
                     padding: '13px 0',
                     borderRadius: 12,
-                    border: '1.5px solid var(--line)',
+                    border:
+                      '1.5px solid var(--line)',
                     background: '#fff',
-                    color: 'var(--ink-soft)',
+                    color:
+                      'var(--ink-soft)',
                     fontWeight: '800',
                     fontSize: 13.5,
                     cursor: 'pointer',
@@ -991,14 +931,17 @@ export default function DistributorPage() {
                     padding: '13px 0',
                     borderRadius: 12,
                     border: 'none',
-                    background: 'linear-gradient(120deg, #7C3AED, #DB2777)',
+                    background:
+                      'linear-gradient(120deg, #7C3AED, #DB2777)',
                     color: '#fff',
                     fontWeight: '800',
                     fontSize: 13.5,
                     cursor: 'pointer',
                   }}
                 >
-                  {revealBusy ? 'جاري التأكيد...' : 'تأكيد البيع'}
+                  {revealBusy
+                    ? 'جاري التأكيد...'
+                    : 'تأكيد البيع'}
                 </button>
               </div>
             </div>
@@ -1011,7 +954,8 @@ export default function DistributorPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(20,10,40,0.6)',
+            background:
+              'rgba(20,10,40,0.6)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1029,13 +973,15 @@ export default function DistributorPage() {
               width: '100%',
               textAlign: 'center',
               position: 'relative',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+              boxShadow:
+                '0 20px 60px rgba(0,0,0,0.35)',
               overflow: 'hidden',
             }}
           >
             <div
               style={{
-                background: 'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                background:
+                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
                 padding: '18px 20px',
                 position: 'relative',
               }}
@@ -1050,7 +996,8 @@ export default function DistributorPage() {
                   height: 30,
                   borderRadius: 10,
                   border: 'none',
-                  background: 'rgba(255,255,255,0.25)',
+                  background:
+                    'rgba(255,255,255,0.25)',
                   color: '#fff',
                   fontSize: 15,
                   fontWeight: '900',
@@ -1115,7 +1062,8 @@ export default function DistributorPage() {
                     flex: 1,
                     padding: '11px 0',
                     borderRadius: 12,
-                    border: '1.5px solid #DDD3F5',
+                    border:
+                      '1.5px solid #DDD3F5',
                     background: '#F3F0FB',
                     color: '#5B21B6',
                     fontWeight: '800',
@@ -1123,13 +1071,15 @@ export default function DistributorPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  {copied ? '✓ تم النسخ' : '📋 نسخ الكود'}
+                  {copied
+                    ? '✓ تم النسخ'
+                    : '📋 نسخ الكود'}
                 </button>
 
                 <button
                   onClick={shareWhatsapp}
                   style={{
-                    flex: 1,
+                    flex: '1',
                     padding: '11px 0',
                     borderRadius: 12,
                     border: 'none',
