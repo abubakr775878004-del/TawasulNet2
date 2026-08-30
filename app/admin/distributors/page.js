@@ -30,7 +30,7 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
     
-    // 1. جلب قائمة الموزعين
+    // 1. جلب قائمة الموزعين مع الدين الثابت المستقل من جدول profiles
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -47,48 +47,21 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. حساب الصافي لكل موزع بدقة مطابقة لصفحة الموزع (إجمالي مبيعات الكروت مع خصم 10% مطروحاً منها السدادات النقدية)
+    // 2. جلب عدد الكروت في المخزن فقط للعرض (بدون التأثير على الدين الثابت)
     const listWithDetails = await Promise.all(
       distributors.map(async (dist) => {
-        // جلب الكروت المباعة الخاصة بالموزع وحساب قيمتها
-        const { data: soldCards } = await supabase
-          .from('cards')
-          .select('packages(price)')
-          .eq('assigned_to', dist.id)
-          .eq('status', 'sold');
-
-        const totalSoldValue = (soldCards || []).reduce(
-          (sum, item) => sum + Number(item.packages?.price || 0),
-          0
-        );
-
-        // تطبيق خصم 10% على إجمالي المبيعات
-        const grossDebt = totalSoldValue * 0.9;
-
-        // جلب السدادات النقدية من جدول distributor_payments المرتبط بالموزع
-        const { data: paymentsData } = await supabase
-          .from('distributor_payments')
-          .select('amount')
-          .eq('distributor_id', dist.id);
-
-        const totalPaid = (paymentsData || []).reduce(
-          (sum, item) => sum + Number(item.amount || 0),
-          0
-        );
-
-        // الصافي المستحق الفعلي بدقة تامة
-        const netDebt = Math.max(0, Math.round(grossDebt - totalPaid));
-
-        // عد الكروت المتاحة في مخزنه الحالي
         const { count: myCardsCount } = await supabase
           .from('cards')
           .select('*', { count: 'exact', head: true })
           .eq('assigned_to', dist.id)
           .eq('status', 'with_distributor');
 
+        // اعتماد الدين الثابت المخزن في قاعدة البيانات حصراً ولن يتأثر بحذف الكروت المباعة
+        const permanentNetDebt = Number(dist.permanent_debt ?? dist.debt ?? 0);
+
         return {
           ...dist,
-          debt: netDebt,
+          debt: permanentNetDebt,
           myCardsCount: myCardsCount || 0,
         };
       })
@@ -137,12 +110,11 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // تحديث الرصيد بجدول profiles
-    const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
+    // استخدام دالة تحديث الدين الثابت عند إضافة مخزون جديد
+    const { error: updateError } = await supabase.rpc('update_permanent_debt', {
       target_id: id,
-      amount: amount,
-      is_debt: false,
-      is_add: true
+      amount_to_add: amount,
+      is_payment: false
     });
 
     setBusyId(null);
@@ -158,10 +130,12 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // تسجيل السداد النقدي في جدول distributor_payments لخصمه فوراً من الصافي المستحق
-    const { error: payError } = await supabase
-      .from('distributor_payments')
-      .insert([{ distributor_id: id, amount: amount }]);
+    // استخدام دالة تحديث الدين الثابت عند السداد النقدي
+    const { error: payError } = await supabase.rpc('update_permanent_debt', {
+      target_id: id,
+      amount_to_add: amount,
+      is_payment: true
+    });
 
     if (payError) {
       setBusyId(null);
@@ -172,7 +146,7 @@ export default function DistributorsPage() {
     setBusyId(null);
     setDebts({ ...debts, [id]: '' });
     loadList();
-    alert('✓ تم تسجيل السداد النقدي وخصمه من صافي الدين بنجاح');
+    alert('✓ تم تسجيل السداد النقدي وخصمه من الدين الثابت بنجاح');
   }
 
   async function updateStatus(id, status) {
@@ -341,7 +315,7 @@ export default function DistributorsPage() {
                       padding: '8px 12px' 
                     }}>
                       <div style={{ fontSize: 11, color: currentNetDebt > 0 ? '#991b1b' : '#166534', fontWeight: 700 }}>
-                        المبلغ الصافي المستحق للمدير
+                        المبلغ الصافي المستحق للمدير (ثابت)
                       </div>
                       <div className="mono" style={{ fontSize: 14, fontWeight: 900, color: currentNetDebt > 0 ? '#dc2626' : '#059669', marginTop: 2 }}>
                         {formatNum(currentNetDebt)} <span style={{ fontSize: 11 }}>ريال</span>
