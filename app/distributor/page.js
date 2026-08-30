@@ -74,36 +74,18 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // جلب جميع الكروت المسندة للموزع (المتاحة والمباعة) لحساب القيمة الإجمالية بدقة
-      const { data: allAssignedCards, error: cardsErr } = await supabase
+      // التعديل المباشر والصحيح: حساب إجمالي قيمة الكروت المباعة للمدير بناءً على جدول sales_log أو الكروت المباعة
+      const { data: soldCardsData } = await supabase
         .from('cards')
-        .select('status, packages(price)')
+        .select('packages(price)')
         .eq('assigned_to', profile.id)
-        .in('status', ['with_distributor', 'sold']);
+        .eq('status', 'sold');
 
-      if (cardsErr) {
-        console.error('Error fetching cards for debt calculation:', cardsErr);
-      }
-
-      const totalCardsValue = (allAssignedCards || []).reduce((sum, card) => {
-        const price = Number(card.packages?.price || 0);
-        return sum + price;
+      const totalSoldValue = (soldCardsData || []).reduce((sum, item) => {
+        return sum + Number(item.packages?.price || 0);
       }, 0);
 
-      const { data: ledgerData } = await supabase
-        .from('distributor_ledger')
-        .select('amount, type')
-        .eq('distributor_id', profile.id);
-
-      const totalPayments = (ledgerData || []).reduce((sum, item) => {
-        if (item.type === 'payment') {
-          return sum + Math.abs(Number(item.amount || 0));
-        }
-        return sum;
-      }, 0);
-
-      const calculatedDebt = totalCardsValue - totalPayments;
-      setNetDebt(Math.max(0, Math.round(calculatedDebt)));
+      setNetDebt(Math.round(totalSoldValue));
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -252,12 +234,7 @@ export default function DistributorPage() {
       'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
       'سبحان الله وبحمده، سبحان الله العظيم',
       'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
-      'اللهم صل وسلم وبارك على نبينا محمد',
-      'استغفر الله وأكثر من ذكره',
-      'الحمد لله على كل نعمة',
-      'اتقِ الله واجعل الخير طريقك دائمًا',
-      'اللهم اجعل يومكم خيرًا وبركة',
-      'من توكل على الله كفاه'
+      'اللهم صل وسلم وبارك على نبينا محمد'
     ];
 
     const dailyReminder =
@@ -328,38 +305,8 @@ export default function DistributorPage() {
         return;
       }
 
-      let telegramSuccess = false;
-
-      try {
-        const telegramResponse = await fetch('/api/telegram', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            distributor_name: profile.full_name,
-            content: content,
-          }),
-          cache: 'no-store',
-        });
-
-        let telegramResult = null;
-        try {
-          telegramResult = await telegramResponse.json();
-        } catch (jsonError) {}
-
-        if (telegramResponse.ok && telegramResult?.success === true) {
-          telegramSuccess = true;
-        }
-      } catch (telegramError) {}
-
       setNoteContent('');
-
-      if (telegramSuccess) {
-        setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
-      } else {
-        setNoteMessage('✓ تم حفظ رسالتك، لكن تعذر إرسال إشعار تيليجرام');
-      }
+      setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
 
       setTimeout(() => {
         setNoteMessage('');
@@ -422,8 +369,7 @@ export default function DistributorPage() {
             <span style={{ 
               width: 7, height: 7, borderRadius: '50%', 
               background: isOnline ? '#10B981' : '#EF4444',
-              display: 'inline-block',
-              boxShadow: isOnline ? '0 0 6px #10B981' : 'none'
+              display: 'inline-block'
             }}></span>
             {isOnline ? 'نشط' : 'خامل'}
           </div>
@@ -442,8 +388,6 @@ export default function DistributorPage() {
               padding: '20px 24px',
               color: '#fff',
               marginBottom: 20,
-              boxShadow:
-                '0 10px 25px rgba(124, 58, 237, 0.25)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
@@ -531,7 +475,7 @@ export default function DistributorPage() {
           </div>
 
           <div style={{
-            background: netDebt > 0 ? 'linear-gradient(135deg, #065f46 0%, #059669 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+            background: 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
             borderRadius: 20,
             padding: 20,
             color: '#fff',
@@ -607,7 +551,7 @@ export default function DistributorPage() {
           </div>
 
           {revealError && (
-            <div className="error-note" style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
+            <div style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
               {revealError}
             </div>
           )}
@@ -681,14 +625,12 @@ export default function DistributorPage() {
                     <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
                       {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
                     </div>
-                    <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
+                    <div className="mono" style={{ fontSize: '12px', color: '#64748B' }}>
                       {sale.code}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: '10.5px', color: '#94A3B8' }}>
-                      {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+                  <div style={{ textAlign: 'left', fontSize: '10.5px', color: '#94A3B8' }}>
+                    {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               ))}
@@ -728,7 +670,6 @@ export default function DistributorPage() {
                 marginBottom: 10,
                 fontSize: 13.5,
                 resize: 'vertical',
-                opacity: noteBusy ? 0.7 : 1,
               }}
             />
 
@@ -741,10 +682,6 @@ export default function DistributorPage() {
                   color:
                     noteMessage.startsWith('✓')
                       ? '#10B981'
-                      : noteMessage.startsWith(
-                          '⚠️'
-                        )
-                      ? '#D97706'
                       : '#DC2626',
                 }}
               >
@@ -762,16 +699,6 @@ export default function DistributorPage() {
               style={{
                 width: 'auto',
                 padding: '10px 20px',
-                opacity:
-                  noteBusy ||
-                  !noteContent.trim()
-                    ? 0.65
-                    : 1,
-                cursor:
-                  noteBusy ||
-                  !noteContent.trim()
-                    ? 'not-allowed'
-                    : 'pointer',
               }}
             >
               {noteBusy
@@ -800,7 +727,6 @@ export default function DistributorPage() {
             style={{
               background: '#fff',
               borderRadius: 22,
-              padding: 0,
               maxWidth: 340,
               width: '100%',
               textAlign: 'center',
@@ -815,6 +741,7 @@ export default function DistributorPage() {
                   'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
                 padding:
                   '26px 20px 22px',
+                color: '#fff',
               }}
             >
               <div
@@ -832,8 +759,6 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 26,
                   fontWeight: '900',
-                  color: '#fff',
-                  lineHeight: 1.2,
                 }}
               >
                 {pendingPackage.name}
@@ -850,7 +775,7 @@ export default function DistributorPage() {
                   fontSize: 12.5,
                   color: 'var(--ink-soft)',
                   marginBottom: 15,
-                  textAlign: 'right'
+                  textAlign: 'right',
                 }}
               >
                 <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
@@ -860,29 +785,15 @@ export default function DistributorPage() {
                   type="text"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="مثال: أحمد محمد (لإدخاله في السحب)"
+                  placeholder="مثال: أحمد محمد"
                   style={{
                     width: '100%',
                     padding: '10px 12px',
                     borderRadius: 10,
                     border: '1.5px solid var(--line)',
                     fontSize: '13px',
-                    outline: 'none'
                   }}
                 />
-                <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: '600' }}>
-                  💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
-                </span>
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--ink-soft)',
-                  marginBottom: 20,
-                }}
-              >
-                سيتم تسليم كرت واحد وتأكيده كمباع
               </div>
 
               <div
@@ -901,10 +812,7 @@ export default function DistributorPage() {
                     border:
                       '1.5px solid var(--line)',
                     background: '#fff',
-                    color:
-                      'var(--ink-soft)',
                     fontWeight: '800',
-                    fontSize: 13.5,
                     cursor: 'pointer',
                   }}
                 >
@@ -923,7 +831,6 @@ export default function DistributorPage() {
                       'linear-gradient(120deg, #7C3AED, #DB2777)',
                     color: '#fff',
                     fontWeight: '800',
-                    fontSize: 13.5,
                     cursor: 'pointer',
                   }}
                 >
@@ -953,14 +860,11 @@ export default function DistributorPage() {
         >
           <div
             style={{
-              background:
-                'linear-gradient(160deg, #ffffff 0%, #ffffff 60%, #F3F0FB 100%)',
+              background: '#fff',
               borderRadius: 24,
-              padding: 0,
               maxWidth: 380,
               width: '100%',
               textAlign: 'center',
-              position: 'relative',
               boxShadow:
                 '0 20px 60px rgba(0,0,0,0.35)',
               overflow: 'hidden',
@@ -971,6 +875,7 @@ export default function DistributorPage() {
                 background:
                   'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
                 padding: '18px 20px',
+                color: '#fff',
                 position: 'relative',
               }}
             >
@@ -987,11 +892,9 @@ export default function DistributorPage() {
                   background:
                     'rgba(255,255,255,0.25)',
                   color: '#fff',
-                  fontSize: 15,
                   fontWeight: '900',
                   cursor: 'pointer',
                 }}
-                title="إغلاق"
               >
                 ✕
               </button>
@@ -1009,7 +912,6 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#fff',
                   fontWeight: '900',
                   marginTop: 2,
                 }}
@@ -1029,7 +931,6 @@ export default function DistributorPage() {
                   fontSize: 28,
                   fontWeight: '900',
                   margin: '4px 0 18px',
-                  letterSpacing: 1,
                   direction: 'ltr',
                   color: '#3A1D66',
                 }}
@@ -1055,7 +956,6 @@ export default function DistributorPage() {
                     background: '#F3F0FB',
                     color: '#5B21B6',
                     fontWeight: '800',
-                    fontSize: 13,
                     cursor: 'pointer',
                   }}
                 >
@@ -1074,7 +974,6 @@ export default function DistributorPage() {
                     background: '#25D366',
                     color: '#fff',
                     fontWeight: '800',
-                    fontSize: 13,
                     cursor: 'pointer',
                   }}
                 >
@@ -1092,7 +991,6 @@ export default function DistributorPage() {
                   background: '#F3F0FB',
                   color: '#5B21B6',
                   fontWeight: '800',
-                  fontSize: 13.5,
                   cursor: 'pointer',
                 }}
               >
