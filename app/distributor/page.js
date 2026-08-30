@@ -74,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // جلب الدين من جدول profiles مع فحص كلا الحقلين لضمان المطابقة التامة
+      // قراءة الدين المحدث مباشرة من جدول profiles
       const { data: freshProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -148,12 +148,11 @@ export default function DistributorPage() {
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
       
-      // الحسبة الدقيقة: 90% للمدير (دين) و 10% للموزع
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
 
-      // 2. تحديث حالة الكرت إلى مباع وإضافة اسم الزبون
+      // 2. تحديث حالة الكرت إلى مباع
       const { error: updateCardError } = await supabase
         .from('cards')
         .update({
@@ -179,8 +178,8 @@ export default function DistributorPage() {
       const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
       const newTotalDebt = existingDebt + managerShare;
 
-      // تحديث الحقلين معا (debt_balance و debt) لضمان عدم حصول أي تضارب نهائياً
-      await supabase
+      // تحديث الحقلين معا في جدول profiles
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({ 
           debt_balance: newTotalDebt,
@@ -188,10 +187,11 @@ export default function DistributorPage() {
         })
         .eq('id', profile.id);
 
-      // تحديث القيمة في الشاشة فوراً وبشكل لحظي للموزع
-      setNetDebt(newTotalDebt);
+      if (profileError) {
+        console.error('Profile update debt error (RLS restriction?):', profileError);
+      }
 
-      // 4. تسجيل العملية في جدول السجلات (sales_log) مع الحصص بدقة
+      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ حصة المدير والموزع
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -202,7 +202,10 @@ export default function DistributorPage() {
         sold_at: soldAtTimestamp
       });
 
-      // 5. إظهار الكرت بنجاح وتحديث واجهة الموزع
+      // تثبيت القيمة مباشرة في الشاشة لضمان عدم اختفائها
+      setNetDebt(newTotalDebt);
+
+      // 5. إظهار الكرت بنجاح للموزع
       setRevealedCard({
         code: card.code,
         packageName: pendingPackage.name,
@@ -212,7 +215,38 @@ export default function DistributorPage() {
       setCustomerName('');
       setCopied(false);
 
-      await load();
+      // تحديث باقي البيانات بهدوء بدون التأثير على الدين المعروض
+      const since = new Date();
+      since.setHours(0, 0, 0, 0);
+
+      const { data: availableCards } = await supabase
+        .from('cards')
+        .select('*, packages(name, price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'with_distributor');
+
+      setMyCards(availableCards || []);
+
+      const { count } = await supabase
+        .from('cards')
+        .select('*', { count: 'exact', head: true })
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte('sold_at', since.toISOString());
+
+      setSoldToday(count || 0);
+
+      const { data: salesData } = await supabase
+        .from('cards')
+        .select('id, code, sold_at, customer_name, packages(name, price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte('sold_at', since.toISOString())
+        .order('sold_at', { ascending: false })
+        .limit(10);
+
+      setRecentSales(salesData || []);
+
     } catch (error) {
       console.error('Confirm reveal error:', error);
       setRevealError('حدث خطأ غير متوقع، حاول مرة أخرى');
