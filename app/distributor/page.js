@@ -74,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // التعديل المباشر والصحيح: حساب إجمالي قيمة الكروت المباعة للمدير بناءً على جدول sales_log أو الكروت المباعة
+      // حساب إجمالي الكروت المباعة مع خصم نسبة 10% للموزع
       const { data: soldCardsData } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -85,7 +85,10 @@ export default function DistributorPage() {
         return sum + Number(item.packages?.price || 0);
       }, 0);
 
-      setNetDebt(Math.round(totalSoldValue));
+      // تطبيق خصم 10% (صافي المبلغ للمدير بعد نسبة الموزع)
+      const discountedValue = totalSoldValue * 0.9;
+
+      setNetDebt(Math.round(discountedValue));
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -475,14 +478,17 @@ export default function DistributorPage() {
           </div>
 
           <div style={{
-            background: 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+            background: netDebt > 0 
+              ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' 
+              : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
             borderRadius: 20,
             padding: 20,
             color: '#fff',
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'space-between',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)'
+            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
+            transition: 'background 0.3s ease'
           }}>
             <div>
               <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
