@@ -74,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // قراءة الدين المحدث مباشرة من جدول profiles
+      // جلب القيمة من الحقل المربط بصفحة المدير بدقة
       const { data: freshProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -148,6 +148,7 @@ export default function DistributorPage() {
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
       
+      // توزيع النسب: 90% للمدير و 10% للموزع
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
@@ -168,7 +169,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // 3. جلب الدين الحالي بدقة وتحديثه بحصة المدير (90%)
+      // 3. جلب القيمة الحالية من الخانة المرتبطة بصفحة المدير وإضافة حصة المدير (90%)
       const { data: currentDistProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -178,7 +179,7 @@ export default function DistributorPage() {
       const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
       const newTotalDebt = existingDebt + managerShare;
 
-      // تحديث الحقلين معا في جدول profiles
+      // تحديث خانة الدين الجديدة والمرتبطة بصفحة المدير بكلا الحقلين لضمان التطابق التام
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ 
@@ -188,7 +189,7 @@ export default function DistributorPage() {
         .eq('id', profile.id);
 
       if (profileError) {
-        console.error('Profile update debt error (RLS restriction?):', profileError);
+        console.error('Profile update debt error:', profileError);
       }
 
       // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ حصة المدير والموزع
@@ -202,7 +203,7 @@ export default function DistributorPage() {
         sold_at: soldAtTimestamp
       });
 
-      // تثبيت القيمة مباشرة في الشاشة لضمان عدم اختفائها
+      // تثبيت القيمة المحدثة في واجهة الموزع مباشرة
       setNetDebt(newTotalDebt);
 
       // 5. إظهار الكرت بنجاح للموزع
@@ -215,7 +216,7 @@ export default function DistributorPage() {
       setCustomerName('');
       setCopied(false);
 
-      // تحديث باقي البيانات بهدوء بدون التأثير على الدين المعروض
+      // تحديث باقي البيانات المرتبطة دون التأثير على قيمة الدين المحدثة
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
