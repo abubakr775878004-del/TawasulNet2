@@ -47,42 +47,58 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب الحركات المالية حصراً من جدول distributor_ledger الدائم (معزل تماماً عن الكروت)
-    const { data: ledgerData, error: ledgerError } = await supabase
-      .from('distributor_ledger')
-      .select('distributor_id, amount, type');
+    // 2. حساب الصافي لكل موزع بدقة مطابقة لصفحة الموزع (إجمالي مبيعات الكروت مع خصم 10% مطروحاً منها السدادات النقدية)
+    const listWithDetails = await Promise.all(
+      distributors.map(async (dist) => {
+        // جلب الكروت المباعة الخاصة بالموزع وحساب قيمتها
+        const { data: soldCards } = await supabase
+          .from('cards')
+          .select('packages(price)')
+          .eq('assigned_to', dist.id)
+          .eq('status', 'sold');
 
-    if (ledgerError) {
-      console.error('Error loading ledger:', ledgerError);
-    }
+        const totalSoldValue = (soldCards || []).reduce(
+          (sum, item) => sum + Number(item.packages?.price || 0),
+          0
+        );
 
-    // 3. حساب الدين الصافي لكل موزع بدقة تامة (الشحنات مطروحاً منها السدادات)
-    const updatedDistributors = distributors.map((dist) => {
-      const distLedger = (ledgerData || []).filter(item => item.distributor_id === dist.id);
-      
-      let calculatedDebt = 0;
-      distLedger.forEach(item => {
-        const amt = Number(item.amount) || 0;
-        if (item.type === 'shipment') {
-          calculatedDebt += amt;
-        } else if (item.type === 'payment') {
-          calculatedDebt -= amt;
-        }
-      });
+        // تطبيق خصم 10% على إجمالي المبيعات
+        const grossDebt = totalSoldValue * 0.9;
 
-      const finalDebt = Math.max(0, Math.round(calculatedDebt));
+        // جلب السدادات النقدية من جدول distributor_payments المرتبط بالموزع
+        const { data: paymentsData } = await supabase
+          .from('distributor_payments')
+          .select('amount')
+          .eq('distributor_id', dist.id);
 
-      return {
-        ...dist,
-        debt: finalDebt
-      };
-    });
+        const totalPaid = (paymentsData || []).reduce(
+          (sum, item) => sum + Number(item.amount || 0),
+          0
+        );
 
-    setList(updatedDistributors);
+        // الصافي المستحق الفعلي بدقة تامة
+        const netDebt = Math.max(0, Math.round(grossDebt - totalPaid));
+
+        // عد الكروت المتاحة في مخزنه الحالي
+        const { count: myCardsCount } = await supabase
+          .from('cards')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', dist.id)
+          .eq('status', 'with_distributor');
+
+        return {
+          ...dist,
+          debt: netDebt,
+          myCardsCount: myCardsCount || 0,
+        };
+      })
+    );
+
+    setList(listWithDetails);
     
     const initialCards = {};
     const initialDebts = {};
-    updatedDistributors.forEach((d) => { 
+    listWithDetails.forEach((d) => { 
       initialCards[d.id] = d.personal_card || ''; 
       initialDebts[d.id] = '';
     });
@@ -121,23 +137,7 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // 1. تسجيل الحركة في جدول الدفتر المالي الدائم كحركة شحنة/دين (shipment)
-    const { error: ledgerError } = await supabase
-      .from('distributor_ledger')
-      .insert([{
-        distributor_id: id,
-        amount: amount,
-        type: 'shipment',
-        notes: 'إضافة رصيد مخزون/دين من لوحة الأدمن'
-      }]);
-
-    if (ledgerError) {
-      setBusyId(null);
-      setError('تعذر تسجيل الحركة في الدفتر الدائم: ' + ledgerError.message);
-      return;
-    }
-
-    // 2. تحديث الرصيد بجدول profiles
+    // تحديث الرصيد بجدول profiles
     const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
@@ -158,10 +158,10 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // 1. تسجيل السداد في جدول payments القديم
+    // تسجيل السداد النقدي في جدول distributor_payments لخصمه فوراً من الصافي المستحق
     const { error: payError } = await supabase
-      .from('payments')
-      .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
+      .from('distributor_payments')
+      .insert([{ distributor_id: id, amount: amount }]);
 
     if (payError) {
       setBusyId(null);
@@ -169,33 +169,10 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. تسجيل السداد في الدفتر المالي الدائم (payment)
-    const { error: ledgerError } = await supabase
-      .from('distributor_ledger')
-      .insert([{
-        distributor_id: id,
-        amount: amount,
-        type: 'payment',
-        notes: 'سداد نقدي مقبوض'
-      }]);
-
-    if (ledgerError) {
-      setBusyId(null);
-      setError('تعذر تسجيل السداد في الدفتر الدائم: ' + ledgerError.message);
-      return;
-    }
-
-    // 3. تعديل رصيد الدين في جدول profiles
-    await supabase.rpc('modify_distributor_balance', {
-      target_id: id,
-      amount: amount,
-      is_debt: true,
-      is_add: false
-    });
-
     setBusyId(null);
     setDebts({ ...debts, [id]: '' });
     loadList();
+    alert('✓ تم تسجيل السداد النقدي وخصمه من صافي الدين بنجاح');
   }
 
   async function updateStatus(id, status) {
@@ -354,6 +331,7 @@ export default function DistributorsPage() {
                       <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
                         {formatNum(d.balance)} <span style={{ fontSize: 11 }}>ريال</span>
                       </div>
+                      <div style={{ fontSize: 10.5, color: '#94A3B8', marginTop: 2 }}>عدد الكروت لديه: {d.myCardsCount}</div>
                     </div>
                     
                     <div style={{ 
