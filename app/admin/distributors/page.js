@@ -30,7 +30,7 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
     
-    // 1. جلب قائمة الموزعين مع الدين الثابت المستقل من جدول profiles
+    // 1. جلب قائمة الموزعين مع حقول الدين والرصيد من جدول profiles
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -47,7 +47,7 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب عدد الكروت في المخزن فقط للعرض (بدون التأثير على الدين الثابت)
+    // 2. جلب عدد الكروت في المخزن فقط للعرض
     const listWithDetails = await Promise.all(
       distributors.map(async (dist) => {
         const { count: myCardsCount } = await supabase
@@ -56,8 +56,8 @@ export default function DistributorsPage() {
           .eq('assigned_to', dist.id)
           .eq('status', 'with_distributor');
 
-        // اعتماد الدين الثابت المخزن في قاعدة البيانات حصراً ولن يتأثر بحذف الكروت المباعة
-        const permanentNetDebt = Number(dist.permanent_debt ?? dist.debt ?? 0);
+        // قراءة الدين الثابت بدقة من الحقول المتاحة
+        const permanentNetDebt = Number(dist.debt_balance ?? dist.permanent_debt ?? dist.debt ?? 0);
 
         return {
           ...dist,
@@ -110,43 +110,93 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // استخدام دالة تحديث الدين الثابت عند إضافة مخزون جديد
-    const { error: updateError } = await supabase.rpc('update_permanent_debt', {
-      target_id: id,
-      amount_to_add: amount,
-      is_payment: false
-    });
+    try {
+      // 1. جلب بيانات الموزع الحالية لضمان تحديث الرصيد والدين بشكل صحيح وآمن
+      const { data: targetDist, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('balance, debt_balance, debt')
+        .eq('id', id)
+        .single();
 
-    setBusyId(null);
-    if (updateError) { 
-      setError('تعذّرت إضافة الرصيد: ' + updateError.message); 
-      return; 
+      if (fetchErr || !targetDist) {
+        throw new Error('تعذّر العثور على بيانات الموزع');
+      }
+
+      const currentBalance = Number(targetDist.balance || 0);
+      const currentDebt = Number(targetDist.debt_balance ?? targetDist.debt ?? 0);
+      
+      const newBalance = currentBalance + amount;
+      // عند شحن المخزون/الرصيد، يزيد إجمالي عهدة/دين الموزع على المدير بقيمة المخزون المضاف
+      const newDebt = currentDebt + amount;
+
+      // 2. تحديث الرصيد والدين معا في جدول profiles
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ 
+          balance: newBalance,
+          debt_balance: newDebt,
+          debt: newDebt
+        })
+        .eq('id', id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setTopUps({ ...topUps, [id]: '' });
+      await loadList();
+      alert('✓ تمت إضافة رصيد المخزون وتحديث الحساب بنجاح');
+
+    } catch (err) {
+      console.error('Add balance error:', err);
+      setError('تعذّرت إضافة الرصيد: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
+      setBusyId(null);
     }
-    setTopUps({ ...topUps, [id]: '' });
-    loadList();
   }
 
   async function executePayDebt(id, amount) {
     setError(''); 
     setBusyId(id);
     
-    // استخدام دالة تحديث الدين الثابت عند السداد النقدي
-    const { error: payError } = await supabase.rpc('update_permanent_debt', {
-      target_id: id,
-      amount_to_add: amount,
-      is_payment: true
-    });
+    try {
+      // 1. جلب الدين الحالي للموزع
+      const { data: targetDist, error: fetchErr } = await supabase
+        .from('profiles')
+        .select('debt_balance, debt')
+        .eq('id', id)
+        .single();
 
-    if (payError) {
+      if (fetchErr || !targetDist) {
+        throw new Error('تعذّر العثور على بيانات الموزع');
+      }
+
+      const currentDebt = Number(targetDist.debt_balance ?? targetDist.debt ?? 0);
+      const newDebt = Math.max(0, currentDebt - amount);
+
+      // 2. خصم المبلغ المسدد من الدين الثابت للمدير
+      const { error: payError } = await supabase
+        .from('profiles')
+        .update({ 
+          debt_balance: newDebt,
+          debt: newDebt 
+        })
+        .eq('id', id);
+
+      if (payError) {
+        throw payError;
+      }
+
+      setDebts({ ...debts, [id]: '' });
+      await loadList();
+      alert('✓ تم تسجيل السداد النقدي وخصمه من الدين الثابت بنجاح');
+
+    } catch (err) {
+      console.error('Pay debt error:', err);
+      setError('تعذّر تسجيل عملية السداد: ' + (err.message || 'خطأ غير معروف'));
+    } finally {
       setBusyId(null);
-      setError('تعذّر تسجيل عملية السداد: ' + payError.message);
-      return;
     }
-
-    setBusyId(null);
-    setDebts({ ...debts, [id]: '' });
-    loadList();
-    alert('✓ تم تسجيل السداد النقدي وخصمه من الدين الثابت بنجاح');
   }
 
   async function updateStatus(id, status) {
@@ -214,7 +264,7 @@ export default function DistributorsPage() {
           إدارة طلبات التسجيل والحسابات الحالية والمستحقات المباشرة
         </p>
 
-        {error && <div className="error-note">{error}</div>}
+        {error && <div className="error-note" style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '10px', marginBottom: '16px', border: '1px solid #fca5a5', fontSize: '13px', fontWeight: 'bold' }}>{error}</div>}
 
         <div className="panel" style={{ marginBottom: 24 }}>
           <div className="panel-head">
