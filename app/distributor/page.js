@@ -74,8 +74,14 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // قراءة الدين الثابت والمستقل مباشرة من حقل الموزع في قاعدة البيانات لتتطابق تماماً مع صفحة المدير
-      const currentNetDebt = Number(profile?.permanent_debt ?? profile?.debt ?? 0);
+      // قراءة الدين الثابت والمستقل مباشرة من حقل debt_balance في جدول profiles
+      const { data: freshProfile } = await supabase
+        .from('profiles')
+        .select('debt_balance, balance')
+        .eq('id', profile.id)
+        .single();
+
+      const currentNetDebt = Number(freshProfile?.debt_balance ?? profile?.debt_balance ?? profile?.debt ?? 0);
       setNetDebt(currentNetDebt);
 
     } catch (err) {
@@ -140,24 +146,29 @@ export default function DistributorPage() {
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
-
       const soldAtTimestamp = new Date().toISOString();
 
-      const { error: updateError } = await supabase
-        .from('cards')
-        .update({
-          status: 'sold',
-          sold_at: soldAtTimestamp,
-          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
-        })
-        .eq('id', card.id);
+      // استدعاء دالة قاعدة البيانات الآمنة (RPC) لتنفيذ البيع وحساب دين المدير (90%) تلقائياً
+      const { error: rpcError } = await supabase.rpc('process_card_sale', {
+        p_card_id: card.id,
+        p_distributor_id: profile.id,
+        p_package_price: cardPrice
+      });
 
-      if (updateError) {
-        console.error('Update card error:', updateError);
-        setRevealError('حدث خطأ أثناء حفظ بيانات البيع');
+      if (rpcError) {
+        console.error('RPC process_card_sale error:', rpcError);
+        setRevealError('حدث خطأ أثناء معالجة عملية البيع والدين');
         setRevealBusy(false);
         return;
       }
+
+      // تحديث اسم الزبون وسجل المبيعات المؤقت
+      await supabase
+        .from('cards')
+        .update({
+          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
+        })
+        .eq('id', card.id);
 
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
