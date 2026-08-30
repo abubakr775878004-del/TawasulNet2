@@ -46,13 +46,13 @@ export default function DistributorPage() {
 
     try {
       // 1. جلب الكروت المتاحة حالياً لدى الموزع[span_0](start_span)[span_0](end_span)
-      const { data } = await supabase
+      const { data: availableCards } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'with_distributor');
 
-      setMyCards(data || []);
+      setMyCards(availableCards || []);
 
       const since = new Date();
       since.setHours(0, 0, 0, 0);
@@ -79,27 +79,39 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. التعديل الصحيح والدقيق: جلب وحساب الدين من جدول distributor_ledger فقط
-      const { data: ledgerData, error: ledgerErr } = await supabase
+      // 4. الحل الدقيق والآمن: حساب إجمالي الكروت التي بحوزته + الكروت المباعة غير الموردة من جدول cards مباشرة
+      const { data: allAssignedCards, error: cardsErr } = await supabase
+        .from('cards')
+        .select('status, packages(price)')
+        .eq('assigned_to', profile.id)
+        .in('status', ['with_distributor', 'sold']);
+
+      if (cardsErr) {
+        console.error('Error fetching cards for debt calculation:', cardsErr);
+      }
+
+      // حساب المجموع الكلي لقيمة الكروت التي تم تسليمها لهذا الموزع
+      const totalCardsValue = (allAssignedCards || []).reduce((sum, card) => {
+        const price = Number(card.packages?.price || 0);
+        return sum + price;
+      }, 0);
+
+      // جلب المدفوعات المسجلة في الـ ledger إن وجدت لتخفيض المبلغ
+      const { data: ledgerData } = await supabase
         .from('distributor_ledger')
         .select('amount, type')
         .eq('distributor_id', profile.id);
 
-      if (ledgerErr) {
-        console.error('Error fetching distributor ledger:', ledgerErr);
-      }
-
-      const totalDebt = (ledgerData || []).reduce((sum, item) => {
-        const amt = Number(item.amount || 0);
-        if (item.type === 'shipment') {
-          return sum + Math.abs(amt);
-        } else if (item.type === 'payment') {
-          return sum - Math.abs(amt);
+      const totalPayments = (ledgerData || []).reduce((sum, item) => {
+        if (item.type === 'payment') {
+          return sum + Math.abs(Number(item.amount || 0));
         }
         return sum;
       }, 0);
 
-      setNetDebt(Math.max(0, Math.round(totalDebt)));
+      // إذا لم يكن هناك سجل ليدجر للشحنات، نعتبر إجمالي الكروت الحالية والمباعة هو الدين، مطروحاً منه المدفوعات
+      const calculatedDebt = totalCardsValue - totalPayments;
+      setNetDebt(Math.max(0, Math.round(calculatedDebt)));
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -183,7 +195,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // 2. إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة[span_4](start_span)[span_4](end_span)
+      // 2. إدراج السجل تلقائياً في sales_log[span_4](start_span)[span_4](end_span)
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
