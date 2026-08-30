@@ -17,7 +17,6 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // حالة لتخزين المبلغ الصافي المستحق للمدير
   const [netDebt, setNetDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -34,7 +33,6 @@ export default function DistributorPage() {
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
 
-  // دالة تنسيق الأرقام
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -45,7 +43,6 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
-      // 1. جلب الكروت المتاحة حالياً لدى الموزع[span_0](start_span)[span_0](end_span)
       const { data: availableCards } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -57,7 +54,6 @@ export default function DistributorPage() {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      // 2. عدد مبيعات اليوم[span_1](start_span)[span_1](end_span)
       const { count } = await supabase
         .from('cards')
         .select('*', { count: 'exact', head: true })
@@ -67,7 +63,6 @@ export default function DistributorPage() {
 
       setSoldToday(count || 0);
 
-      // 3. آخر مبيعات اليوم[span_2](start_span)[span_2](end_span)
       const { data: salesData } = await supabase
         .from('cards')
         .select('id, code, sold_at, customer_name, packages(name, price)')
@@ -79,7 +74,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. الحل الدقيق والآمن: حساب إجمالي الكروت التي بحوزته + الكروت المباعة غير الموردة من جدول cards مباشرة
+      // جلب جميع الكروت المسندة للموزع (المتاحة والمباعة) لحساب القيمة الإجمالية بدقة
       const { data: allAssignedCards, error: cardsErr } = await supabase
         .from('cards')
         .select('status, packages(price)')
@@ -90,13 +85,11 @@ export default function DistributorPage() {
         console.error('Error fetching cards for debt calculation:', cardsErr);
       }
 
-      // حساب المجموع الكلي لقيمة الكروت التي تم تسليمها لهذا الموزع
       const totalCardsValue = (allAssignedCards || []).reduce((sum, card) => {
         const price = Number(card.packages?.price || 0);
         return sum + price;
       }, 0);
 
-      // جلب المدفوعات المسجلة في الـ ledger إن وجدت لتخفيض المبلغ
       const { data: ledgerData } = await supabase
         .from('distributor_ledger')
         .select('amount, type')
@@ -109,7 +102,6 @@ export default function DistributorPage() {
         return sum;
       }, 0);
 
-      // إذا لم يكن هناك سجل ليدجر للشحنات، نعتبر إجمالي الكروت الحالية والمباعة هو الدين، مطروحاً منه المدفوعات
       const calculatedDebt = totalCardsValue - totalPayments;
       setNetDebt(Math.max(0, Math.round(calculatedDebt)));
 
@@ -178,7 +170,6 @@ export default function DistributorPage() {
 
       const soldAtTimestamp = new Date().toISOString();
 
-      // 1. تحديث الكرت إلى مباع في جدول cards[span_3](start_span)[span_3](end_span)
       const { error: updateError } = await supabase
         .from('cards')
         .update({
@@ -195,7 +186,6 @@ export default function DistributorPage() {
         return;
       }
 
-      // 2. إدراج السجل تلقائياً في sales_log[span_4](start_span)[span_4](end_span)
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -441,7 +431,6 @@ export default function DistributorPage() {
 
         <AdSlotBar />
 
-        {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
         {profile.personal_card && (
@@ -510,7 +499,6 @@ export default function DistributorPage() {
           </div>
         )}
 
-        {/* بطاقات الأرصدة والمستحقات */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
           <div className="balance-card" style={{ marginBottom: 0 }}>
             <div className="lbl">
@@ -542,7 +530,6 @@ export default function DistributorPage() {
             </div>
           </div>
 
-          {/* بطاقة المبلغ الصافي المستحق للمدير */}
           <div style={{
             background: netDebt > 0 ? 'linear-gradient(135deg, #065f46 0%, #059669 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
             borderRadius: 20,
