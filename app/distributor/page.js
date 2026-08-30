@@ -35,84 +35,161 @@ export default function DistributorPage() {
 
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
-    return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return val.toLocaleString('en-US', {
+      maximumFractionDigits: 0,
+    });
   };
 
-  // جلب البيانات الأساسية عند الدخول أو التحديث اليدوي
+  /*
+   * جلب بيانات الموزع.
+   *
+   * ملاحظة مهمة:
+   * الدين يتم قراءته من قاعدة البيانات، ولا يتم حسابه
+   * من البطاقات الموجودة في المتصفح.
+   */
   async function load(isInitial = false) {
     if (!profile) return;
+
     setIsRefreshing(true);
 
     try {
-      const { data: availableCards } = await supabase
-        .from('cards')
-        .select('*, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'with_distributor');
+      const { data: availableCards, error: availableCardsError } =
+        await supabase
+          .from('cards')
+          .select('*, packages(name, price)')
+          .eq('assigned_to', profile.id)
+          .eq('status', 'with_distributor');
+
+      if (availableCardsError) {
+        console.error(
+          'Error loading available cards:',
+          availableCardsError
+        );
+      }
 
       setMyCards(availableCards || []);
 
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      const { count } = await supabase
+      const { count, error: soldCountError } = await supabase
         .from('cards')
-        .select('*', { count: 'exact', head: true })
+        .select('*', {
+          count: 'exact',
+          head: true,
+        })
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
         .gte('sold_at', since.toISOString());
 
+      if (soldCountError) {
+        console.error(
+          'Error loading sold count:',
+          soldCountError
+        );
+      }
+
       setSoldToday(count || 0);
 
-      const { data: salesData } = await supabase
-        .from('cards')
-        .select('id, code, sold_at, customer_name, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString())
-        .order('sold_at', { ascending: false })
-        .limit(10);
+      const { data: salesData, error: salesError } =
+        await supabase
+          .from('cards')
+          .select(
+            'id, code, sold_at, customer_name, packages(name, price)'
+          )
+          .eq('assigned_to', profile.id)
+          .eq('status', 'sold')
+          .gte('sold_at', since.toISOString())
+          .order('sold_at', {
+            ascending: false,
+          })
+          .limit(10);
+
+      if (salesError) {
+        console.error(
+          'Error loading recent sales:',
+          salesError
+        );
+      }
 
       setRecentSales(salesData || []);
 
-      // جلب الدين من جدول profiles فقط عند التحميل الأول أو التحديث اليدوي الصريح لمنع التداخل اللحظي
-      const { data: freshProfile } = await supabase
-        .from('profiles')
-        .select('debt_balance, debt')
-        .eq('id', profile.id)
-        .single();
+      /*
+       * قراءة الدين من profiles فقط.
+       *
+       * لا نقوم هنا بحساب الدين من الكروت.
+       * الدين هو قيمة مالية محفوظة في قاعدة البيانات.
+       */
+      const { data: freshProfile, error: profileError } =
+        await supabase
+          .from('profiles')
+          .select('debt_balance, debt')
+          .eq('id', profile.id)
+          .single();
 
-      const currentNetDebt = Number(freshProfile?.debt_balance ?? freshProfile?.debt ?? profile?.debt_balance ?? profile?.debt ?? 0);
-      
-      // نحدث قيمة الدين فقط إذا كان التحميل أولياً أو لم يتم البيع للتو لمنع اختفاء الرقم
-      if (isInitial || netDebt === 0) {
-        setNetDebt(currentNetDebt);
+      if (profileError) {
+        console.error(
+          'Error loading distributor debt:',
+          profileError
+        );
+      } else {
+        const currentNetDebt = Number(
+          freshProfile?.debt_balance ??
+            freshProfile?.debt ??
+            0
+        );
+
+        setNetDebt(
+          Number.isFinite(currentNetDebt)
+            ? currentNetDebt
+            : 0
+        );
       }
-
     } catch (err) {
-      console.error('Error loading distributor data:', err);
+      console.error(
+        'Error loading distributor data:',
+        err
+      );
     } finally {
       setIsRefreshing(false);
     }
   }
 
   useEffect(() => {
-    if (profile) {
-      load(true);
-    }
+    if (!profile) return;
+
+    load(true);
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+
+    window.addEventListener(
+      'online',
+      handleOnline
+    );
+
+    window.addEventListener(
+      'offline',
+      handleOffline
+    );
+
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener(
+        'online',
+        handleOnline
+      );
+
+      window.removeEventListener(
+        'offline',
+        handleOffline
+      );
     };
   }, [profile]);
 
   function askReveal(pkgId, pkgName) {
     setRevealError('');
     setCustomerName('');
+
     setPendingPackage({
       id: pkgId,
       name: pkgName,
@@ -121,128 +198,240 @@ export default function DistributorPage() {
 
   function cancelReveal() {
     if (revealBusy) return;
+
     setPendingPackage(null);
     setCustomerName('');
+    setRevealError('');
   }
 
   async function confirmReveal() {
-    if (!pendingPackage || !profile || revealBusy) return;
+    if (
+      !pendingPackage ||
+      !profile ||
+      revealBusy
+    ) {
+      return;
+    }
 
     setRevealBusy(true);
     setRevealError('');
 
     try {
-      // 1. جلب أول كرت متاح من هذه الباقة للموزع مع سعر الباقة
-      const { data, error } = await supabase
+      /*
+       * نبحث عن أول كرت متاح للموزع من الباقة المطلوبة.
+       *
+       * هذا الكرت سيتم تمرير ID الخاص به إلى RPC.
+       */
+      const {
+        data,
+        error,
+      } = await supabase
         .from('cards')
-        .select('id, code, package_id, packages(price)')
+        .select(
+          'id, code, package_id, packages(name, price)'
+        )
         .eq('assigned_to', profile.id)
-        .eq('package_id', pendingPackage.id)
+        .eq(
+          'package_id',
+          pendingPackage.id
+        )
         .eq('status', 'with_distributor')
-        .order('created_at', { ascending: true })
+        .order('created_at', {
+          ascending: true,
+        })
         .limit(1);
 
-      if (error || !data || data.length === 0) {
-        setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
+      if (error) {
+        console.error(
+          'Find card error:',
+          error
+        );
+
+        setRevealError(
+          'حدث خطأ أثناء البحث عن الكرت'
+        );
+
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        setRevealError(
+          'تعذّر إيجاد كرت متاح من هذه الباقة'
+        );
+
         setPendingPackage(null);
-        setRevealBusy(false);
+
         return;
       }
 
       const card = data[0];
-      const trimmedCustomerName = customerName.trim();
-      const cardPrice = Number(card.packages?.price || 0);
-      
-      // توزيع النسب: 90% حصة المدير و 10% حصة الموزع
-      const managerShare = cardPrice * 0.9;
-      const distributorShare = cardPrice * 0.1;
-      const soldAtTimestamp = new Date().toISOString();
 
-      // 2. تحديث حالة الكرت إلى مباع في قاعدة البيانات
-      const { error: updateCardError } = await supabase
-        .from('cards')
-        .update({
-          status: 'sold',
-          sold_at: soldAtTimestamp,
-          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
-        })
-        .eq('id', card.id);
+      const trimmedCustomerName =
+        customerName.trim();
 
-      if (updateCardError) {
-        setRevealError('حدث خطأ أثناء تحديث حالة الكرت');
-        setRevealBusy(false);
+      const cardPrice = Number(
+        card.packages?.price || 0
+      );
+
+      if (
+        !Number.isFinite(cardPrice) ||
+        cardPrice <= 0
+      ) {
+        setRevealError(
+          'سعر الباقة غير صحيح، لا يمكن إتمام البيع'
+        );
+
         return;
       }
 
-      // 3. حساب القيمة الجديدة بدقة تامة وإضافتها مباشرة على القيمة الحالية للمتغير
-      const updatedDebt = Number(netDebt) + managerShare;
-      setNetDebt(updatedDebt); // تثبيت القيمة في الواجهة فوراً لضمان عدم اختفائها
+      /*
+       * النسب الحالية للنظام:
+       * المدير 90%
+       * الموزع 10%
+       *
+       * يتم تمرير القيم إلى RPC الحالية،
+       * لكن تنفيذ العملية المالية نفسها يجب أن يتم
+       * داخل قاعدة البيانات.
+       */
+      const managerShare =
+        cardPrice * 0.9;
 
-      // 4. تحديث قيمة الدين في جدول profiles للمدير والموزع في الخلفية
-      await supabase
+      const distributorShare =
+        cardPrice * 0.1;
+
+      /*
+       * العملية المالية الأساسية.
+       *
+       * لا نقوم هنا بتحديث:
+       * - status
+       * - sold_at
+       * - debt_balance
+       * - debt
+       * - sales_log
+       *
+       * بشكل منفصل.
+       *
+       * RPC هي المسؤولة عن تنفيذ العملية كعملية واحدة.
+       */
+      const {
+        data: saleResult,
+        error: saleError,
+      } = await supabase.rpc(
+        'confirm_card_sale',
+        {
+          p_card_id: card.id,
+          p_distributor_id: profile.id,
+          p_package_id: card.package_id,
+          p_price: cardPrice,
+          p_manager_share: managerShare,
+          p_distributor_share:
+            distributorShare,
+          p_customer_name:
+            trimmedCustomerName !== ''
+              ? trimmedCustomerName
+              : null,
+        }
+      );
+
+      if (saleError) {
+        console.error(
+          'confirm_card_sale error:',
+          saleError
+        );
+
+        setRevealError(
+          saleError.message ||
+            'تعذّر تأكيد البيع، لم يتم خصم أي مبلغ'
+        );
+
+        return;
+      }
+
+      /*
+       * لا نأخذ الدين الجديد من حساب محلي.
+       *
+       * بعد نجاح البيع نعيد قراءة الدين الحقيقي
+       * من قاعدة البيانات.
+       */
+      const {
+        data: updatedProfile,
+        error: updatedProfileError,
+      } = await supabase
         .from('profiles')
-        .update({ 
-          debt_balance: updatedDebt,
-          debt: updatedDebt 
-        })
-        .eq('id', profile.id);
+        .select(
+          'debt_balance, debt'
+        )
+        .eq('id', profile.id)
+        .single();
 
-      // 5. تسجيل العملية في جدول السجلات (sales_log)
-      await supabase.from('sales_log').insert({
-        distributor_id: profile.id,
-        card_id: card.id,
-        package_id: card.package_id,
-        price: cardPrice,
-        manager_share: managerShare,
-        distributor_share: distributorShare,
-        sold_at: soldAtTimestamp
-      });
+      if (
+        updatedProfileError
+      ) {
+        console.error(
+          'Error refreshing debt after sale:',
+          updatedProfileError
+        );
+      } else {
+        const updatedDebt = Number(
+          updatedProfile?.debt_balance ??
+            updatedProfile?.debt ??
+            0
+        );
 
-      // 6. إظهار الكرت بنجاح للموزع
+        setNetDebt(
+          Number.isFinite(updatedDebt)
+            ? updatedDebt
+            : 0
+        );
+      }
+
+      /*
+       * نحافظ على الكود القادم من نتيجة البيع إن كانت RPC
+       * تعيده، وإلا نستخدم الكرت الذي تم اختياره.
+       */
+      let soldCode = card.code;
+
+      if (
+        saleResult &&
+        typeof saleResult === 'object'
+      ) {
+        if (saleResult.code) {
+          soldCode = saleResult.code;
+        } else if (
+          saleResult.card_code
+        ) {
+          soldCode =
+            saleResult.card_code;
+        }
+      }
+
       setRevealedCard({
-        code: card.code,
-        packageName: pendingPackage.name,
+        code: soldCode,
+        packageName:
+          pendingPackage.name,
       });
 
       setPendingPackage(null);
       setCustomerName('');
       setCopied(false);
 
-      // تحديث قوائم الكروت ومبيعات اليوم في الخلفية دون إعادة جلب الدين لتجنب أي تداخل
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
-
-      const { data: availableCards } = await supabase
-        .from('cards')
-        .select('*, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'with_distributor');
-
-      setMyCards(availableCards || []);
-
-      const { count } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString());
-
-      setSoldToday(count || 0);
-
-      const { data: salesData } = await supabase
-        .from('cards')
-        .select('id, code, sold_at, customer_name, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString())
-        .order('sold_at', { ascending: false })
-        .limit(10);
-
-      setRecentSales(salesData || []);
-
+      /*
+       * تحديث بيانات الصفحة بعد نجاح البيع.
+       *
+       * هنا نعيد قراءة كل شيء من قاعدة البيانات،
+       * بما في ذلك الدين الحقيقي.
+       */
+      await load(true);
     } catch (error) {
-      console.error('Confirm reveal error:', error);
-      setRevealError('حدث خطأ غير متوقع، حاول مرة أخرى');
+      console.error(
+        'Confirm reveal error:',
+        error
+      );
+
+      setRevealError(
+        error?.message ||
+          'حدث خطأ غير متوقع، حاول مرة أخرى'
+      );
     } finally {
       setRevealBusy(false);
     }
@@ -257,27 +446,43 @@ export default function DistributorPage() {
     if (!revealedCard) return;
 
     try {
-      await navigator.clipboard.writeText(revealedCard.code);
+      await navigator.clipboard.writeText(
+        revealedCard.code
+      );
+
       setCopied(true);
+
       setTimeout(() => {
         setCopied(false);
       }, 2000);
     } catch (error) {
-      console.error('Copy code error:', error);
+      console.error(
+        'Copy code error:',
+        error
+      );
     }
   }
 
-  async function copyPersonalCode(codeText) {
+  async function copyPersonalCode(
+    codeText
+  ) {
     if (!codeText) return;
 
     try {
-      await navigator.clipboard.writeText(codeText);
+      await navigator.clipboard.writeText(
+        codeText
+      );
+
       setPersonalCopied(true);
+
       setTimeout(() => {
         setPersonalCopied(false);
       }, 2000);
     } catch (error) {
-      console.error('Copy personal card error:', error);
+      console.error(
+        'Copy personal card error:',
+        error
+      );
     }
   }
 
@@ -288,26 +493,37 @@ export default function DistributorPage() {
       'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
       'سبحان الله وبحمده، سبحان الله العظيم',
       'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
-      'اللهم صل وسلم وبارك على نبينا محمد'
+      'اللهم صل وسلم وبارك على نبينا محمد',
     ];
 
     const dailyReminder =
       dailyReminders[
-        Math.floor(Math.random() * dailyReminders.length)
+        Math.floor(
+          Math.random() *
+            dailyReminders.length
+        )
       ];
 
     const now = new Date();
 
-    const saleDate = now.toLocaleDateString('ar-YE', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    });
+    const saleDate =
+      now.toLocaleDateString(
+        'ar-YE',
+        {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }
+      );
 
-    const saleTime = now.toLocaleTimeString('ar-YE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const saleTime =
+      now.toLocaleTimeString(
+        'ar-YE',
+        {
+          hour: '2-digit',
+          minute: '2-digit',
+        }
+      );
 
     const text = `🌐 *شبكة تواصل*
 
@@ -323,7 +539,9 @@ export default function DistributorPage() {
 *شكرًا لاختياركم شبكة تواصل*`;
 
     window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
+      `https://wa.me/?text=${encodeURIComponent(
+        text
+      )}`,
       '_blank'
     );
   }
@@ -335,10 +553,14 @@ export default function DistributorPage() {
       return;
     }
 
-    const content = noteContent.trim();
+    const content =
+      noteContent.trim();
 
     if (!content) {
-      setNoteMessage('⚠️ اكتب الرسالة أولًا');
+      setNoteMessage(
+        '⚠️ اكتب الرسالة أولًا'
+      );
+
       return;
     }
 
@@ -346,28 +568,49 @@ export default function DistributorPage() {
     setNoteMessage('');
 
     try {
-      const { error: dbError } = await supabase
+      const {
+        error: dbError,
+      } = await supabase
         .from('distributor_notes')
         .insert({
-          distributor_id: profile.id,
-          distributor_name: profile.full_name,
-          content: content,
+          distributor_id:
+            profile.id,
+          distributor_name:
+            profile.full_name,
+          content,
         });
 
       if (dbError) {
-        setNoteMessage('❌ تعذّر حفظ الرسالة، حاول مرة أخرى');
+        console.error(
+          'Send note error:',
+          dbError
+        );
+
+        setNoteMessage(
+          '❌ تعذّر حفظ الرسالة، حاول مرة أخرى'
+        );
+
         return;
       }
 
       setNoteContent('');
-      setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
+
+      setNoteMessage(
+        '✓ تم إرسال رسالتك للمدير بنجاح'
+      );
 
       setTimeout(() => {
         setNoteMessage('');
       }, 4000);
-
     } catch (error) {
-      setNoteMessage('❌ حدث خطأ غير متوقع، حاول مرة أخرى');
+      console.error(
+        'Unexpected note error:',
+        error
+      );
+
+      setNoteMessage(
+        '❌ حدث خطأ غير متوقع، حاول مرة أخرى'
+      );
     } finally {
       setNoteBusy(false);
     }
@@ -380,13 +623,17 @@ export default function DistributorPage() {
   const byPackage = {};
 
   myCards.forEach((c) => {
-    const key = c.packages?.name || 'غير محدد';
+    const key =
+      c.packages?.name ||
+      'غير محدد';
 
     if (!byPackage[key]) {
       byPackage[key] = {
         count: 0,
-        packageId: c.package_id,
-        price: c.packages?.price || 0,
+        packageId:
+          c.package_id,
+        price:
+          c.packages?.price || 0,
       };
     }
 
@@ -402,10 +649,19 @@ export default function DistributorPage() {
       />
 
       <div className="main">
-        <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          className="topbar"
+          style={{
+            display: 'flex',
+            justifyContent:
+              'space-between',
+            alignItems: 'center',
+          }}
+        >
           <div>
             <h1>
-              مرحبًا، {profile.full_name} 👋
+              مرحبًا،{' '}
+              {profile.full_name} 👋
             </h1>
 
             <div className="greet">
@@ -413,19 +669,44 @@ export default function DistributorPage() {
             </div>
           </div>
 
-          <div style={{ 
-            display: 'flex', alignItems: 'center', gap: 6, 
-            background: isOnline ? '#ECFDF5' : '#FEF2F2', 
-            color: isOnline ? '#059669' : '#DC2626', 
-            padding: '6px 12px', borderRadius: 20, fontSize: 11.5, fontWeight: '800',
-            border: `1px solid ${isOnline ? '#A7F3D0' : '#FECACA'}`
-          }}>
-            <span style={{ 
-              width: 7, height: 7, borderRadius: '50%', 
-              background: isOnline ? '#10B981' : '#EF4444',
-              display: 'inline-block'
-            }}></span>
-            {isOnline ? 'نشط' : 'خامل'}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: isOnline
+                ? '#ECFDF5'
+                : '#FEF2F2',
+              color: isOnline
+                ? '#059669'
+                : '#DC2626',
+              padding: '6px 12px',
+              borderRadius: 20,
+              fontSize: 11.5,
+              fontWeight: '800',
+              border: `1px solid ${
+                isOnline
+                  ? '#A7F3D0'
+                  : '#FECACA'
+              }`,
+            }}
+          >
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: isOnline
+                  ? '#10B981'
+                  : '#EF4444',
+                display:
+                  'inline-block',
+              }}
+            />
+
+            {isOnline
+              ? 'نشط'
+              : 'خامل'}
           </div>
         </div>
 
@@ -439,11 +720,13 @@ export default function DistributorPage() {
               background:
                 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
               borderRadius: 20,
-              padding: '20px 24px',
+              padding:
+                '20px 24px',
               color: '#fff',
               marginBottom: 20,
               display: 'flex',
-              justifyContent: 'space-between',
+              justifyContent:
+                'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
@@ -475,7 +758,9 @@ export default function DistributorPage() {
 
             <button
               onClick={() =>
-                copyPersonalCode(profile.personal_card)
+                copyPersonalCode(
+                  profile.personal_card
+                )
               }
               style={{
                 background:
@@ -483,7 +768,8 @@ export default function DistributorPage() {
                 border:
                   '1px solid rgba(255,255,255,0.4)',
                 color: '#fff',
-                padding: '10px 18px',
+                padding:
+                  '10px 18px',
                 borderRadius: 12,
                 fontWeight: '800',
                 fontSize: 13,
@@ -497,14 +783,29 @@ export default function DistributorPage() {
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-          <div className="balance-card" style={{ marginBottom: 0 }}>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              '1fr 1fr',
+            gap: 12,
+            marginBottom: 20,
+          }}
+        >
+          <div
+            className="balance-card"
+            style={{
+              marginBottom: 0,
+            }}
+          >
             <div className="lbl">
               رصيدك الحالي بمخزنك
             </div>
 
             <div className="amt">
-              {Number(profile.balance).toLocaleString(
+              {Number(
+                profile.balance
+              ).toLocaleString(
                 'en-US'
               )}{' '}
               <span>ريال</span>
@@ -517,7 +818,8 @@ export default function DistributorPage() {
                   color: '#E3D6FF',
                 }}
               >
-                كروت لديك الآن: {myCards.length}
+                كروت لديك الآن:{' '}
+                {myCards.length}
               </div>
 
               <Link href="/distributor/request">
@@ -528,29 +830,72 @@ export default function DistributorPage() {
             </div>
           </div>
 
-          <div style={{
-            background: netDebt > 0 
-              ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' 
-              : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
-            borderRadius: 20,
-            padding: 20,
-            color: '#fff',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-            transition: 'background 0.3s ease'
-          }}>
+          <div
+            style={{
+              background:
+                netDebt > 0
+                  ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)'
+                  : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+              borderRadius: 20,
+              padding: 20,
+              color: '#fff',
+              display: 'flex',
+              flexDirection:
+                'column',
+              justifyContent:
+                'space-between',
+              boxShadow:
+                '0 10px 25px rgba(0, 0, 0, 0.1)',
+              transition:
+                'background 0.3s ease',
+            }}
+          >
             <div>
-              <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#f1f5f9',
+                  fontWeight: '700',
+                  marginBottom: 6,
+                }}
+              >
                 المبلغ الصافي المستحق للمدير
               </div>
-              <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
-                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
+
+              <div
+                className="mono"
+                style={{
+                  fontSize: 26,
+                  fontWeight: '900',
+                  letterSpacing: 0.5,
+                }}
+              >
+                {formatNum(
+                  netDebt
+                )}{' '}
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight:
+                      'normal',
+                  }}
+                >
+                  ريال
+                </span>
               </div>
             </div>
-            <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
-              {netDebt > 0 ? '⚠️ إجمالي المستحقات المالية الحالية' : '✓ الحساب مسدد بالكامل'}
+
+            <div
+              style={{
+                fontSize: 11.5,
+                color: '#f8fafc',
+                marginTop: 10,
+                opacity: 0.9,
+              }}
+            >
+              {netDebt > 0
+                ? '⚠️ إجمالي المستحقات المالية الحالية'
+                : '✓ الحساب مسدد بالكامل'}
             </div>
           </div>
         </div>
@@ -584,39 +929,96 @@ export default function DistributorPage() {
         </div>
 
         <div className="panel">
-          <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div
+            className="panel-head"
+            style={{
+              display: 'flex',
+              justifyContent:
+                'space-between',
+              alignItems: 'center',
+            }}
+          >
             <div>
-              <h3>باقاتي المتاحة</h3>
+              <h3>
+                باقاتي المتاحة
+              </h3>
 
               <span className="muted">
                 اضغط &quot;إظهار كرت&quot; عند وجود زبون
               </span>
             </div>
 
-            <button 
-              onClick={() => load(true)} 
-              disabled={isRefreshing}
+            <button
+              onClick={() =>
+                load(true)
+              }
+              disabled={
+                isRefreshing
+              }
               style={{
-                background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
-                padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: '800',
-                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
+                background:
+                  '#F3F0FB',
+                border:
+                  '1px solid #DDD3F5',
+                color:
+                  '#5B21B6',
+                padding:
+                  '6px 12px',
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: '800',
+                cursor:
+                  'pointer',
+                display: 'flex',
+                alignItems:
+                  'center',
+                gap: 5,
               }}
             >
-              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
-              {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
+              <span
+                style={{
+                  display:
+                    'inline-block',
+                  transform:
+                    isRefreshing
+                      ? 'rotate(360deg)'
+                      : 'none',
+                  transition:
+                    'transform 0.5s',
+                }}
+              >
+                🔄
+              </span>
+
+              {isRefreshing
+                ? 'جاري التحديث...'
+                : 'تحديث القائمة'}
             </button>
           </div>
 
           {revealError && (
-            <div style={{ color: '#DC2626', background: '#FEF2F2', padding: '10px', borderRadius: '8px', marginBottom: '10px', fontSize: '13px' }}>
+            <div
+              style={{
+                color: '#DC2626',
+                background:
+                  '#FEF2F2',
+                padding: 10,
+                borderRadius: 8,
+                marginBottom: 10,
+                fontSize: 13,
+              }}
+            >
               {revealError}
             </div>
           )}
 
-          {Object.keys(byPackage).length === 0 && (
+          {Object.keys(
+            byPackage
+          ).length === 0 && (
             <div
               style={{
-                color: 'var(--ink-soft)',
+                color:
+                  'var(--ink-soft)',
                 fontSize: 13,
               }}
             >
@@ -625,7 +1027,9 @@ export default function DistributorPage() {
           )}
 
           <div className="pkg-grid">
-            {Object.entries(byPackage).map(
+            {Object.entries(
+              byPackage
+            ).map(
               ([name, info]) => (
                 <div
                   className="pkg-card"
@@ -637,7 +1041,9 @@ export default function DistributorPage() {
 
                   <div className="pcount">
                     {info.count}{' '}
-                    <span>كرت لديك</span>
+                    <span>
+                      كرت لديك
+                    </span>
                   </div>
 
                   <button
@@ -661,36 +1067,121 @@ export default function DistributorPage() {
           </div>
         </div>
 
-        <div className="panel" style={{ marginTop: 20 }}>
+        <div
+          className="panel"
+          style={{
+            marginTop: 20,
+          }}
+        >
           <div className="panel-head">
-            <h3>سجل مبيعات اليوم الأخيرة</h3>
-            <span className="muted">آخر الكروت التي قمت ببيعها اليوم</span>
+            <h3>
+              سجل مبيعات اليوم الأخيرة
+            </h3>
+
+            <span className="muted">
+              آخر الكروت التي قمت ببيعها اليوم
+            </span>
           </div>
 
-          {recentSales.length === 0 ? (
-            <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
+          {recentSales.length ===
+          0 ? (
+            <div
+              style={{
+                color:
+                  'var(--ink-soft)',
+                fontSize: 13,
+                padding:
+                  '10px 0',
+              }}
+            >
               لم تقم ببيع أي كرت حتى الآن اليوم.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
-              {recentSales.map((sale) => (
-                <div key={sale.id} style={{ 
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                  background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' 
-                }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
-                      {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection:
+                  'column',
+                gap: 10,
+                marginTop: 10,
+              }}
+            >
+              {recentSales.map(
+                (sale) => (
+                  <div
+                    key={sale.id}
+                    style={{
+                      display:
+                        'flex',
+                      justifyContent:
+                        'space-between',
+                      alignItems:
+                        'center',
+                      background:
+                        '#F8FAFC',
+                      padding:
+                        '10px 14px',
+                      borderRadius:
+                        12,
+                      border:
+                        '1px solid #E2E8F0',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight:
+                            '800',
+                          color:
+                            '#1E293B',
+                        }}
+                      >
+                        {sale
+                          .packages
+                          ?.name ||
+                          'باقة'}{' '}
+                        {sale.customer_name
+                          ? `(الزبون: ${sale.customer_name})`
+                          : ''}
+                      </div>
+
+                      <div
+                        className="mono"
+                        style={{
+                          fontSize: 12,
+                          color:
+                            '#64748B',
+                        }}
+                      >
+                        {sale.code}
+                      </div>
                     </div>
-                    <div className="mono" style={{ fontSize: '12px', color: '#64748B' }}>
-                      {sale.code}
+
+                    <div
+                      style={{
+                        textAlign:
+                          'left',
+                        fontSize:
+                          10.5,
+                        color:
+                          '#94A3B8',
+                      }}
+                    >
+                      {new Date(
+                        sale.sold_at
+                      ).toLocaleTimeString(
+                        'ar-YE',
+                        {
+                          hour: '2-digit',
+                          minute:
+                            '2-digit',
+                        }
+                      )}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'left', fontSize: '10.5px', color: '#94A3B8' }}>
-                    {new Date(sale.sold_at).toLocaleTimeString('ar-YE', { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
@@ -707,10 +1198,16 @@ export default function DistributorPage() {
             </h3>
           </div>
 
-          <form onSubmit={sendNoteToAdmin}>
+          <form
+            onSubmit={
+              sendNoteToAdmin
+            }
+          >
             <textarea
               rows={3}
-              value={noteContent}
+              value={
+                noteContent
+              }
               onChange={(e) =>
                 setNoteContent(
                   e.target.value
@@ -737,7 +1234,9 @@ export default function DistributorPage() {
                   fontWeight: '700',
                   marginBottom: 10,
                   color:
-                    noteMessage.startsWith('✓')
+                    noteMessage.startsWith(
+                      '✓'
+                    )
                       ? '#10B981'
                       : '#DC2626',
                 }}
@@ -755,7 +1254,8 @@ export default function DistributorPage() {
               className="btn-primary"
               style={{
                 width: 'auto',
-                padding: '10px 20px',
+                padding:
+                  '10px 20px',
               }}
             >
               {noteBusy
@@ -774,8 +1274,10 @@ export default function DistributorPage() {
             background:
               'rgba(20,10,40,0.6)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems:
+              'center',
+            justifyContent:
+              'center',
             zIndex: 1000,
             padding: 20,
           }}
@@ -786,7 +1288,8 @@ export default function DistributorPage() {
               borderRadius: 22,
               maxWidth: 340,
               width: '100%',
-              textAlign: 'center',
+              textAlign:
+                'center',
               boxShadow:
                 '0 20px 60px rgba(0,0,0,0.35)',
               overflow: 'hidden',
@@ -804,8 +1307,10 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12,
-                  color: '#E3D6FF',
-                  fontWeight: '700',
+                  color:
+                    '#E3D6FF',
+                  fontWeight:
+                    '700',
                   marginBottom: 6,
                 }}
               >
@@ -815,80 +1320,124 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 26,
-                  fontWeight: '900',
+                  fontWeight:
+                    '900',
                 }}
               >
-                {pendingPackage.name}
+                {
+                  pendingPackage.name
+                }
               </div>
             </div>
 
             <div
               style={{
-                padding: '20px 24px 24px',
+                padding:
+                  '20px 24px 24px',
               }}
             >
               <div
                 style={{
                   fontSize: 12.5,
-                  color: 'var(--ink-soft)',
+                  color:
+                    'var(--ink-soft)',
                   marginBottom: 15,
-                  textAlign: 'right',
+                  textAlign:
+                    'right',
                 }}
               >
-                <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
+                <label
+                  style={{
+                    display:
+                      'block',
+                    marginBottom: 6,
+                    fontWeight:
+                      '700',
+                    color:
+                      '#374151',
+                  }}
+                >
                   اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
+
                 <input
                   type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  value={
+                    customerName
+                  }
+                  onChange={(e) =>
+                    setCustomerName(
+                      e.target.value
+                    )
+                  }
                   placeholder="مثال: أحمد محمد"
                   style={{
                     width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: 10,
-                    border: '1.5px solid var(--line)',
-                    fontSize: '13px',
+                    padding:
+                      '10px 12px',
+                    borderRadius:
+                      10,
+                    border:
+                      '1.5px solid var(--line)',
+                    fontSize: 13,
                   }}
                 />
               </div>
 
               <div
                 style={{
-                  display: 'flex',
+                  display:
+                    'flex',
                   gap: 10,
                 }}
               >
                 <button
-                  onClick={cancelReveal}
-                  disabled={revealBusy}
+                  onClick={
+                    cancelReveal
+                  }
+                  disabled={
+                    revealBusy
+                  }
                   style={{
                     flex: 1,
-                    padding: '13px 0',
-                    borderRadius: 12,
+                    padding:
+                      '13px 0',
+                    borderRadius:
+                      12,
                     border:
                       '1.5px solid var(--line)',
-                    background: '#fff',
-                    fontWeight: '800',
-                    cursor: 'pointer',
+                    background:
+                      '#fff',
+                    fontWeight:
+                      '800',
+                    cursor:
+                      'pointer',
                   }}
                 >
                   إلغاء
                 </button>
 
                 <button
-                  onClick={confirmReveal}
-                  disabled={revealBusy}
+                  onClick={
+                    confirmReveal
+                  }
+                  disabled={
+                    revealBusy
+                  }
                   style={{
                     flex: 1,
-                    padding: '13px 0',
-                    borderRadius: 12,
+                    padding:
+                      '13px 0',
+                    borderRadius:
+                      12,
                     border: 'none',
                     background:
                       'linear-gradient(120deg, #7C3AED, #DB2777)',
                     color: '#fff',
-                    fontWeight: '800',
-                    cursor: 'pointer',
+                    fontWeight:
+                      '800',
+                    cursor:
+                      'pointer',
                   }}
                 >
                   {revealBusy
@@ -909,8 +1458,10 @@ export default function DistributorPage() {
             background:
               'rgba(20,10,40,0.6)',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            alignItems:
+              'center',
+            justifyContent:
+              'center',
             zIndex: 1000,
             padding: 20,
           }}
@@ -921,7 +1472,8 @@ export default function DistributorPage() {
               borderRadius: 24,
               maxWidth: 380,
               width: '100%',
-              textAlign: 'center',
+              textAlign:
+                'center',
               boxShadow:
                 '0 20px 60px rgba(0,0,0,0.35)',
               overflow: 'hidden',
@@ -931,26 +1483,34 @@ export default function DistributorPage() {
               style={{
                 background:
                   'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
-                padding: '18px 20px',
+                padding:
+                  '18px 20px',
                 color: '#fff',
-                position: 'relative',
+                position:
+                  'relative',
               }}
             >
               <button
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
                 style={{
-                  position: 'absolute',
+                  position:
+                    'absolute',
                   top: 12,
                   left: 12,
                   width: 30,
                   height: 30,
-                  borderRadius: 10,
+                  borderRadius:
+                    10,
                   border: 'none',
                   background:
                     'rgba(255,255,255,0.25)',
                   color: '#fff',
-                  fontWeight: '900',
-                  cursor: 'pointer',
+                  fontWeight:
+                    '900',
+                  cursor:
+                    'pointer',
                 }}
               >
                 ✕
@@ -959,17 +1519,22 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12.5,
-                  color: '#E3D6FF',
-                  fontWeight: '700',
+                  color:
+                    '#E3D6FF',
+                  fontWeight:
+                    '700',
                 }}
               >
-                {revealedCard.packageName}
+                {
+                  revealedCard.packageName
+                }
               </div>
 
               <div
                 style={{
                   fontSize: 12,
-                  fontWeight: '900',
+                  fontWeight:
+                    '900',
                   marginTop: 2,
                 }}
               >
@@ -986,34 +1551,49 @@ export default function DistributorPage() {
                 className="mono"
                 style={{
                   fontSize: 28,
-                  fontWeight: '900',
-                  margin: '4px 0 18px',
-                  direction: 'ltr',
-                  color: '#3A1D66',
+                  fontWeight:
+                    '900',
+                  margin:
+                    '4px 0 18px',
+                  direction:
+                    'ltr',
+                  color:
+                    '#3A1D66',
                 }}
               >
-                {revealedCard.code}
+                {
+                  revealedCard.code
+                }
               </div>
 
               <div
                 style={{
-                  display: 'flex',
+                  display:
+                    'flex',
                   gap: 10,
                   marginBottom: 18,
                 }}
               >
                 <button
-                  onClick={copyCode}
+                  onClick={
+                    copyCode
+                  }
                   style={{
                     flex: 1,
-                    padding: '11px 0',
-                    borderRadius: 12,
+                    padding:
+                      '11px 0',
+                    borderRadius:
+                      12,
                     border:
                       '1.5px solid #DDD3F5',
-                    background: '#F3F0FB',
-                    color: '#5B21B6',
-                    fontWeight: '800',
-                    cursor: 'pointer',
+                    background:
+                      '#F3F0FB',
+                    color:
+                      '#5B21B6',
+                    fontWeight:
+                      '800',
+                    cursor:
+                      'pointer',
                   }}
                 >
                   {copied
@@ -1022,17 +1602,23 @@ export default function DistributorPage() {
                 </button>
 
                 <button
-                  onClick={`shareWhatsapp`}
-                  onClick={shareWhatsapp}
+                  onClick={
+                    shareWhatsapp
+                  }
                   style={{
                     flex: 1,
-                    padding: '11px 0',
-                    borderRadius: 12,
+                    padding:
+                      '11px 0',
+                    borderRadius:
+                      12,
                     border: 'none',
-                    background: '#25D366',
+                    background:
+                      '#25D366',
                     color: '#fff',
-                    fontWeight: '800',
-                    cursor: 'pointer',
+                    fontWeight:
+                      '800',
+                    cursor:
+                      'pointer',
                   }}
                 >
                   واتساب
@@ -1040,16 +1626,24 @@ export default function DistributorPage() {
               </div>
 
               <button
-                onClick={closeModal}
+                onClick={
+                  closeModal
+                }
                 style={{
                   width: '100%',
-                  padding: '13px 0',
-                  borderRadius: 14,
+                  padding:
+                    '13px 0',
+                  borderRadius:
+                    14,
                   border: 'none',
-                  background: '#F3F0FB',
-                  color: '#5B21B6',
-                  fontWeight: '800',
-                  cursor: 'pointer',
+                  background:
+                    '#F3F0FB',
+                  color:
+                    '#5B21B6',
+                  fontWeight:
+                    '800',
+                  cursor:
+                    'pointer',
                 }}
               >
                 إغلاق
