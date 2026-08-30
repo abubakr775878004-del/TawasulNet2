@@ -79,7 +79,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. الحل الجذري: جلب جميع الكروت المباعة فعلياً من جدول cards لهذا الموزع لحساب إجمالي المبيعات الصحيح ودون الاعتماد على sales_log المفقود
+      // 4. جلب جميع الكروت المباعة فعلياً من جدول cards لهذا الموزع لحساب إجمالي المبيعات الصحيح
       const { data: soldCardsData, error: soldErr } = await supabase
         .from('cards')
         .select('packages(price)')
@@ -94,9 +94,7 @@ export default function DistributorPage() {
         return sum + Number(c.packages?.price || 0);
       }, 0);
 
-      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
-
-      // 5. جلب سدادات هذا الموزع المسجلة في جدول payments
+      // 5. جلب سدادات هذا الموزع المسجلة في جدول payments إن وجدت
       const { data: paymentsData, error: payErr } = await supabase
         .from('payments')
         .select('amount')
@@ -108,8 +106,8 @@ export default function DistributorPage() {
 
       const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // حساب الدين المتبقي الصافي بدقة تامة من جدول cards المباشر
-      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+      // حساب الدين المتبقي الصافي بدقة تامة (المبيعات كاملة مطروحاً منها المسدد)
+      const remainingDebt = Math.max(0, Math.round(totalSalesRevenue - totalPaid));
       setNetDebt(remainingDebt);
 
     } catch (err) {
@@ -194,7 +192,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // 2. الحل الجذري المزدوج: إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة
+      // 2. إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -455,7 +453,7 @@ export default function DistributorPage() {
               boxShadow:
                 '0 10px 25px rgba(124, 58, 237, 0.25)',
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
@@ -543,7 +541,7 @@ export default function DistributorPage() {
 
           {/* بطاقة المبلغ الصافي المستحق للمدير */}
           <div style={{
-            background: netDebt > 0 ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
+            background: netDebt > 0 ? 'linear-gradient(135deg, #065f46 0%, #059669 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
             borderRadius: 20,
             padding: 20,
             color: '#fff',
@@ -561,7 +559,7 @@ export default function DistributorPage() {
               </div>
             </div>
             <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
-              {netDebt > 0 ? '⚠️ يوجد مبالغ متبقية لم تسدد بعد' : '✓ الحساب مسدد بالكامل'}
+              {netDebt > 0 ? '⚠️ إجمالي المستحقات المالية الحالية' : '✓ الحساب مسدد بالكامل'}
             </div>
           </div>
         </div>
@@ -1079,7 +1077,7 @@ export default function DistributorPage() {
                 <button
                   onClick={shareWhatsapp}
                   style={{
-                    flex: '1',
+                    flex: 1,
                     padding: '11px 0',
                     borderRadius: 12,
                     border: 'none',
