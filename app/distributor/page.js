@@ -17,7 +17,7 @@ export default function DistributorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ط­ط§ظ„ط© ظ„طھط®ط²ظٹظ† ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„طµط§ظپظٹ ط§ظ„ظ…ط³طھط­ظ‚ ظ„ظ„ظ…ط¯ظٹط±
+  // حالة لتخزين المبلغ الصافي المستحق للمدير
   const [netDebt, setNetDebt] = useState(0);
 
   const [pendingPackage, setPendingPackage] = useState(null);
@@ -34,7 +34,7 @@ export default function DistributorPage() {
   const [noteBusy, setNoteBusy] = useState(false);
   const [noteMessage, setNoteMessage] = useState('');
 
-  // ط¯ط§ظ„ط© طھظ†ط³ظٹظ‚ ط§ظ„ط£ط±ظ‚ط§ظ…
+  // دالة تنسيق الأرقام
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -45,7 +45,7 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
-      // 1. ط¬ظ„ط¨ ط§ظ„ظƒط±ظˆطھ ط§ظ„ظ…طھط§ط­ط© ط­ط§ظ„ظٹط§ظ‹ ظ„ط¯ظ‰ ط§ظ„ظ…ظˆط²ط¹
+      // 1. جلب الكروت المتاحة حالياً لدى الموزع[span_0](start_span)[span_0](end_span)
       const { data } = await supabase
         .from('cards')
         .select('*, packages(name, price)')
@@ -57,7 +57,7 @@ export default function DistributorPage() {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      // 2. ط¹ط¯ط¯ ظ…ط¨ظٹط¹ط§طھ ط§ظ„ظٹظˆظ…
+      // 2. عدد مبيعات اليوم[span_1](start_span)[span_1](end_span)
       const { count } = await supabase
         .from('cards')
         .select('*', { count: 'exact', head: true })
@@ -67,7 +67,7 @@ export default function DistributorPage() {
 
       setSoldToday(count || 0);
 
-      // 3. ط¢ط®ط± ظ…ط¨ظٹط¹ط§طھ ط§ظ„ظٹظˆظ…
+      // 3. آخر مبيعات اليوم[span_2](start_span)[span_2](end_span)
       const { data: salesData } = await supabase
         .from('cards')
         .select('id, code, sold_at, customer_name, packages(name, price)')
@@ -79,36 +79,27 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. ط¬ظ„ط¨ ط¬ظ…ظٹط¹ ط§ظ„ظƒط±ظˆطھ ط§ظ„ظ…ط¨ط§ط¹ط© ظپط¹ظ„ظٹط§ظ‹ ظ…ظ† ط¬ط¯ظˆظ„ cards ظ„ظ‡ط°ط§ ط§ظ„ظ…ظˆط²ط¹ ظ„ط­ط³ط§ط¨ ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط¨ظٹط¹ط§طھ ط§ظ„طµط­ظٹط­
-      const { data: soldCardsData, error: soldErr } = await supabase
-        .from('cards')
-        .select('packages(price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold');
-
-      if (soldErr) {
-        console.error('Error fetching sold cards:', soldErr);
-      }
-
-      const totalSalesRevenue = (soldCardsData || []).reduce((sum, c) => {
-        return sum + Number(c.packages?.price || 0);
-      }, 0);
-
-      // 5. ط¬ظ„ط¨ ط³ط¯ط§ط¯ط§طھ ظ‡ط°ط§ ط§ظ„ظ…ظˆط²ط¹ ط§ظ„ظ…ط³ط¬ظ„ط© ظپظٹ ط¬ط¯ظˆظ„ payments ط¥ظ† ظˆط¬ط¯طھ
-      const { data: paymentsData, error: payErr } = await supabase
-        .from('payments')
-        .select('amount')
+      // 4. التعديل الصحيح والدقيق: جلب وحساب الدين من جدول distributor_ledger فقط
+      const { data: ledgerData, error: ledgerErr } = await supabase
+        .from('distributor_ledger')
+        .select('amount, type')
         .eq('distributor_id', profile.id);
 
-      if (payErr) {
-        console.error('Error fetching payments:', payErr);
+      if (ledgerErr) {
+        console.error('Error fetching distributor ledger:', ledgerErr);
       }
 
-      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      const totalDebt = (ledgerData || []).reduce((sum, item) => {
+        const amt = Number(item.amount || 0);
+        if (item.type === 'shipment') {
+          return sum + Math.abs(amt);
+        } else if (item.type === 'payment') {
+          return sum - Math.abs(amt);
+        }
+        return sum;
+      }, 0);
 
-      // ط­ط³ط§ط¨ ط§ظ„ط¯ظٹظ† ط§ظ„ظ…طھط¨ظ‚ظٹ ط§ظ„طµط§ظپظٹ ط¨ط¯ظ‚ط© طھط§ظ…ط© (ط§ظ„ظ…ط¨ظٹط¹ط§طھ ظƒط§ظ…ظ„ط© ظ…ط·ط±ظˆط­ط§ظ‹ ظ…ظ†ظ‡ط§ ط§ظ„ظ…ط³ط¯ط¯)
-      const remainingDebt = Math.max(0, Math.round(totalSalesRevenue - totalPaid));
-      setNetDebt(remainingDebt);
+      setNetDebt(Math.max(0, Math.round(totalDebt)));
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -163,7 +154,7 @@ export default function DistributorPage() {
         .limit(1);
 
       if (error || !data || data.length === 0) {
-        setRevealError('طھط¹ط°ظ‘ط± ط¥ظٹط¬ط§ط¯ ظƒط±طھ ظ…طھط§ط­ ظ…ظ† ظ‡ط°ظ‡ ط§ظ„ط¨ط§ظ‚ط©');
+        setRevealError('تعذّر إيجاد كرت متاح من هذه الباقة');
         setPendingPackage(null);
         setRevealBusy(false);
         return;
@@ -175,7 +166,7 @@ export default function DistributorPage() {
 
       const soldAtTimestamp = new Date().toISOString();
 
-      // 1. طھط­ط¯ظٹط« ط§ظ„ظƒط±طھ ط¥ظ„ظ‰ ظ…ط¨ط§ط¹ ظپظٹ ط¬ط¯ظˆظ„ cards
+      // 1. تحديث الكرت إلى مباع في جدول cards[span_3](start_span)[span_3](end_span)
       const { error: updateError } = await supabase
         .from('cards')
         .update({
@@ -187,12 +178,12 @@ export default function DistributorPage() {
 
       if (updateError) {
         console.error('Update card error:', updateError);
-        setRevealError('ط­ط¯ط« ط®ط·ط£ ط£ط«ظ†ط§ط، ط­ظپط¸ ط¨ظٹط§ظ†ط§طھ ط§ظ„ط¨ظٹط¹');
+        setRevealError('حدث خطأ أثناء حفظ بيانات البيع');
         setRevealBusy(false);
         return;
       }
 
-      // 2. ط¥ط¯ط±ط§ط¬ ط§ظ„ط³ط¬ظ„ طھظ„ظ‚ط§ط¦ظٹط§ظ‹ ظپظٹ sales_log ظ„ط¶ظ…ط§ظ† طھظˆط§ظپظ‚ ط§ظ„ط£ظ†ط¸ظ…ط© ظƒط§ظ…ظ„ط©
+      // 2. إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة[span_4](start_span)[span_4](end_span)
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -213,7 +204,7 @@ export default function DistributorPage() {
       await load();
     } catch (error) {
       console.error('Confirm reveal error:', error);
-      setRevealError('ط­ط¯ط« ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹طŒ ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰');
+      setRevealError('حدث خطأ غير متوقع، حاول مرة أخرى');
     } finally {
       setRevealBusy(false);
     }
@@ -256,15 +247,15 @@ export default function DistributorPage() {
     if (!revealedCard) return;
 
     const dailyReminders = [
-      'ط£ظƒط«ط±ظˆط§ ظ…ظ† ط§ظ„طµظ„ط§ط© ط¹ظ„ظ‰ ط§ظ„ظ†ط¨ظٹ (طµظ„ظ‰ ط§ظ„ظ„ظ‡ ط¹ظ„ظٹظ‡ ظˆط³ظ„ظ…)',
-      'ط³ط¨ط­ط§ظ† ط§ظ„ظ„ظ‡ ظˆط¨ط­ظ…ط¯ظ‡طŒ ط³ط¨ط­ط§ظ† ط§ظ„ظ„ظ‡ ط§ظ„ط¹ط¸ظٹظ…',
-      'ظ„ط§ طھظ†ط³ظژ ط°ظƒط± ط§ظ„ظ„ظ‡طŒ ظپط¨ط°ظƒط±ظ‡ طھط·ظ…ط¦ظ† ط§ظ„ظ‚ظ„ظˆط¨',
-      'ط§ظ„ظ„ظ‡ظ… طµظ„ ظˆط³ظ„ظ… ظˆط¨ط§ط±ظƒ ط¹ظ„ظ‰ ظ†ط¨ظٹظ†ط§ ظ…ط­ظ…ط¯',
-      'ط§ط³طھط؛ظپط± ط§ظ„ظ„ظ‡ ظˆط£ظƒط«ط± ظ…ظ† ط°ظƒط±ظ‡',
-      'ط§ظ„ط­ظ…ط¯ ظ„ظ„ظ‡ ط¹ظ„ظ‰ ظƒظ„ ظ†ط¹ظ…ط©',
-      'ط§طھظ‚ظگ ط§ظ„ظ„ظ‡ ظˆط§ط¬ط¹ظ„ ط§ظ„ط®ظٹط± ط·ط±ظٹظ‚ظƒ ط¯ط§ط¦ظ…ظ‹ط§',
-      'ط§ظ„ظ„ظ‡ظ… ط§ط¬ط¹ظ„ ظٹظˆظ…ظƒظ… ط®ظٹط±ظ‹ط§ ظˆط¨ط±ظƒط©',
-      'ظ…ظ† طھظˆظƒظ„ ط¹ظ„ظ‰ ط§ظ„ظ„ظ‡ ظƒظپط§ظ‡'
+      'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
+      'سبحان الله وبحمده، سبحان الله العظيم',
+      'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
+      'اللهم صل وسلم وبارك على نبينا محمد',
+      'استغفر الله وأكثر من ذكره',
+      'الحمد لله على كل نعمة',
+      'اتقِ الله واجعل الخير طريقك دائمًا',
+      'اللهم اجعل يومكم خيرًا وبركة',
+      'من توكل على الله كفاه'
     ];
 
     const dailyReminder =
@@ -285,18 +276,18 @@ export default function DistributorPage() {
       minute: '2-digit'
     });
 
-    const text = `ًںŒگ *ط´ط¨ظƒط© طھظˆط§طµظ„*
+    const text = `🌐 *شبكة تواصل*
 
-ًںژ« *ظƒط±طھ ط§ظ„ط¥ظ†طھط±ظ†طھ*
+🎫 *كرت الإنترنت*
 
 \`${revealedCard.code}\`
 
-ًں“¦ *ط§ظ„ط¨ط§ظ‚ط©:* ${revealedCard.packageName}
-ًں“… ${saleDate} | ًں•گ ${saleTime}
+📦 *الباقة:* ${revealedCard.packageName}
+📅 ${saleDate} | 🕐 ${saleTime}
 
-âœ¨ ${dailyReminder}
+✨ ${dailyReminder}
 
-*ط´ظƒط±ظ‹ط§ ظ„ط§ط®طھظٹط§ط±ظƒظ… ط´ط¨ظƒط© طھظˆط§طµظ„*`;
+*شكرًا لاختياركم شبكة تواصل*`;
 
     window.open(
       `https://wa.me/?text=${encodeURIComponent(text)}`,
@@ -314,7 +305,7 @@ export default function DistributorPage() {
     const content = noteContent.trim();
 
     if (!content) {
-      setNoteMessage('âڑ ï¸ڈ ط§ظƒطھط¨ ط§ظ„ط±ط³ط§ظ„ط© ط£ظˆظ„ظ‹ط§');
+      setNoteMessage('⚠️ اكتب الرسالة أولًا');
       return;
     }
 
@@ -331,7 +322,7 @@ export default function DistributorPage() {
         });
 
       if (dbError) {
-        setNoteMessage('â‌Œ طھط¹ط°ظ‘ط± ط­ظپط¸ ط§ظ„ط±ط³ط§ظ„ط©طŒ ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰');
+        setNoteMessage('❌ تعذّر حفظ الرسالة، حاول مرة أخرى');
         return;
       }
 
@@ -363,9 +354,9 @@ export default function DistributorPage() {
       setNoteContent('');
 
       if (telegramSuccess) {
-        setNoteMessage('âœ“ طھظ… ط¥ط±ط³ط§ظ„ ط±ط³ط§ظ„طھظƒ ظ„ظ„ظ…ط¯ظٹط± ط¨ظ†ط¬ط§ط­');
+        setNoteMessage('✓ تم إرسال رسالتك للمدير بنجاح');
       } else {
-        setNoteMessage('âœ“ طھظ… ط­ظپط¸ ط±ط³ط§ظ„طھظƒطŒ ظ„ظƒظ† طھط¹ط°ط± ط¥ط±ط³ط§ظ„ ط¥ط´ط¹ط§ط± طھظٹظ„ظٹط¬ط±ط§ظ…');
+        setNoteMessage('✓ تم حفظ رسالتك، لكن تعذر إرسال إشعار تيليجرام');
       }
 
       setTimeout(() => {
@@ -373,7 +364,7 @@ export default function DistributorPage() {
       }, 4000);
 
     } catch (error) {
-      setNoteMessage('â‌Œ ط­ط¯ط« ط®ط·ط£ ط؛ظٹط± ظ…طھظˆظ‚ط¹طŒ ط­ط§ظˆظ„ ظ…ط±ط© ط£ط®ط±ظ‰');
+      setNoteMessage('❌ حدث خطأ غير متوقع، حاول مرة أخرى');
     } finally {
       setNoteBusy(false);
     }
@@ -386,7 +377,7 @@ export default function DistributorPage() {
   const byPackage = {};
 
   myCards.forEach((c) => {
-    const key = c.packages?.name || 'ط؛ظٹط± ظ…ط­ط¯ط¯';
+    const key = c.packages?.name || 'غير محدد';
 
     if (!byPackage[key]) {
       byPackage[key] = {
@@ -411,11 +402,11 @@ export default function DistributorPage() {
         <div className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <h1>
-              ظ…ط±ط­ط¨ظ‹ط§طŒ {profile.full_name} ًں‘‹
+              مرحبًا، {profile.full_name} 👋
             </h1>
 
             <div className="greet">
-              ط¥ظ„ظٹظƒ ظ…ظ„ط®طµ ط­ط³ط§ط¨ظƒ ط§ظ„ظٹظˆظ…
+              إليك ملخص حسابك اليوم
             </div>
           </div>
 
@@ -432,13 +423,13 @@ export default function DistributorPage() {
               display: 'inline-block',
               boxShadow: isOnline ? '0 0 6px #10B981' : 'none'
             }}></span>
-            {isOnline ? 'ظ†ط´ط·' : 'ط®ط§ظ…ظ„'}
+            {isOnline ? 'نشط' : 'خامل'}
           </div>
         </div>
 
         <AdSlotBar />
 
-        {/* ظ…ط³ط§ط¨ظ‚ط© ط§ظ„ط³ط­ط¨ ط§ظ„ط£ط³ط¨ظˆط¹ظٹ */}
+        {/* مسابقة السحب الأسبوعي */}
         <WeeklyWinnerPanel />
 
         {profile.personal_card && (
@@ -468,7 +459,7 @@ export default function DistributorPage() {
                   marginBottom: 4,
                 }}
               >
-                â­گ ظƒط±طھظƒ ط§ظ„ط´ط®طµظٹ (ط«ط§ط¨طھ ظˆظ…ظ…ظٹط²)
+                ⭐ كرتك الشخصي (ثابت ومميز)
               </div>
 
               <div
@@ -501,24 +492,24 @@ export default function DistributorPage() {
               }}
             >
               {personalCopied
-                ? 'âœ“ طھظ… ط§ظ„ظ†ط³ط®'
-                : 'ًں“‹ ظ†ط³ط® ط§ظ„ظƒط±طھ ط§ظ„ط´ط®طµظٹ'}
+                ? '✓ تم النسخ'
+                : '📋 نسخ الكرت الشخصي'}
             </button>
           </div>
         )}
 
-        {/* ط¨ط·ط§ظ‚ط§طھ ط§ظ„ط£ط±طµط¯ط© ظˆط§ظ„ظ…ط³طھط­ظ‚ط§طھ */}
+        {/* بطاقات الأرصدة والمستحقات */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
           <div className="balance-card" style={{ marginBottom: 0 }}>
             <div className="lbl">
-              ط±طµظٹط¯ظƒ ط§ظ„ط­ط§ظ„ظٹ ط¨ظ…ط®ط²ظ†ظƒ
+              رصيدك الحالي بمخزنك
             </div>
 
             <div className="amt">
               {Number(profile.balance).toLocaleString(
                 'en-US'
               )}{' '}
-              <span>ط±ظٹط§ظ„</span>
+              <span>ريال</span>
             </div>
 
             <div className="foot">
@@ -528,18 +519,18 @@ export default function DistributorPage() {
                   color: '#E3D6FF',
                 }}
               >
-                ظƒط±ظˆطھ ظ„ط¯ظٹظƒ ط§ظ„ط¢ظ†: {myCards.length}
+                كروت لديك الآن: {myCards.length}
               </div>
 
               <Link href="/distributor/request">
                 <button className="req-btn">
-                  ط·ظ„ط¨ ظƒط±ظˆطھ ط¬ط¯ظٹط¯
+                  طلب كروت جديد
                 </button>
               </Link>
             </div>
           </div>
 
-          {/* ط¨ط·ط§ظ‚ط© ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„طµط§ظپظٹ ط§ظ„ظ…ط³طھط­ظ‚ ظ„ظ„ظ…ط¯ظٹط± */}
+          {/* بطاقة المبلغ الصافي المستحق للمدير */}
           <div style={{
             background: netDebt > 0 ? 'linear-gradient(135deg, #065f46 0%, #059669 100%)' : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
             borderRadius: 20,
@@ -552,14 +543,14 @@ export default function DistributorPage() {
           }}>
             <div>
               <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
-                ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„طµط§ظپظٹ ط§ظ„ظ…ط³طھط­ظ‚ ظ„ظ„ظ…ط¯ظٹط±
+                المبلغ الصافي المستحق للمدير
               </div>
               <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
-                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ط±ظٹط§ظ„</span>
+                {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
               </div>
             </div>
             <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
-              {netDebt > 0 ? 'âڑ ï¸ڈ ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط³طھط­ظ‚ط§طھ ط§ظ„ظ…ط§ظ„ظٹط© ط§ظ„ط­ط§ظ„ظٹط©' : 'âœ“ ط§ظ„ط­ط³ط§ط¨ ظ…ط³ط¯ط¯ ط¨ط§ظ„ظƒط§ظ…ظ„'}
+              {netDebt > 0 ? '⚠️ إجمالي المستحقات المالية الحالية' : '✓ الحساب مسدد بالكامل'}
             </div>
           </div>
         </div>
@@ -573,7 +564,7 @@ export default function DistributorPage() {
         >
           <div className="stat">
             <div className="label">
-              ظƒط±ظˆطھ ظ…طھط§ط­ط© ط¹ظ†ط¯ظٹ
+              كروت متاحة عندي
             </div>
 
             <div className="value">
@@ -583,7 +574,7 @@ export default function DistributorPage() {
 
           <div className="stat">
             <div className="label">
-              ظ…ط¨ظٹط¹ط§طھ ط§ظ„ظٹظˆظ…
+              مبيعات اليوم
             </div>
 
             <div className="value">
@@ -595,10 +586,10 @@ export default function DistributorPage() {
         <div className="panel">
           <div className="panel-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <h3>ط¨ط§ظ‚ط§طھظٹ ط§ظ„ظ…طھط§ط­ط©</h3>
+              <h3>باقاتي المتاحة</h3>
 
               <span className="muted">
-                ط§ط¶ط؛ط· &quot;ط¥ط¸ظ‡ط§ط± ظƒط±طھ&quot; ط¹ظ†ط¯ ظˆط¬ظˆط¯ ط²ط¨ظˆظ†
+                اضغط &quot;إظهار كرت&quot; عند وجود زبون
               </span>
             </div>
 
@@ -611,8 +602,8 @@ export default function DistributorPage() {
                 cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px'
               }}
             >
-              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>ًں”„</span>
-              {isRefreshing ? 'ط¬ط§ط±ظٹ ط§ظ„طھط­ط¯ظٹط«...' : 'طھط­ط¯ظٹط« ط§ظ„ظ‚ط§ط¦ظ…ط©'}
+              <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(360deg)' : 'none', transition: 'transform 0.5s' }}>🔄</span>
+              {isRefreshing ? 'جاري التحديث...' : 'تحديث القائمة'}
             </button>
           </div>
 
@@ -629,7 +620,7 @@ export default function DistributorPage() {
                 fontSize: 13,
               }}
             >
-              ظ„ط§ طھظˆط¬ط¯ ظƒط±ظˆطھ ظ„ط¯ظٹظƒ ط­ط§ظ„ظٹظ‹ط§
+              لا توجد كروت لديك حاليًا
             </div>
           )}
 
@@ -646,7 +637,7 @@ export default function DistributorPage() {
 
                   <div className="pcount">
                     {info.count}{' '}
-                    <span>ظƒط±طھ ظ„ط¯ظٹظƒ</span>
+                    <span>كرت لديك</span>
                   </div>
 
                   <button
@@ -662,7 +653,7 @@ export default function DistributorPage() {
                       )
                     }
                   >
-                    ط¥ط¸ظ‡ط§ط± ظƒط±طھ
+                    إظهار كرت
                   </button>
                 </div>
               )
@@ -672,13 +663,13 @@ export default function DistributorPage() {
 
         <div className="panel" style={{ marginTop: 20 }}>
           <div className="panel-head">
-            <h3>ط³ط¬ظ„ ظ…ط¨ظٹط¹ط§طھ ط§ظ„ظٹظˆظ… ط§ظ„ط£ط®ظٹط±ط©</h3>
-            <span className="muted">ط¢ط®ط± ط§ظ„ظƒط±ظˆطھ ط§ظ„طھظٹ ظ‚ظ…طھ ط¨ط¨ظٹط¹ظ‡ط§ ط§ظ„ظٹظˆظ…</span>
+            <h3>سجل مبيعات اليوم الأخيرة</h3>
+            <span className="muted">آخر الكروت التي قمت ببيعها اليوم</span>
           </div>
 
           {recentSales.length === 0 ? (
             <div style={{ color: 'var(--ink-soft)', fontSize: 13, padding: '10px 0' }}>
-              ظ„ظ… طھظ‚ظ… ط¨ط¨ظٹط¹ ط£ظٹ ظƒط±طھ ط­طھظ‰ ط§ظ„ط¢ظ† ط§ظ„ظٹظˆظ….
+              لم تقم ببيع أي كرت حتى الآن اليوم.
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
@@ -689,7 +680,7 @@ export default function DistributorPage() {
                 }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: '800', color: '#1E293B' }}>
-                      {sale.packages?.name || 'ط¨ط§ظ‚ط©'} {sale.customer_name ? `(ط§ظ„ط²ط¨ظˆظ†: ${sale.customer_name})` : ''}
+                      {sale.packages?.name || 'باقة'} {sale.customer_name ? `(الزبون: ${sale.customer_name})` : ''}
                     </div>
                     <div className="mono" style={{ fontSize: '12px', color: '#64748B', letterSpacing: '0.5px' }}>
                       {sale.code}
@@ -714,7 +705,7 @@ export default function DistributorPage() {
         >
           <div className="panel-head">
             <h3>
-              ط¥ط±ط³ط§ظ„ ظ…ظ„ط§ط­ط¸ط© ط£ظˆ ط·ظ„ط¨ ظ„ظ„ظ…ط¯ظٹط±
+              إرسال ملاحظة أو طلب للمدير
             </h3>
           </div>
 
@@ -728,7 +719,7 @@ export default function DistributorPage() {
                 )
               }
               disabled={noteBusy}
-              placeholder="ط§ظƒطھط¨ ط±ط³ط§ظ„طھظƒ ط£ظˆ ط·ظ„ط¨ظƒ ظ‡ظ†ط§ ظ„ظٹط¸ظ‡ط± ظ„ط¯ظ‰ ط§ظ„ظ…ط¯ظٹط± ظ…ط¨ط§ط´ط±ط©..."
+              placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
               style={{
                 width: '100%',
                 padding: 12,
@@ -749,10 +740,10 @@ export default function DistributorPage() {
                   fontWeight: '700',
                   marginBottom: 10,
                   color:
-                    noteMessage.startsWith('âœ“')
+                    noteMessage.startsWith('✓')
                       ? '#10B981'
                       : noteMessage.startsWith(
-                          'âڑ ï¸ڈ'
+                          '⚠️'
                         )
                       ? '#D97706'
                       : '#DC2626',
@@ -785,8 +776,8 @@ export default function DistributorPage() {
               }}
             >
               {noteBusy
-                ? 'ط¬ط§ط±ظٹ ط§ظ„ط¥ط±ط³ط§ظ„...'
-                : 'ط¥ط±ط³ط§ظ„ ظ„ظ„ظ…ط¯ظٹط±'}
+                ? 'جاري الإرسال...'
+                : 'إرسال للمدير'}
             </button>
           </form>
         </div>
@@ -835,7 +826,7 @@ export default function DistributorPage() {
                   marginBottom: 6,
                 }}
               >
-                ط¥ط¸ظ‡ط§ط± ظƒط±طھ ظ…ظ† ط¨ط§ظ‚ط©
+                إظهار كرت من باقة
               </div>
 
               <div
@@ -864,13 +855,13 @@ export default function DistributorPage() {
                 }}
               >
                 <label style={{ display: 'block', marginBottom: 6, fontWeight: '700', color: '#374151' }}>
-                  ط§ط³ظ… ط§ظ„ط²ط¨ظˆظ† (ط§ط®طھظٹط§ط±ظٹ ظ„ظ„ط³ط­ط¨ ط§ظ„ط£ط³ط¨ظˆط¹ظٹ):
+                  اسم الزبون (اختياري للسحب الأسبوعي):
                 </label>
                 <input
                   type="text"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="ظ…ط«ط§ظ„: ط£ط­ظ…ط¯ ظ…ط­ظ…ط¯ (ظ„ط¥ط¯ط®ط§ظ„ظ‡ ظپظٹ ط§ظ„ط³ط­ط¨)"
+                  placeholder="مثال: أحمد محمد (لإدخاله في السحب)"
                   style={{
                     width: '100%',
                     padding: '10px 12px',
@@ -881,7 +872,7 @@ export default function DistributorPage() {
                   }}
                 />
                 <span style={{ fontSize: '11px', color: '#7C3AED', display: 'block', marginTop: 4, fontWeight: '600' }}>
-                  ًں’، ظƒطھط§ط¨ط© ط§ظ„ط§ط³ظ… طھط¤ظ‡ظ„ ط§ظ„ط²ط¨ظˆظ† ظ„ط¯ط®ظˆظ„ ط§ظ„ط³ط­ط¨ ط§ظ„ط£ط³ط¨ظˆط¹ظٹ طھظ„ظ‚ط§ط¦ظٹط§ظ‹!
+                  💡 كتابة الاسم تؤهل الزبون لدخول السحب الأسبوعي تلقائياً!
                 </span>
               </div>
 
@@ -892,7 +883,7 @@ export default function DistributorPage() {
                   marginBottom: 20,
                 }}
               >
-                ط³ظٹطھظ… طھط³ظ„ظٹظ… ظƒط±طھ ظˆط§ط­ط¯ ظˆطھط£ظƒظٹط¯ظ‡ ظƒظ…ط¨ط§ط¹
+                سيتم تسليم كرت واحد وتأكيده كمباع
               </div>
 
               <div
@@ -918,7 +909,7 @@ export default function DistributorPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  ط¥ظ„ط؛ط§ط،
+                  إلغاء
                 </button>
 
                 <button
@@ -938,8 +929,8 @@ export default function DistributorPage() {
                   }}
                 >
                   {revealBusy
-                    ? 'ط¬ط§ط±ظٹ ط§ظ„طھط£ظƒظٹط¯...'
-                    : 'طھط£ظƒظٹط¯ ط§ظ„ط¨ظٹط¹'}
+                    ? 'جاري التأكيد...'
+                    : 'تأكيد البيع'}
                 </button>
               </div>
             </div>
@@ -1001,9 +992,9 @@ export default function DistributorPage() {
                   fontWeight: '900',
                   cursor: 'pointer',
                 }}
-                title="ط¥ط؛ظ„ط§ظ‚"
+                title="إغلاق"
               >
-                âœ•
+                ✕
               </button>
 
               <div
@@ -1024,7 +1015,7 @@ export default function DistributorPage() {
                   marginTop: 2,
                 }}
               >
-                âœ“ طھظ… ط§ظ„ط¨ظٹط¹ ط¨ظ†ط¬ط§ط­
+                ✓ تم البيع بنجاح
               </div>
             </div>
 
@@ -1070,8 +1061,8 @@ export default function DistributorPage() {
                   }}
                 >
                   {copied
-                    ? 'âœ“ طھظ… ط§ظ„ظ†ط³ط®'
-                    : 'ًں“‹ ظ†ط³ط® ط§ظ„ظƒظˆط¯'}
+                    ? '✓ تم النسخ'
+                    : '📋 نسخ الكود'}
                 </button>
 
                 <button
@@ -1088,7 +1079,7 @@ export default function DistributorPage() {
                     cursor: 'pointer',
                   }}
                 >
-                  ظˆط§طھط³ط§ط¨
+                  واتساب
                 </button>
               </div>
 
@@ -1106,7 +1097,7 @@ export default function DistributorPage() {
                   cursor: 'pointer',
                 }}
               >
-                ط¥ط؛ظ„ط§ظ‚
+                إغلاق
               </button>
             </div>
           </div>
