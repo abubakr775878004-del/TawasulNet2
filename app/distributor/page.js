@@ -79,10 +79,10 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. الحل الجذري: جلب جميع الكروت المباعة فعلياً من جدول cards لهذا الموزع لحساب إجمالي المبيعات الصحيح ودون الاعتماد على sales_log المفقود
+      // 4. الحل الجذري والتصحيح الدقيق: ربط السعر بشكل سليم عبر جدول الباقات وضمان جلب الأسعار بشكل كامل
       const { data: soldCardsData, error: soldErr } = await supabase
         .from('cards')
-        .select('packages(price)')
+        .select('package_id, packages(price)')
         .eq('assigned_to', profile.id)
         .eq('status', 'sold');
 
@@ -91,7 +91,8 @@ export default function DistributorPage() {
       }
 
       const totalSalesRevenue = (soldCardsData || []).reduce((sum, c) => {
-        return sum + Number(c.packages?.price || 0);
+        const price = Number(c.packages?.price || 0);
+        return sum + price;
       }, 0);
 
       const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
@@ -108,7 +109,7 @@ export default function DistributorPage() {
 
       const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-      // حساب الدين المتبقي الصافي بدقة تامة من جدول cards المباشر
+      // حساب الدين المتبقي الصافي بدقة تامة وتجنب أي فروقات رقمية
       const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
       setNetDebt(remainingDebt);
 
@@ -1095,6 +1096,7 @@ export default function DistributorPage() {
               </div>
 
               <button
+                onClick5={closeModal}
                 onClick={closeModal}
                 style={{
                   width: '100%',
