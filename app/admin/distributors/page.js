@@ -30,8 +30,6 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
 
-    // جلب قائمة الموزعين مع الحقول المستقلة تماماً
-    // balance للرصيد و debt/debt_balance للدين
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -56,7 +54,6 @@ export default function DistributorsPage() {
           .eq('assigned_to', dist.id)
           .eq('status', 'with_distributor');
 
-        // فصل الدين الصافي عن الرصيد بشكل قاطع
         const permanentNetDebt = Number(
           dist.debt_balance ?? dist.debt ?? 0
         );
@@ -117,7 +114,10 @@ export default function DistributorsPage() {
     }
   }
 
-  // تعديل شحن المخزون ليؤثر على الرصيد (balance) فقط بشكل مستقل
+  // =========================================================
+  // شحن المخزون - يؤثر على balance فقط
+  // =========================================================
+
   async function executeAddBalance(id, amount) {
     setError('');
     setBusyId(id);
@@ -136,18 +136,19 @@ export default function DistributorsPage() {
       const currentBalance = Number(targetDist.balance || 0);
       const newBalance = currentBalance + amount;
 
-      // تحديث خانة الرصيد (balance) فقط دون المساس بالدين نهائياً
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ balance: newBalance })
+        .update({
+          balance: newBalance
+        })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      setTopUps({
-        ...topUps,
+      setTopUps((prev) => ({
+        ...prev,
         [id]: ''
-      });
+      }));
 
       await loadList();
 
@@ -158,26 +159,21 @@ export default function DistributorsPage() {
 
       setError(
         'تعذّرت إضافة الرصيد: ' +
-        (err.message || 'خطأ غير معروف')
+        (err?.message || 'خطأ غير معروف')
       );
     } finally {
       setBusyId(null);
     }
   }
 
-  // =====================================================
+  // =========================================================
   // السداد النقدي
-  // =====================================================
+  // =========================================================
   // مهم:
-  // لا يتم تعديل profiles.debt مباشرة من الواجهة.
-  // يتم تسجيل السداد عبر RPC الرسمي:
-  // record_distributor_payment()
-  //
-  // الدالة تقوم داخلياً بـ:
-  // 1. تسجيل السداد في distributor_debt_transactions
-  // 2. تحديث debt
-  // 3. تحديث debt_balance
-  // =====================================================
+  // لا يتم تعديل debt أو debt_balance مباشرة من الواجهة.
+  // العملية بالكامل تتم عن طريق RPC:
+  // record_distributor_payment
+  // =========================================================
 
   async function executePayDebt(id, amount) {
     setError('');
@@ -186,22 +182,22 @@ export default function DistributorsPage() {
     try {
       const numericAmount = Number(amount);
 
-      if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      if (!numericAmount || numericAmount <= 0) {
         throw new Error('مبلغ السداد يجب أن يكون أكبر من صفر');
       }
 
-      // الحصول على المستخدم الحالي من جلسة Supabase
+      // التأكد من وجود جلسة مستخدم
       const {
         data: { user },
         error: userError
       } = await supabase.auth.getUser();
 
       if (userError || !user) {
-        throw new Error('يجب تسجيل الدخول قبل تسجيل السداد');
+        throw new Error('يجب تسجيل الدخول بحساب الأدمن');
       }
 
-      // تسجيل السداد عبر الدالة المالية الرسمية
-      const { error: payError } = await supabase.rpc(
+      // استدعاء العملية المالية الآمنة من قاعدة البيانات
+      const { error: rpcError } = await supabase.rpc(
         'record_distributor_payment',
         {
           p_distributor_id: id,
@@ -211,23 +207,23 @@ export default function DistributorsPage() {
         }
       );
 
-      if (payError) {
-        throw payError;
+      if (rpcError) {
+        throw rpcError;
       }
 
-      setDebts({
-        ...debts,
+      setDebts((prev) => ({
+        ...prev,
         [id]: ''
-      });
+      }));
 
       await loadList();
 
       alert(
-        '✓ تم تسجيل السداد النقدي وتحديث الدين والدفتر المالي بنجاح'
+        '✓ تم تسجيل السداد وتحديث الدين وتسجيل العملية في الدفتر المالي بنجاح'
       );
 
     } catch (err) {
-      console.error('Pay debt error:', err);
+      console.error('Pay debt RPC error:', err);
 
       setError(
         'تعذّر تسجيل عملية السداد: ' +
@@ -237,6 +233,10 @@ export default function DistributorsPage() {
       setBusyId(null);
     }
   }
+
+  // =========================================================
+  // تحديث حالة الموزع
+  // =========================================================
 
   async function updateStatus(id, status) {
     setError('');
@@ -254,12 +254,15 @@ export default function DistributorsPage() {
         'تعذّر تنفيذ الإجراء: ' +
         updateError.message
       );
-
       return;
     }
 
     loadList();
   }
+
+  // =========================================================
+  // حذف الموزع
+  // =========================================================
 
   async function deleteDistributor(id, name) {
     if (
@@ -285,12 +288,15 @@ export default function DistributorsPage() {
         'تعذّر حذف الحساب: ' +
         deleteError.message
       );
-
       return;
     }
 
     loadList();
   }
+
+  // =========================================================
+  // حفظ الكرت الشخصي
+  // =========================================================
 
   async function savePersonalCard(id) {
     setError('');
@@ -310,7 +316,6 @@ export default function DistributorsPage() {
         'تعذّر حفظ الكرت الشخصي: ' +
         updateError.message
       );
-
       return;
     }
 
@@ -377,6 +382,10 @@ export default function DistributorsPage() {
           </div>
         )}
 
+        {/* =====================================================
+            طلبات بانتظار الموافقة
+        ===================================================== */}
+
         <div
           className="panel"
           style={{ marginBottom: 24 }}
@@ -404,6 +413,7 @@ export default function DistributorsPage() {
           )}
 
           {pending.map((d) => (
+
             <div
               key={d.id}
               className="req-row"
@@ -435,17 +445,25 @@ export default function DistributorsPage() {
                   className="btn-sm btn-approve"
                   disabled={busyId === d.id}
                   onClick={() =>
-                    updateStatus(d.id, 'approved')
+                    updateStatus(
+                      d.id,
+                      'approved'
+                    )
                   }
                 >
-                  {busyId === d.id ? '...' : 'قبول'}
+                  {busyId === d.id
+                    ? '...'
+                    : 'قبول'}
                 </button>
 
                 <button
                   className="btn-sm btn-reject"
                   disabled={busyId === d.id}
                   onClick={() =>
-                    updateStatus(d.id, 'rejected')
+                    updateStatus(
+                      d.id,
+                      'rejected'
+                    )
                   }
                 >
                   رفض
@@ -467,9 +485,14 @@ export default function DistributorsPage() {
               </div>
 
             </div>
+
           ))}
 
         </div>
+
+        {/* =====================================================
+            جميع الموزعين
+        ===================================================== */}
 
         <div className="panel">
 
@@ -526,6 +549,8 @@ export default function DistributorsPage() {
                     gap: 14,
                   }}
                 >
+
+                  {/* رأس بطاقة الموزع */}
 
                   <div
                     style={{
@@ -590,7 +615,9 @@ export default function DistributorsPage() {
 
                       <button
                         style={deleteBtnStyle}
-                        disabled={busyId === d.id}
+                        disabled={
+                          busyId === d.id
+                        }
                         onClick={() =>
                           deleteDistributor(
                             d.id,
@@ -604,6 +631,10 @@ export default function DistributorsPage() {
                     </div>
 
                   </div>
+
+                  {/* =================================================
+                      الرصيد والدين
+                  ================================================= */}
 
                   <div
                     style={{
@@ -644,11 +675,15 @@ export default function DistributorsPage() {
                         }}
                       >
                         {formatNum(d.balance)}
+
                         <span
-                          style={{ fontSize: 11 }}
+                          style={{
+                            fontSize: 11
+                          }}
                         >
                           {' '}ريال
                         </span>
+
                       </div>
 
                       <div
@@ -658,7 +693,8 @@ export default function DistributorsPage() {
                           marginTop: 2
                         }}
                       >
-                        عدد الكروت لديه: {d.myCardsCount}
+                        عدد الكروت لديه:{' '}
+                        {d.myCardsCount}
                       </div>
 
                     </div>
@@ -704,16 +740,24 @@ export default function DistributorsPage() {
                         }}
                       >
                         {formatNum(currentNetDebt)}
+
                         <span
-                          style={{ fontSize: 11 }}
+                          style={{
+                            fontSize: 11
+                          }}
                         >
                           {' '}ريال
                         </span>
+
                       </div>
 
                     </div>
 
                   </div>
+
+                  {/* =================================================
+                      شحن المخزون
+                  ================================================= */}
 
                   <div
                     style={{
@@ -755,10 +799,14 @@ export default function DistributorsPage() {
                         min="0"
                         maxLength={9}
                         placeholder="أدخل مبلغ المخزون (مثلاً 50000)"
-                        value={topUps[d.id] || ''}
+                        value={
+                          topUps[d.id] || ''
+                        }
                         onChange={(e) => {
+
                           if (
-                            e.target.value.length <= 9
+                            e.target.value.length <=
+                            9
                           ) {
                             setTopUps({
                               ...topUps,
@@ -766,6 +814,7 @@ export default function DistributorsPage() {
                                 e.target.value
                             });
                           }
+
                         }}
                         style={{
                           flex: 1,
@@ -810,6 +859,10 @@ export default function DistributorsPage() {
 
                   </div>
 
+                  {/* =================================================
+                      السداد النقدي
+                  ================================================= */}
+
                   <div
                     style={{
                       background: '#f0fdf4',
@@ -849,10 +902,14 @@ export default function DistributorsPage() {
                         min="0"
                         maxLength={9}
                         placeholder="أدخل المبلغ المقبوض كاش"
-                        value={debts[d.id] || ''}
+                        value={
+                          debts[d.id] || ''
+                        }
                         onChange={(e) => {
+
                           if (
-                            e.target.value.length <= 9
+                            e.target.value.length <=
+                            9
                           ) {
                             setDebts({
                               ...debts,
@@ -860,6 +917,7 @@ export default function DistributorsPage() {
                                 e.target.value
                             });
                           }
+
                         }}
                         style={{
                           flex: 1,
@@ -903,6 +961,10 @@ export default function DistributorsPage() {
                     </div>
 
                   </div>
+
+                  {/* =================================================
+                      الكرت الشخصي
+                  ================================================= */}
 
                   <div
                     style={{
@@ -960,7 +1022,9 @@ export default function DistributorsPage() {
                   </div>
 
                 </div>
+
               );
+
             })}
 
           </div>
@@ -968,6 +1032,10 @@ export default function DistributorsPage() {
         </div>
 
       </div>
+
+      {/* =========================================================
+          نافذة تأكيد العملية
+      ========================================================= */}
 
       {confirmModal.isOpen && (
 
@@ -980,7 +1048,8 @@ export default function DistributorsPage() {
             bottom: 0,
             background:
               'rgba(15, 23, 42, 0.65)',
-            backdropFilter: 'blur(4px)',
+            backdropFilter:
+              'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1040,9 +1109,12 @@ export default function DistributorsPage() {
                 }}
               >
                 هل أنت متأكد من{' '}
+
                 {confirmModal.type === 'balance'
                   ? 'إضافة رصيد مخزون بقيمة'
-                  : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
+                  : 'تسجيل سداد نقدي مقبوض بقيمة'}
+
+                {' '}
 
                 <strong
                   style={{
@@ -1058,9 +1130,12 @@ export default function DistributorsPage() {
                     confirmModal.amount
                   )}{' '}
                   ريال
-                </strong>{' '}
+                </strong>
+
+                {' '}
 
                 للموزع{' '}
+
                 <strong>
                   ({confirmModal.distributorName})
                 </strong>
@@ -1078,7 +1153,9 @@ export default function DistributorsPage() {
             >
 
               <button
-                onClick={handleConfirmedAction}
+                onClick={
+                  handleConfirmedAction
+                }
                 style={{
                   flex: 1,
                   background:
