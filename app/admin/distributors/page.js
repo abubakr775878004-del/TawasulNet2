@@ -30,7 +30,7 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
     
-    // 1. جلب قائمة الموزعين مع حقول الدين والرصيد من جدول profiles
+    // جلب قائمة الموزعين مع الحقول المستقلة تماماً (balance للرصيد و debt/debt_balance للدين)
     const { data: distributors, error: loadError } = await supabase
       .from('profiles')
       .select('*')
@@ -47,7 +47,6 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب عدد الكروت في المخزن فقط للعرض
     const listWithDetails = await Promise.all(
       distributors.map(async (dist) => {
         const { count: myCardsCount } = await supabase
@@ -56,12 +55,13 @@ export default function DistributorsPage() {
           .eq('assigned_to', dist.id)
           .eq('status', 'with_distributor');
 
-        // قراءة الدين الثابت بدقة من الحقول المتاحة
-        const permanentNetDebt = Number(dist.debt_balance ?? dist.permanent_debt ?? dist.debt ?? 0);
+        // فصل الدين الصافي عن الرصيد بشكل قاطع
+        const permanentNetDebt = Number(dist.debt_balance ?? dist.debt ?? 0);
 
         return {
           ...dist,
           debt: permanentNetDebt,
+          balance: Number(dist.balance || 0),
           myCardsCount: myCardsCount || 0,
         };
       })
@@ -106,15 +106,15 @@ export default function DistributorsPage() {
     }
   }
 
+  // تعديل شحن المخزون ليؤثر على الرصيد (balance) فقط بشكل مستقل
   async function executeAddBalance(id, amount) {
     setError(''); 
     setBusyId(id);
     
     try {
-      // 1. جلب بيانات الموزع الحالية لضمان تحديث الرصيد والدين بشكل صحيح وآمن
       const { data: targetDist, error: fetchErr } = await supabase
         .from('profiles')
-        .select('balance, debt_balance, debt')
+        .select('balance')
         .eq('id', id)
         .single();
 
@@ -123,29 +123,19 @@ export default function DistributorsPage() {
       }
 
       const currentBalance = Number(targetDist.balance || 0);
-      const currentDebt = Number(targetDist.debt_balance ?? targetDist.debt ?? 0);
-      
       const newBalance = currentBalance + amount;
-      // عند شحن المخزون/الرصيد، يزيد إجمالي عهدة/دين الموزع على المدير بقيمة المخزون المضاف
-      const newDebt = currentDebt + amount;
 
-      // 2. تحديث الرصيد والدين معا في جدول profiles
+      // تحديث خانة الرصيد (balance) فقط دون المساس بالدين نهائياً
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ 
-          balance: newBalance,
-          debt_balance: newDebt,
-          debt: newDebt
-        })
+        .update({ balance: newBalance })
         .eq('id', id);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
       setTopUps({ ...topUps, [id]: '' });
       await loadList();
-      alert('✓ تمت إضافة رصيد المخزون وتحديث الحساب بنجاح');
+      alert('✓ تمت إضافة رصيد المخزون للموزع بنجاح');
 
     } catch (err) {
       console.error('Add balance error:', err);
@@ -155,12 +145,12 @@ export default function DistributorsPage() {
     }
   }
 
+  // سداد الدين يؤثر على الدين (debt / debt_balance) فقط
   async function executePayDebt(id, amount) {
     setError(''); 
     setBusyId(id);
     
     try {
-      // 1. جلب الدين الحالي للموزع
       const { data: targetDist, error: fetchErr } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -174,7 +164,6 @@ export default function DistributorsPage() {
       const currentDebt = Number(targetDist.debt_balance ?? targetDist.debt ?? 0);
       const newDebt = Math.max(0, currentDebt - amount);
 
-      // 2. خصم المبلغ المسدد من الدين الثابت للمدير
       const { error: payError } = await supabase
         .from('profiles')
         .update({ 
@@ -183,13 +172,11 @@ export default function DistributorsPage() {
         })
         .eq('id', id);
 
-      if (payError) {
-        throw payError;
-      }
+      if (payError) throw payError;
 
       setDebts({ ...debts, [id]: '' });
       await loadList();
-      alert('✓ تم تسجيل السداد النقدي وخصمه من الدين الثابت بنجاح');
+      alert('✓ تم تسجيل السداد النقدي وخصمه من الدين بنجاح');
 
     } catch (err) {
       console.error('Pay debt error:', err);
