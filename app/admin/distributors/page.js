@@ -47,31 +47,31 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. الحل الجذري: جلب الكروت المباعة فعلياً من جدول cards مع أسعار الباقات لجعل الحساب مطابقاً لصفحة الموزع تماماً
-    const { data: soldCardsData } = await supabase
-      .from('cards')
-      .select('assigned_to, packages(price)')
-      .eq('status', 'sold');
+    // 2. جلب الحركات المالية من جدول distributor_ledger الدائم
+    const { data: ledgerData, error: ledgerError } = await supabase
+      .from('distributor_ledger')
+      .select('distributor_id, amount, type');
 
-    // 3. جلب السدادات من جدول payments لكل الموزعين
-    const { data: payments } = await supabase
-      .from('payments')
-      .select('distributor_id, amount');
+    if (ledgerError) {
+      console.error('Error loading ledger:', ledgerError);
+    }
 
-    // 4. دمج الحسابات وتصحيح قيمة الدين لكل موزع بدقة تامة مطابقة لصفحة الموزع
+    // 3. حساب الدين الصافي لكل موزع بدقة من جدول الحركات المالي الدائم (shipment - payment)
     const updatedDistributors = distributors.map((dist) => {
-      // تصفية كروت هذا الموزع المباعة وحساب إجمالي الأرباح
-      const distCards = (soldCardsData || []).filter(c => c.assigned_to === dist.id);
-      const totalSalesRevenue = distCards.reduce((sum, c) => sum + Number(c.packages?.price || 0), 0);
-      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
+      const distLedger = (ledgerData || []).filter(item => item.distributor_id === dist.id);
+      
+      let calculatedDebt = 0;
+      distLedger.forEach(item => {
+        const amt = Number(item.amount) || 0;
+        if (item.type === 'shipment') {
+          calculatedDebt += amt;
+        } else if (item.type === 'payment') {
+          calculatedDebt -= amt;
+        }
+      });
 
-      // تصفية سدادات هذا الموزع
-      const distPayments = (payments || []).filter(p => p.distributor_id === dist.id);
-      const totalPaid = distPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-
-      // حساب الدين الفعلي بدقة مطابقة تماماً لصفحة الموزع
-      const calculatedDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
-      const finalDebt = Number(dist.debt) > 0 && calculatedDebt === 0 ? Number(dist.debt) : calculatedDebt;
+      // ضمان عدم نزول الدين تحت الصفر
+      const finalDebt = Math.max(0, Math.round(calculatedDebt));
 
       return {
         ...dist,
@@ -122,6 +122,7 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
+    // 1. إضافة رصيد المخزون للموزع عبر الدالة الموجودة
     const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
@@ -129,11 +130,27 @@ export default function DistributorsPage() {
       is_add: true
     });
 
-    setBusyId(null);
     if (updateError) { 
+      setBusyId(null);
       setError('تعذّرت إضافة الرصيد: ' + updateError.message); 
       return; 
     }
+
+    // 2. تسجيل العملية في جدول الدفتر المالي الدائم كحركة شحنة/دين (shipment)
+    const { error: ledgerError } = await supabase
+      .from('distributor_ledger')
+      .insert([{
+        distributor_id: id,
+        amount: amount,
+        type: 'shipment',
+        notes: 'شحن رصيد مخزون من لوحة الأدمن'
+      }]);
+
+    setBusyId(null);
+    if (ledgerError) {
+      setError('تمت إضافة الرصيد ولكن تعذر تسجيل الحركة في الدفتر الدائم: ' + ledgerError.message);
+    }
+
     setTopUps({ ...topUps, [id]: '' });
     loadList();
   }
@@ -142,6 +159,7 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
+    // 1. تسجيل السداد في جدول payments القديم (للتوافق)
     const { error: payError } = await supabase
       .from('payments')
       .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
@@ -152,6 +170,23 @@ export default function DistributorsPage() {
       return;
     }
 
+    // 2. تسجيل السداد في جدول الدفتر المالي الدائم (payment) لتثبيت الدين وعدم تأثره بحذف الكروت
+    const { error: ledgerError } = await supabase
+      .from('distributor_ledger')
+      .insert([{
+        distributor_id: id,
+        amount: amount,
+        type: 'payment',
+        notes: 'سداد نقدي مقبوض'
+      }]);
+
+    if (ledgerError) {
+      setBusyId(null);
+      setError('تعذر تسجيل السداد في الدفتر الدائم: ' + ledgerError.message);
+      return;
+    }
+
+    // 3. تعديل رصيد الدين في جدول profiles
     await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
