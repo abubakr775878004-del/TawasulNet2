@@ -47,7 +47,7 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. جلب الحركات المالية من جدول distributor_ledger الدائم
+    // 2. جلب الحركات المالية حصراً من جدول distributor_ledger الدائم (معزل تماماً عن الكروت)
     const { data: ledgerData, error: ledgerError } = await supabase
       .from('distributor_ledger')
       .select('distributor_id, amount, type');
@@ -56,7 +56,7 @@ export default function DistributorsPage() {
       console.error('Error loading ledger:', ledgerError);
     }
 
-    // 3. حساب الدين الصافي لكل موزع بدقة من جدول الحركات المالي الدائم (shipment - payment)
+    // 3. حساب الدين الصافي لكل موزع بدقة تامة (الشحنات مطروحاً منها السدادات)
     const updatedDistributors = distributors.map((dist) => {
       const distLedger = (ledgerData || []).filter(item => item.distributor_id === dist.id);
       
@@ -70,7 +70,6 @@ export default function DistributorsPage() {
         }
       });
 
-      // ضمان عدم نزول الدين تحت الصفر
       const finalDebt = Math.max(0, Math.round(calculatedDebt));
 
       return {
@@ -122,7 +121,23 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // 1. إضافة رصيد المخزون للموزع عبر الدالة الموجودة
+    // 1. تسجيل الحركة في جدول الدفتر المالي الدائم كحركة شحنة/دين (shipment)
+    const { error: ledgerError } = await supabase
+      .from('distributor_ledger')
+      .insert([{
+        distributor_id: id,
+        amount: amount,
+        type: 'shipment',
+        notes: 'إضافة رصيد مخزون/دين من لوحة الأدمن'
+      }]);
+
+    if (ledgerError) {
+      setBusyId(null);
+      setError('تعذر تسجيل الحركة في الدفتر الدائم: ' + ledgerError.message);
+      return;
+    }
+
+    // 2. تحديث الرصيد بجدول profiles
     const { error: updateError } = await supabase.rpc('modify_distributor_balance', {
       target_id: id,
       amount: amount,
@@ -130,27 +145,11 @@ export default function DistributorsPage() {
       is_add: true
     });
 
+    setBusyId(null);
     if (updateError) { 
-      setBusyId(null);
       setError('تعذّرت إضافة الرصيد: ' + updateError.message); 
       return; 
     }
-
-    // 2. تسجيل العملية في جدول الدفتر المالي الدائم كحركة شحنة/دين (shipment)
-    const { error: ledgerError } = await supabase
-      .from('distributor_ledger')
-      .insert([{
-        distributor_id: id,
-        amount: amount,
-        type: 'shipment',
-        notes: 'شحن رصيد مخزون من لوحة الأدمن'
-      }]);
-
-    setBusyId(null);
-    if (ledgerError) {
-      setError('تمت إضافة الرصيد ولكن تعذر تسجيل الحركة في الدفتر الدائم: ' + ledgerError.message);
-    }
-
     setTopUps({ ...topUps, [id]: '' });
     loadList();
   }
@@ -159,7 +158,7 @@ export default function DistributorsPage() {
     setError(''); 
     setBusyId(id);
     
-    // 1. تسجيل السداد في جدول payments القديم (للتوافق)
+    // 1. تسجيل السداد في جدول payments القديم
     const { error: payError } = await supabase
       .from('payments')
       .insert([{ distributor_id: id, amount: amount, notes: 'سداد نقدي من لوحة الأدمن' }]);
@@ -170,7 +169,7 @@ export default function DistributorsPage() {
       return;
     }
 
-    // 2. تسجيل السداد في جدول الدفتر المالي الدائم (payment) لتثبيت الدين وعدم تأثره بحذف الكروت
+    // 2. تسجيل السداد في الدفتر المالي الدائم (payment)
     const { error: ledgerError } = await supabase
       .from('distributor_ledger')
       .insert([{
