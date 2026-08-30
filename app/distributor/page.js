@@ -74,32 +74,8 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 1. حساب إجمالي الكروت المباعة مع خصم نسبة 10%
-      const { data: soldCardsData } = await supabase
-        .from('cards')
-        .select('packages(price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold');
-
-      const totalSoldValue = (soldCardsData || []).reduce((sum, item) => {
-        return sum + Number(item.packages?.price || 0);
-      }, 0);
-
-      const grossDebt = totalSoldValue * 0.9;
-
-      // 2. جلب إجمالي المبالغ المسددة نقدياً من جدول السداد المرتبط بالمدير
-      const { data: paymentsData } = await supabase
-        .from('distributor_payments')
-        .select('amount')
-        .eq('distributor_id', profile.id);
-
-      const totalPaid = (paymentsData || []).reduce((sum, item) => {
-        return sum + Number(item.amount || 0);
-      }, 0);
-
-      // 3. الصافي المستحق الفعلي بعد خصم السدادات النقدية
-      const currentNetDebt = Math.max(0, Math.round(grossDebt - totalPaid));
-
+      // قراءة الدين الثابت والمستقل مباشرة من حقل الموزع في قاعدة البيانات لتتطابق تماماً مع صفحة المدير
+      const currentNetDebt = Number(profile?.permanent_debt ?? profile?.debt ?? 0);
       setNetDebt(currentNetDebt);
 
     } catch (err) {
