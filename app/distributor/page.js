@@ -79,38 +79,27 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // 4. الحل الجذري والتصحيح الدقيق: ربط السعر بشكل سليم عبر جدول الباقات وضمان جلب الأسعار بشكل كامل
-      const { data: soldCardsData, error: soldErr } = await supabase
-        .from('cards')
-        .select('package_id, packages(price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold');
-
-      if (soldErr) {
-        console.error('Error fetching sold cards:', soldErr);
-      }
-
-      const totalSalesRevenue = (soldCardsData || []).reduce((sum, c) => {
-        const price = Number(c.packages?.price || 0);
-        return sum + price;
-      }, 0);
-
-      const netSalesAdmin = totalSalesRevenue * 0.90; // نسبة المدير 90%
-
-      // 5. جلب سدادات هذا الموزع المسجلة في جدول payments
-      const { data: paymentsData, error: payErr } = await supabase
-        .from('payments')
-        .select('amount')
+      // 4. قراءة الحركات المالية حصراً من جدول الدفتر المستقل (distributor_ledger) لضمان ثبات الدين وعدم تأثره بحذف الكروت
+      const { data: ledgerData, error: ledgerError } = await supabase
+        .from('distributor_ledger')
+        .select('amount, type')
         .eq('distributor_id', profile.id);
 
-      if (payErr) {
-        console.error('Error fetching payments:', payErr);
+      if (ledgerError) {
+        console.error('Error fetching distributor ledger:', ledgerError);
       }
 
-      const totalPaid = (paymentsData || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      let calculatedDebt = 0;
+      (ledgerData || []).forEach(item => {
+        const amt = Number(item.amount) || 0;
+        if (item.type === 'shipment') {
+          calculatedDebt += amt;
+        } else if (item.type === 'payment') {
+          calculatedDebt -= amt;
+        }
+      });
 
-      // حساب الدين المتبقي الصافي بدقة تامة وتجنب أي فروقات رقمية
-      const remainingDebt = Math.max(0, Math.round(netSalesAdmin - totalPaid));
+      const remainingDebt = Math.max(0, Math.round(calculatedDebt));
       setNetDebt(remainingDebt);
 
     } catch (err) {
@@ -195,7 +184,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // 2. الحل الجذري المزدوج: إدراج السجل تلقائياً في sales_log لضمان توافق الأنظمة كاملة
+      // 2. إدراج السجل في sales_log
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -456,7 +445,7 @@ export default function DistributorPage() {
               boxShadow:
                 '0 10px 25px rgba(124, 58, 237, 0.25)',
               display: 'flex',
-              justify: 'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
@@ -1096,7 +1085,6 @@ export default function DistributorPage() {
               </div>
 
               <button
-                onClick5={closeModal}
                 onClick={closeModal}
                 style={{
                   width: '100%',
