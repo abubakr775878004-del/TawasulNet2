@@ -149,36 +149,26 @@ export default function DistributorPage() {
       
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
-      const soldAtTimestamp = new Date().toISOString();
 
-      // تحديث حالة الكرت إلى مباع (التريغر في قاعدة البيانات سيتكفل بإضافة 90% للدين تلقائياً وثباته)
-      const { error: updateCardError } = await supabase
-        .from('cards')
-        .update({
-          status: 'sold',
-          sold_at: soldAtTimestamp,
-          customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
-        })
-        .eq('id', card.id);
+      // استخدام الدالة الآمنة في سوبابيس لتحديث الكرت والدين وسجل المبيعات دفعة واحدة
+      const { error: rpcError } = await supabase.rpc('confirm_card_sale', {
+        p_card_id: card.id,
+        p_distributor_id: profile.id,
+        p_package_id: card.package_id,
+        p_price: cardPrice,
+        p_manager_share: managerShare,
+        p_distributor_share: distributorShare,
+        p_customer_name: trimmedCustomerName
+      });
 
-      if (updateCardError) {
-        setRevealError('حدث خطأ أثناء تحديث حالة الكرت');
+      if (rpcError) {
+        console.error('RPC Error:', rpcError);
+        setRevealError('حدث خطأ أثناء تأكيد البيع في قاعدة البيانات');
         setRevealBusy(false);
         return;
       }
 
-      // تسجيل العملية في سجل المبيعات
-      await supabase.from('sales_log').insert({
-        distributor_id: profile.id,
-        card_id: card.id,
-        package_id: card.package_id,
-        price: cardPrice,
-        manager_share: managerShare,
-        distributor_share: distributorShare,
-        sold_at: soldAtTimestamp
-      });
-
-      // إعادة جلب بيانات الملف الشخصي فوراً لتحديث قيمة الدين الظاهرة للموزع بدقة
+      // إعادة جلب بيانات الملف الشخصي لتحديث قيمة الدين الظاهرة للموزع فوراً
       const { data: updatedProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
