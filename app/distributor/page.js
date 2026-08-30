@@ -74,13 +74,14 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
+      // جلب الدين الحقيقي والثابت من جدول profiles مباشرة لتجنب أي اختفاء
       const { data: freshProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
         .eq('id', profile.id)
         .single();
 
-      const currentNetDebt = Number(freshProfile?.debt_balance ?? freshProfile?.debt ?? profile?.debt_balance ?? profile?.debt ?? 0);
+      const currentNetDebt = Number(freshProfile?.debt_balance ?? freshProfile?.debt ?? 0);
       setNetDebt(currentNetDebt);
 
     } catch (err) {
@@ -150,6 +151,7 @@ export default function DistributorPage() {
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
 
+      // تحديث حالة الكرت إلى مباع (التريغر في قاعدة البيانات سيتكفل بإضافة 90% للدين تلقائياً وثباته)
       const { error: updateCardError } = await supabase
         .from('cards')
         .update({
@@ -165,31 +167,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // جلب الدين الحالي الفعلي من قاعدة البيانات لضمان تراكمله وثباته
-      const { data: currentDistProfile } = await supabase
-        .from('profiles')
-        .select('debt_balance, debt')
-        .eq('id', profile.id)
-        .single();
-
-      const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
-      const newTotalDebt = existingDebt + managerShare;
-
-      // تثبيت الدين الجديد في قاعدة البيانات (لا يتغير إلا بتسديد المدير)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ 
-          debt_balance: newTotalDebt,
-          debt: newTotalDebt 
-        })
-        .eq('id', profile.id);
-
-      if (profileError) {
-        console.error('Profile update debt error:', profileError);
-      }
-
-      setNetDebt(newTotalDebt);
-
+      // تسجيل العملية في سجل المبيعات
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -200,6 +178,17 @@ export default function DistributorPage() {
         sold_at: soldAtTimestamp
       });
 
+      // إعادة جلب بيانات الملف الشخصي فوراً لتحديث قيمة الدين الظاهرة للموزع بدقة
+      const { data: updatedProfile } = await supabase
+        .from('profiles')
+        .select('debt_balance, debt')
+        .eq('id', profile.id)
+        .single();
+
+      if (updatedProfile) {
+        setNetDebt(Number(updatedProfile.debt_balance ?? updatedProfile.debt ?? 0));
+      }
+
       setRevealedCard({
         code: card.code,
         packageName: pendingPackage.name,
@@ -209,36 +198,8 @@ export default function DistributorPage() {
       setCustomerName('');
       setCopied(false);
 
-      const since = new Date();
-      since.setHours(0, 0, 0, 0);
-
-      const { data: availableCards } = await supabase
-        .from('cards')
-        .select('*, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'with_distributor');
-
-      setMyCards(availableCards || []);
-
-      const { count } = await supabase
-        .from('cards')
-        .select('*', { count: 'exact', head: true })
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString());
-
-      setSoldToday(count || 0);
-
-      const { data: salesData } = await supabase
-        .from('cards')
-        .select('id, code, sold_at, customer_name, packages(name, price)')
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
-        .gte('sold_at', since.toISOString())
-        .order('sold_at', { ascending: false })
-        .limit(10);
-
-      setRecentSales(salesData || []);
+      // تحديث القوائم والمبيعات اليومية
+      await load();
 
     } catch (error) {
       console.error('Confirm reveal error:', error);
@@ -440,14 +401,14 @@ export default function DistributorPage() {
           }}>
             <div>
               <div style={{ fontSize: 12, color: '#f1f5f9', fontWeight: '700', marginBottom: 6 }}>
-                المبلغ الصافي المستحق للمدير
+                المبلغ الصافي المستحق للمدير (الدين)
               </div>
               <div className="mono" style={{ fontSize: 26, fontWeight: '900', letterSpacing: 0.5 }}>
                 {formatNum(netDebt)} <span style={{ fontSize: 13, fontWeight: 'normal' }}>ريال</span>
               </div>
             </div>
             <div style={{ fontSize: 11.5, color: '#f8fafc', marginTop: 10, opacity: 0.9 }}>
-              {netDebt > 0 ? '⚠️ إجمالي المستحقات المالية الحالية' : '✓ الحساب مسدد بالكامل'}
+              {netDebt > 0 ? '⚠️ لا يتغير إلا عند تسديد المدير' : '✓ الحساب مسدد بالكامل'}
             </div>
           </div>
         </div>
