@@ -24,7 +24,9 @@ export default function DistributorsPage() {
 
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
-    return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+    return val.toLocaleString('en-US', {
+      maximumFractionDigits: 0
+    });
   };
 
   async function loadList() {
@@ -114,9 +116,9 @@ export default function DistributorsPage() {
     }
   }
 
-  // =========================================================
-  // شحن المخزون - يؤثر على balance فقط
-  // =========================================================
+  // =====================================================
+  // شحن رصيد المخزون
+  // =====================================================
 
   async function executeAddBalance(id, amount) {
     setError('');
@@ -161,19 +163,16 @@ export default function DistributorsPage() {
         'تعذّرت إضافة الرصيد: ' +
         (err?.message || 'خطأ غير معروف')
       );
+
     } finally {
       setBusyId(null);
     }
   }
 
-  // =========================================================
-  // السداد النقدي
-  // =========================================================
-  // مهم:
-  // لا يتم تعديل debt أو debt_balance مباشرة من الواجهة.
-  // العملية بالكامل تتم عن طريق RPC:
-  // record_distributor_payment
-  // =========================================================
+  // =====================================================
+  // سداد الدين
+  // يستخدم RPC ولا يقوم بتعديل debt مباشرة
+  // =====================================================
 
   async function executePayDebt(id, amount) {
     setError('');
@@ -186,17 +185,25 @@ export default function DistributorsPage() {
         throw new Error('مبلغ السداد يجب أن يكون أكبر من صفر');
       }
 
-      // التأكد من وجود جلسة مستخدم
+      // جلب المستخدم الحالي
       const {
         data: { user },
         error: userError
       } = await supabase.auth.getUser();
 
-      if (userError || !user) {
-        throw new Error('يجب تسجيل الدخول بحساب الأدمن');
+      if (userError) {
+        throw userError;
       }
 
-      // استدعاء العملية المالية الآمنة من قاعدة البيانات
+      if (!user) {
+        throw new Error('يجب تسجيل الدخول كمدير لتنفيذ السداد');
+      }
+
+      // =================================================
+      // تنفيذ السداد من خلال RPC الآمن
+      // لا يوجد تحديث مباشر لـ debt أو debt_balance هنا
+      // =================================================
+
       const { error: rpcError } = await supabase.rpc(
         'record_distributor_payment',
         {
@@ -211,15 +218,17 @@ export default function DistributorsPage() {
         throw rpcError;
       }
 
+      // تنظيف خانة السداد
       setDebts((prev) => ({
         ...prev,
         [id]: ''
       }));
 
+      // إعادة جلب البيانات من قاعدة البيانات
       await loadList();
 
       alert(
-        '✓ تم تسجيل السداد وتحديث الدين وتسجيل العملية في الدفتر المالي بنجاح'
+        '✓ تم تسجيل السداد وخصم المبلغ من دين الموزع بنجاح'
       );
 
     } catch (err) {
@@ -229,14 +238,15 @@ export default function DistributorsPage() {
         'تعذّر تسجيل عملية السداد: ' +
         (err?.message || 'خطأ غير معروف')
       );
+
     } finally {
       setBusyId(null);
     }
   }
 
-  // =========================================================
+  // =====================================================
   // تحديث حالة الموزع
-  // =========================================================
+  // =====================================================
 
   async function updateStatus(id, status) {
     setError('');
@@ -260,9 +270,9 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  // =========================================================
+  // =====================================================
   // حذف الموزع
-  // =========================================================
+  // =====================================================
 
   async function deleteDistributor(id, name) {
     if (
@@ -294,9 +304,9 @@ export default function DistributorsPage() {
     loadList();
   }
 
-  // =========================================================
+  // =====================================================
   // حفظ الكرت الشخصي
-  // =========================================================
+  // =====================================================
 
   async function savePersonalCard(id) {
     setError('');
@@ -382,9 +392,9 @@ export default function DistributorsPage() {
           </div>
         )}
 
-        {/* =====================================================
-            طلبات بانتظار الموافقة
-        ===================================================== */}
+        {/* =============================================
+            الطلبات المعلقة
+        ============================================= */}
 
         <div
           className="panel"
@@ -490,9 +500,9 @@ export default function DistributorsPage() {
 
         </div>
 
-        {/* =====================================================
-            جميع الموزعين
-        ===================================================== */}
+        {/* =============================================
+            كل الموزعين
+        ============================================= */}
 
         <div className="panel">
 
@@ -550,7 +560,7 @@ export default function DistributorsPage() {
                   }}
                 >
 
-                  {/* رأس بطاقة الموزع */}
+                  {/* رأس الموزع */}
 
                   <div
                     style={{
@@ -615,9 +625,7 @@ export default function DistributorsPage() {
 
                       <button
                         style={deleteBtnStyle}
-                        disabled={
-                          busyId === d.id
-                        }
+                        disabled={busyId === d.id}
                         onClick={() =>
                           deleteDistributor(
                             d.id,
@@ -632,9 +640,7 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* =================================================
-                      الرصيد والدين
-                  ================================================= */}
+                  {/* الرصيد والدين */}
 
                   <div
                     style={{
@@ -675,7 +681,6 @@ export default function DistributorsPage() {
                         }}
                       >
                         {formatNum(d.balance)}
-
                         <span
                           style={{
                             fontSize: 11
@@ -683,7 +688,6 @@ export default function DistributorsPage() {
                         >
                           {' '}ريال
                         </span>
-
                       </div>
 
                       <div
@@ -740,7 +744,6 @@ export default function DistributorsPage() {
                         }}
                       >
                         {formatNum(currentNetDebt)}
-
                         <span
                           style={{
                             fontSize: 11
@@ -748,16 +751,13 @@ export default function DistributorsPage() {
                         >
                           {' '}ريال
                         </span>
-
                       </div>
 
                     </div>
 
                   </div>
 
-                  {/* =================================================
-                      شحن المخزون
-                  ================================================= */}
+                  {/* شحن المخزون */}
 
                   <div
                     style={{
@@ -805,8 +805,7 @@ export default function DistributorsPage() {
                         onChange={(e) => {
 
                           if (
-                            e.target.value.length <=
-                            9
+                            e.target.value.length <= 9
                           ) {
                             setTopUps({
                               ...topUps,
@@ -818,11 +817,13 @@ export default function DistributorsPage() {
                         }}
                         style={{
                           flex: 1,
-                          padding: '9px 12px',
+                          padding:
+                            '9px 12px',
                           borderRadius: 10,
                           border:
                             '1.5px solid #93c5fd',
-                          fontFamily: 'monospace',
+                          fontFamily:
+                            'monospace',
                           fontSize: 12.5
                         }}
                       />
@@ -832,12 +833,14 @@ export default function DistributorsPage() {
                           background: '#2563eb',
                           color: '#fff',
                           border: 'none',
-                          padding: '9px 14px',
+                          padding:
+                            '9px 14px',
                           borderRadius: 10,
                           fontSize: 12,
                           fontWeight: 700,
                           cursor: 'pointer',
-                          whiteSpace: 'nowrap'
+                          whiteSpace:
+                            'nowrap'
                         }}
                         disabled={
                           busyId === d.id ||
@@ -859,9 +862,7 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* =================================================
-                      السداد النقدي
-                  ================================================= */}
+                  {/* السداد النقدي */}
 
                   <div
                     style={{
@@ -908,8 +909,7 @@ export default function DistributorsPage() {
                         onChange={(e) => {
 
                           if (
-                            e.target.value.length <=
-                            9
+                            e.target.value.length <= 9
                           ) {
                             setDebts({
                               ...debts,
@@ -921,11 +921,13 @@ export default function DistributorsPage() {
                         }}
                         style={{
                           flex: 1,
-                          padding: '9px 12px',
+                          padding:
+                            '9px 12px',
                           borderRadius: 10,
                           border:
                             '1.5px solid #86efac',
-                          fontFamily: 'monospace',
+                          fontFamily:
+                            'monospace',
                           fontSize: 12.5
                         }}
                       />
@@ -947,12 +949,14 @@ export default function DistributorsPage() {
                           background: '#059669',
                           color: '#fff',
                           border: 'none',
-                          padding: '9px 14px',
+                          padding:
+                            '9px 14px',
                           borderRadius: 10,
                           fontSize: 12,
                           fontWeight: 700,
                           cursor: 'pointer',
-                          whiteSpace: 'nowrap'
+                          whiteSpace:
+                            'nowrap'
                         }}
                       >
                         تسجيل سداد نقدي
@@ -962,9 +966,7 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* =================================================
-                      الكرت الشخصي
-                  ================================================= */}
+                  {/* الكرت الشخصي */}
 
                   <div
                     style={{
@@ -994,11 +996,13 @@ export default function DistributorsPage() {
                       }
                       style={{
                         flex: 1,
-                        padding: '8px 10px',
+                        padding:
+                          '8px 10px',
                         borderRadius: 8,
                         border:
                           '1.5px solid #ddd6fe',
-                        fontFamily: 'monospace',
+                        fontFamily:
+                          'monospace',
                         fontSize: 12.5
                       }}
                     />
@@ -1006,14 +1010,18 @@ export default function DistributorsPage() {
                     <button
                       className="btn-sm btn-approve"
                       style={{
-                        padding: '8px 14px',
-                        whiteSpace: 'nowrap'
+                        padding:
+                          '8px 14px',
+                        whiteSpace:
+                          'nowrap'
                       }}
                       disabled={
                         busyId === d.id
                       }
                       onClick={() =>
-                        savePersonalCard(d.id)
+                        savePersonalCard(
+                          d.id
+                        )
                       }
                     >
                       حفظ الكرت
@@ -1033,9 +1041,9 @@ export default function DistributorsPage() {
 
       </div>
 
-      {/* =========================================================
+      {/* =============================================
           نافذة تأكيد العملية
-      ========================================================= */}
+      ============================================= */}
 
       {confirmModal.isOpen && (
 
@@ -1109,12 +1117,9 @@ export default function DistributorsPage() {
                 }}
               >
                 هل أنت متأكد من{' '}
-
                 {confirmModal.type === 'balance'
                   ? 'إضافة رصيد مخزون بقيمة'
-                  : 'تسجيل سداد نقدي مقبوض بقيمة'}
-
-                {' '}
+                  : 'تسجيل سداد نقدي مقبوض بقيمة'}{' '}
 
                 <strong
                   style={{
@@ -1130,9 +1135,7 @@ export default function DistributorsPage() {
                     confirmModal.amount
                   )}{' '}
                   ريال
-                </strong>
-
-                {' '}
+                </strong>{' '}
 
                 للموزع{' '}
 
