@@ -74,14 +74,14 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // قراءة الدين الثابت والمستقل مباشرة من حقل debt_balance في جدول profiles
+      // جلب الدين من جدول profiles مع فحص كلا الحقلين لضمان المطابقة التامة
       const { data: freshProfile } = await supabase
         .from('profiles')
-        .select('debt_balance, balance')
+        .select('debt_balance, debt')
         .eq('id', profile.id)
         .single();
 
-      const currentNetDebt = Number(freshProfile?.debt_balance ?? profile?.debt_balance ?? profile?.debt ?? 0);
+      const currentNetDebt = Number(freshProfile?.debt_balance ?? freshProfile?.debt ?? profile?.debt_balance ?? profile?.debt ?? 0);
       setNetDebt(currentNetDebt);
 
     } catch (err) {
@@ -127,7 +127,7 @@ export default function DistributorPage() {
     setRevealError('');
 
     try {
-      // 1. جلب أول كرت متاح من هذه الباقة للموزع مع جلب سعر الباقة بشكل مضمون
+      // 1. جلب أول كرت متاح من هذه الباقة للموزع مع سعر الباقة
       const { data, error } = await supabase
         .from('cards')
         .select('id, code, package_id, packages(price)')
@@ -148,12 +148,12 @@ export default function DistributorPage() {
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
       
-      // الحسبة بدقة: 90% للمدير (دين) و 10% للموزع
+      // الحسبة الدقيقة: 90% للمدير (دين) و 10% للموزع
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
 
-      // 2. تحديث حالة الكرت إلى مباع وإضافة اسم الزبون مباشرة
+      // 2. تحديث حالة الكرت إلى مباع وإضافة اسم الزبون
       const { error: updateCardError } = await supabase
         .from('cards')
         .update({
@@ -169,7 +169,7 @@ export default function DistributorPage() {
         return;
       }
 
-      // 3. قراءة الدين الحالي مباشرة من قاعدة البيانات لضمان عدم حدوث تضارب في القيمة
+      // 3. جلب الدين الحالي بدقة وتحديثه بحصة المدير (90%)
       const { data: currentDistProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -179,20 +179,19 @@ export default function DistributorPage() {
       const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
       const newTotalDebt = existingDebt + managerShare;
 
-      // تحديث الدين المباشر (زيادة الدين بمقدار حصة المدير 90%)
-      const { error: profileError } = await supabase
+      // تحديث الحقلين معا (debt_balance و debt) لضمان عدم حصول أي تضارب نهائياً
+      await supabase
         .from('profiles')
-        .update({ debt_balance: newTotalDebt })
+        .update({ 
+          debt_balance: newTotalDebt,
+          debt: newTotalDebt 
+        })
         .eq('id', profile.id);
 
-      if (profileError) {
-        await supabase
-          .from('profiles')
-          .update({ debt: newTotalDebt })
-          .eq('id', profile.id);
-      }
+      // تحديث القيمة في الشاشة فوراً وبشكل لحظي للموزع
+      setNetDebt(newTotalDebt);
 
-      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ الحصص بدقة
+      // 4. تسجيل العملية في جدول السجلات (sales_log) مع الحصص بدقة
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
