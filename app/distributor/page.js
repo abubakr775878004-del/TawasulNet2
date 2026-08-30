@@ -127,6 +127,7 @@ export default function DistributorPage() {
     setRevealError('');
 
     try {
+      // 1. جلب أول كرت متاح من هذه الباقة للموزع
       const { data, error } = await supabase
         .from('cards')
         .select('id, code, package_id, packages(price)')
@@ -146,38 +147,57 @@ export default function DistributorPage() {
       const card = data[0];
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
+      
+      // الحسبة: 90% للمدير (دين) و 10% للموزع
+      const managerShare = cardPrice * 0.9;
+      const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
 
-      // استدعاء دالة قاعدة البيانات الآمنة (RPC) لتنفيذ البيع وحساب دين المدير (90%) تلقائياً
-      const { error: rpcError } = await supabase.rpc('process_card_sale', {
-        p_card_id: card.id,
-        p_distributor_id: profile.id,
-        p_package_price: cardPrice
-      });
-
-      if (rpcError) {
-        console.error('RPC process_card_sale error:', rpcError);
-        setRevealError('حدث خطأ أثناء معالجة عملية البيع والدين');
-        setRevealBusy(false);
-        return;
-      }
-
-      // تحديث اسم الزبون وسجل المبيعات المؤقت
-      await supabase
+      // 2. تحديث حالة الكرت إلى مباع وإضافة اسم الزبون مباشرة
+      const { error: updateCardError } = await supabase
         .from('cards')
         .update({
+          status: 'sold',
+          sold_at: soldAtTimestamp,
           customer_name: trimmedCustomerName !== '' ? trimmedCustomerName : null,
         })
         .eq('id', card.id);
 
+      if (updateCardError) {
+        setRevealError('حدث خطأ أثناء تحديث حالة الكرت');
+        setRevealBusy(false);
+        return;
+      }
+
+      // 3. تحديث دين المدير مباشرة في جدول profiles (زيادة الدين بنسبة 90%)
+      const currentDebt = Number(netDebt || 0);
+      const newDebt = currentDebt + managerShare;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ debt_balance: newDebt })
+        .eq('id', profile.id);
+
+      if (profileError) {
+        // محاولة احتياطية في حال كان اسم العمود debt فقط
+        await supabase
+          .from('profiles')
+          .update({ debt: newDebt })
+          .eq('id', profile.id);
+      }
+
+      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ الحصص
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
         package_id: card.package_id,
         price: cardPrice,
+        manager_share: managerShare,
+        distributor_share: distributorShare,
         sold_at: soldAtTimestamp
       });
 
+      // 5. إظهار الكرت بنجاح وتحديث واجهة الموزع
       setRevealedCard({
         code: card.code,
         packageName: pendingPackage.name,
