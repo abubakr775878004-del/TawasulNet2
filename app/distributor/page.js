@@ -38,7 +38,8 @@ export default function DistributorPage() {
     return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
 
-  async function load() {
+  // جلب البيانات الأساسية عند الدخول أو التحديث اليدوي
+  async function load(isInitial = false) {
     if (!profile) return;
     setIsRefreshing(true);
 
@@ -74,7 +75,7 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      // جلب القيمة من الحقل المربط بصفحة المدير بدقة
+      // جلب الدين من جدول profiles فقط عند التحميل الأول أو التحديث اليدوي الصريح لمنع التداخل اللحظي
       const { data: freshProfile } = await supabase
         .from('profiles')
         .select('debt_balance, debt')
@@ -82,7 +83,11 @@ export default function DistributorPage() {
         .single();
 
       const currentNetDebt = Number(freshProfile?.debt_balance ?? freshProfile?.debt ?? profile?.debt_balance ?? profile?.debt ?? 0);
-      setNetDebt(currentNetDebt);
+      
+      // نحدث قيمة الدين فقط إذا كان التحميل أولياً أو لم يتم البيع للتو لمنع اختفاء الرقم
+      if (isInitial || netDebt === 0) {
+        setNetDebt(currentNetDebt);
+      }
 
     } catch (err) {
       console.error('Error loading distributor data:', err);
@@ -93,7 +98,7 @@ export default function DistributorPage() {
 
   useEffect(() => {
     if (profile) {
-      load();
+      load(true);
     }
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -148,12 +153,12 @@ export default function DistributorPage() {
       const trimmedCustomerName = customerName.trim();
       const cardPrice = Number(card.packages?.price || 0);
       
-      // توزيع النسب: 90% للمدير و 10% للموزع
+      // توزيع النسب: 90% حصة المدير و 10% حصة الموزع
       const managerShare = cardPrice * 0.9;
       const distributorShare = cardPrice * 0.1;
       const soldAtTimestamp = new Date().toISOString();
 
-      // 2. تحديث حالة الكرت إلى مباع
+      // 2. تحديث حالة الكرت إلى مباع في قاعدة البيانات
       const { error: updateCardError } = await supabase
         .from('cards')
         .update({
@@ -169,30 +174,20 @@ export default function DistributorPage() {
         return;
       }
 
-      // 3. جلب القيمة الحالية من الخانة المرتبطة بصفحة المدير وإضافة حصة المدير (90%)
-      const { data: currentDistProfile } = await supabase
-        .from('profiles')
-        .select('debt_balance, debt')
-        .eq('id', profile.id)
-        .single();
+      // 3. حساب القيمة الجديدة بدقة تامة وإضافتها مباشرة على القيمة الحالية للمتغير
+      const updatedDebt = Number(netDebt) + managerShare;
+      setNetDebt(updatedDebt); // تثبيت القيمة في الواجهة فوراً لضمان عدم اختفائها
 
-      const existingDebt = Number(currentDistProfile?.debt_balance ?? currentDistProfile?.debt ?? netDebt ?? 0);
-      const newTotalDebt = existingDebt + managerShare;
-
-      // تحديث خانة الدين الجديدة والمرتبطة بصفحة المدير بكلا الحقلين لضمان التطابق التام
-      const { error: profileError } = await supabase
+      // 4. تحديث قيمة الدين في جدول profiles للمدير والموزع في الخلفية
+      await supabase
         .from('profiles')
         .update({ 
-          debt_balance: newTotalDebt,
-          debt: newTotalDebt 
+          debt_balance: updatedDebt,
+          debt: updatedDebt 
         })
         .eq('id', profile.id);
 
-      if (profileError) {
-        console.error('Profile update debt error:', profileError);
-      }
-
-      // 4. تسجيل العملية في جدول السجلات (sales_log) مع حفظ حصة المدير والموزع
+      // 5. تسجيل العملية في جدول السجلات (sales_log)
       await supabase.from('sales_log').insert({
         distributor_id: profile.id,
         card_id: card.id,
@@ -203,10 +198,7 @@ export default function DistributorPage() {
         sold_at: soldAtTimestamp
       });
 
-      // تثبيت القيمة المحدثة في واجهة الموزع مباشرة
-      setNetDebt(newTotalDebt);
-
-      // 5. إظهار الكرت بنجاح للموزع
+      // 6. إظهار الكرت بنجاح للموزع
       setRevealedCard({
         code: card.code,
         packageName: pendingPackage.name,
@@ -216,7 +208,7 @@ export default function DistributorPage() {
       setCustomerName('');
       setCopied(false);
 
-      // تحديث باقي البيانات المرتبطة دون التأثير على قيمة الدين المحدثة
+      // تحديث قوائم الكروت ومبيعات اليوم في الخلفية دون إعادة جلب الدين لتجنب أي تداخل
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
@@ -602,7 +594,7 @@ export default function DistributorPage() {
             </div>
 
             <button 
-              onClick={load} 
+              onClick={() => load(true)} 
               disabled={isRefreshing}
               style={{
                 background: '#F3F0FB', border: '1px solid #DDD3F5', color: '#5B21B6',
@@ -1030,6 +1022,7 @@ export default function DistributorPage() {
                 </button>
 
                 <button
+                  onClick={`shareWhatsapp`}
                   onClick={shareWhatsapp}
                   style={{
                     flex: 1,
