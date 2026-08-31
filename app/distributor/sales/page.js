@@ -5,14 +5,16 @@ import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
+function formatNumber(value) {
+  return Math.round(Number(value) || 0).toLocaleString('en-US');
+}
+
 function formatNumericDate(dateString) {
   if (!dateString) return '';
 
   const d = new Date(dateString);
 
-  if (isNaN(d.getTime())) {
-    return dateString;
-  }
+  if (isNaN(d.getTime())) return dateString;
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -21,20 +23,26 @@ function formatNumericDate(dateString) {
   return `${year}/${month}/${day}`;
 }
 
-function formatNumber(value) {
-  return Number(value || 0).toLocaleString('en-US', {
-    maximumFractionDigits: 2,
-  });
-}
-
-function getYearMonth(dateString) {
+function getDateKey(dateString) {
   if (!dateString) return '';
 
   const d = new Date(dateString);
 
-  if (isNaN(d.getTime())) {
-    return '';
-  }
+  if (isNaN(d.getTime())) return '';
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(dateString) {
+  if (!dateString) return '';
+
+  const d = new Date(dateString);
+
+  if (isNaN(d.getTime())) return '';
 
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -42,340 +50,265 @@ function getYearMonth(dateString) {
   return `${year}-${month}`;
 }
 
+function getYearKey(dateString) {
+  if (!dateString) return '';
+
+  const d = new Date(dateString);
+
+  if (isNaN(d.getTime())) return '';
+
+  return String(d.getFullYear());
+}
+
 export default function DistributorSalesPage() {
   const { profile, loading } = useProfile('distributor');
 
   const [soldCards, setSoldCards] = useState([]);
   const [myCards, setMyCards] = useState([]);
-
-  // الدين الحالي الحقيقي من قاعدة البيانات
   const [currentDebt, setCurrentDebt] = useState(0);
+  const [commissionRate, setCommissionRate] = useState(10);
+  const [dataLoading, setDataLoading] = useState(true);
 
-  // السدادات المسجلة
-  const [payments, setPayments] = useState([]);
+  const today = new Date();
 
-  // حالة تحميل التقرير
-  const [reportLoading, setReportLoading] = useState(true);
+  const currentDateValue = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-');
 
-  // الأخطاء
-  const [error, setError] = useState('');
+  const currentMonthValue = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0')
+  ].join('-');
 
-  const currentDate = new Date();
+  const currentYearValue = String(today.getFullYear());
+
+  const [reportType, setReportType] = useState('month');
+
+  const [selectedDay, setSelectedDay] = useState(
+    currentDateValue
+  );
+
+  const [selectedMonth, setSelectedMonth] = useState(
+    currentMonthValue
+  );
 
   const [selectedYear, setSelectedYear] = useState(
-    String(currentDate.getFullYear())
+    currentYearValue
   );
-
-  const [selectedMonthNum, setSelectedMonthNum] = useState(
-    String(currentDate.getMonth() + 1).padStart(2, '0')
-  );
-
-  const selectedMonth = `${selectedYear}-${selectedMonthNum}`;
-
-  // =====================================================
-  // تحميل بيانات التقرير
-  // =====================================================
 
   async function loadData() {
-    if (!profile?.id) return;
+    if (!profile) return;
 
-    setReportLoading(true);
-    setError('');
+    setDataLoading(true);
 
     try {
-      // =====================================================
-      // 1. جلب بيانات الموزع الحالية
-      // =====================================================
-      //
-      // الدين يتم قراءته مباشرة من profiles
-      // ولا يتم إعادة حسابه من المبيعات
-      //
-      // =====================================================
-
-      const { data: distributorData, error: distributorError } =
+      /*
+       * جلب بيانات الموزع الحالية.
+       *
+       * الدين لا يتم حسابه هنا من المبيعات والسدادات.
+       * يتم أخذ الدين الحقيقي مباشرة من قاعدة البيانات.
+       */
+      const { data: distributorData, error: profileError } =
         await supabase
           .from('profiles')
-          .select(
-            `
-              id,
-              full_name,
-              commission_rate,
-              debt,
-              debt_balance
-            `
-          )
+          .select('debt_balance, debt, commission_rate')
           .eq('id', profile.id)
           .single();
 
-      if (distributorError) {
-        throw new Error(
-          `تعذر تحميل الحالة المالية: ${distributorError.message}`
+      if (profileError) {
+        console.error(
+          'Error loading distributor profile:',
+          profileError
         );
       }
 
-      const realCurrentDebt = Number(
-        distributorData?.debt_balance ??
-          distributorData?.debt ??
-          0
-      );
+      if (distributorData) {
+        setCurrentDebt(
+          Number(
+            distributorData.debt_balance ??
+            distributorData.debt ??
+            0
+          )
+        );
 
-      setCurrentDebt(realCurrentDebt);
+        setCommissionRate(
+          Number(
+            distributorData.commission_rate ??
+            10
+          )
+        );
+      }
 
-      // =====================================================
-      // 2. جلب الكروت المباعة
-      // =====================================================
-
+      /*
+       * جلب جميع الكروت المباعة الخاصة بالموزع.
+       */
       const { data: cardsData, error: cardsError } =
         await supabase
           .from('cards')
-          .select(
-            `
-              id,
-              sold_at,
-              manager_price,
-              packages (
-                name,
-                price
-              )
-            `
-          )
+          .select(`
+            id,
+            sold_at,
+            packages (
+              name,
+              price
+            )
+          `)
           .eq('assigned_to', profile.id)
           .eq('status', 'sold')
           .order('sold_at', {
-            ascending: false,
+            ascending: false
           });
 
       if (cardsError) {
-        throw new Error(
-          `تعذر تحميل المبيعات: ${cardsError.message}`
+        console.error(
+          'Error loading sold cards:',
+          cardsError
         );
       }
 
       const formattedSales = (cardsData || []).map((card) => ({
         id: card.id,
-
         package_name:
-          card.packages?.name || 'باقة كرت',
-
+          card.packages?.name ||
+          'باقة غير معروفة',
         price: Number(
           card.packages?.price || 0
         ),
-
-        manager_price: Number(
-          card.manager_price || 0
-        ),
-
-        sold_at: card.sold_at,
+        sold_at: card.sold_at
       }));
 
       setSoldCards(formattedSales);
 
-      // =====================================================
-      // 3. جلب المخزون الحالي
-      // =====================================================
-
+      /*
+       * جلب المخزون الحالي.
+       *
+       * هذه الكروت لم تبع بعد،
+       * لذلك لا تدخل في المبيعات أو الدين.
+       */
       const { data: inventoryData, error: inventoryError } =
         await supabase
           .from('cards')
-          .select(
-            `
-              id,
-              assigned_to,
-              status,
-              packages (
-                name,
-                price
-              )
-            `
-          )
+          .select(`
+            id,
+            packages (
+              name,
+              price
+            )
+          `)
           .eq('assigned_to', profile.id)
           .eq('status', 'with_distributor');
 
       if (inventoryError) {
-        throw new Error(
-          `تعذر تحميل المخزون: ${inventoryError.message}`
+        console.error(
+          'Error loading inventory:',
+          inventoryError
         );
       }
 
       setMyCards(inventoryData || []);
 
-      // =====================================================
-      // 4. جلب السدادات الصحيحة
-      // =====================================================
-      //
-      // المصدر المالي الرسمي للسداد هو:
-      //
-      // distributor_debt_transactions
-      //
-      // وليس جدول payments القديم
-      //
-      // =====================================================
-
-      const { data: paymentsData, error: paymentsError } =
-        await supabase
-          .from('distributor_debt_transactions')
-          .select(
-            `
-              id,
-              amount,
-              type,
-              created_at,
-              notes
-            `
-          )
-          .eq('distributor_id', profile.id)
-          .eq('type', 'payment')
-          .order('created_at', {
-            ascending: false,
-          });
-
-      if (paymentsError) {
-        throw new Error(
-          `تعذر تحميل السدادات: ${paymentsError.message}`
-        );
-      }
-
-      const formattedPayments = (paymentsData || []).map(
-        (payment) => ({
-          id: payment.id,
-          amount: Number(payment.amount || 0),
-          type: payment.type,
-          created_at: payment.created_at,
-          notes: payment.notes || '',
-        })
+    } catch (error) {
+      console.error(
+        'Distributor report error:',
+        error
       );
-
-      setPayments(formattedPayments);
-
-    } catch (err) {
-      console.error('Distributor report error:', err);
-
-      setError(
-        err.message ||
-          'حدث خطأ أثناء تحميل التقرير'
-      );
-
     } finally {
-      setReportLoading(false);
+      setDataLoading(false);
     }
   }
 
-  // =====================================================
-  // تحميل التقرير
-  // =====================================================
-
   useEffect(() => {
-    if (profile?.id) {
+    if (profile) {
       loadData();
     }
-  }, [profile?.id]);
+  }, [profile]);
 
-  // =====================================================
-  // بيانات الموزع المالية
-  // =====================================================
-
-  const commissionRate = Number(
-    profile?.commission_rate ?? 10
-  );
-
-  const managerRate =
-    Math.max(
-      0,
-      100 - commissionRate
-    );
-
-  // =====================================================
-  // مبيعات الشهر المحدد
-  // =====================================================
-
+  /*
+   * فلترة المبيعات حسب نوع التقرير.
+   *
+   * يومي:
+   * YYYY-MM-DD
+   *
+   * شهري:
+   * YYYY-MM
+   *
+   * سنوي:
+   * YYYY
+   */
   const filteredSales = useMemo(() => {
     return soldCards.filter((sale) => {
-      return (
-        getYearMonth(sale.sold_at) ===
-        selectedMonth
-      );
+      if (!sale.sold_at) return false;
+
+      if (reportType === 'day') {
+        return (
+          getDateKey(sale.sold_at) ===
+          selectedDay
+        );
+      }
+
+      if (reportType === 'month') {
+        return (
+          getMonthKey(sale.sold_at) ===
+          selectedMonth
+        );
+      }
+
+      if (reportType === 'year') {
+        return (
+          getYearKey(sale.sold_at) ===
+          selectedYear
+        );
+      }
+
+      return true;
     });
   }, [
     soldCards,
+    reportType,
+    selectedDay,
     selectedMonth,
+    selectedYear
   ]);
 
-  // =====================================================
-  // سدادات الشهر المحدد
-  // =====================================================
-
-  const filteredPayments = useMemo(() => {
-    return payments.filter((payment) => {
-      return (
-        getYearMonth(
-          payment.created_at
-        ) === selectedMonth
-      );
-    });
-  }, [
-    payments,
-    selectedMonth,
-  ]);
-
-  // =====================================================
-  // إجمالي المبيعات الشهرية
-  // =====================================================
-
-  const monthlyRevenue =
-    filteredSales.reduce(
-      (sum, item) =>
-        sum + Number(item.price || 0),
+  /*
+   * إجمالي قيمة المبيعات للفترة.
+   */
+  const salesTotal = useMemo(() => {
+    return filteredSales.reduce(
+      (sum, sale) =>
+        sum + Number(sale.price || 0),
       0
     );
+  }, [filteredSales]);
 
-  // =====================================================
-  // عمولة الموزع
-  // =====================================================
+  /*
+   * عدد الكروت المباعة.
+   */
+  const soldCardsCount =
+    filteredSales.length;
 
-  const monthlyCommission =
-    (monthlyRevenue *
-      commissionRate) /
-    100;
+  /*
+   * عمولة الموزع حسب النسبة المخزنة
+   * في profiles.commission_rate.
+   */
+  const distributorCommission =
+    salesTotal *
+    (commissionRate / 100);
 
-  // =====================================================
-  // مستحق المدير الناتج عن مبيعات الشهر
-  // =====================================================
+  /*
+   * حصة المدير من مبيعات الفترة.
+   */
+  const managerShare =
+    salesTotal -
+    distributorCommission;
 
-  const monthlyManagerDue =
-    (monthlyRevenue *
-      managerRate) /
-    100;
-
-  // =====================================================
-  // إجمالي السداد خلال الشهر المحدد
-  // =====================================================
-
-  const monthlyPaidAmount =
-    filteredPayments.reduce(
-      (sum, payment) =>
-        sum +
-        Number(payment.amount || 0),
-      0
-    );
-
-  // =====================================================
-  // إجمالي السدادات المسجلة تاريخياً
-  // =====================================================
-
-  const totalPaidAmount =
-    payments.reduce(
-      (sum, payment) =>
-        sum +
-        Number(payment.amount || 0),
-      0
-    );
-
-  // =====================================================
-  // إجمالي قيمة المخزون الحالي
-  // =====================================================
-
-  const remainingInventoryValue =
-    myCards.reduce(
+  /*
+   * قيمة المخزون الحالي.
+   */
+  const inventoryValue = useMemo(() => {
+    return myCards.reduce(
       (sum, card) =>
         sum +
         Number(
@@ -383,39 +316,58 @@ export default function DistributorSalesPage() {
         ),
       0
     );
+  }, [myCards]);
 
-  // =====================================================
-  // ملخص المبيعات حسب الباقة
-  // =====================================================
+  /*
+   * تجميع المبيعات حسب الباقة.
+   */
+  const salesByPackage = useMemo(() => {
+    const result = {};
 
-  const salesByPackage =
-    useMemo(() => {
-      const data = {};
+    filteredSales.forEach((sale) => {
+      const packageName =
+        sale.package_name ||
+        'باقة غير معروفة';
 
-      filteredSales.forEach((item) => {
-        const name =
-          item.package_name ||
-          'باقة كرت';
+      if (!result[packageName]) {
+        result[packageName] = {
+          count: 0,
+          revenue: 0
+        };
+      }
 
-        if (!data[name]) {
-          data[name] = {
-            count: 0,
-            revenue: 0,
-          };
-        }
+      result[packageName].count += 1;
 
-        data[name].count += 1;
+      result[packageName].revenue +=
+        Number(sale.price || 0);
+    });
 
-        data[name].revenue +=
-          Number(item.price || 0);
-      });
+    return result;
+  }, [filteredSales]);
 
-      return data;
-    }, [filteredSales]);
+  /*
+   * عنوان الفترة الحالية.
+   */
+  const reportTitle = useMemo(() => {
+    if (reportType === 'day') {
+      return selectedDay || 'اليوم المحدد';
+    }
 
-  // =====================================================
-  // حالة التحميل
-  // =====================================================
+    if (reportType === 'month') {
+      return selectedMonth || 'الشهر المحدد';
+    }
+
+    if (reportType === 'year') {
+      return selectedYear || 'السنة المحددة';
+    }
+
+    return '';
+  }, [
+    reportType,
+    selectedDay,
+    selectedMonth,
+    selectedYear
+  ]);
 
   if (loading || !profile) {
     return null;
@@ -432,83 +384,178 @@ export default function DistributorSalesPage() {
 
       <div className="main">
 
-        {/* ================================================= */}
         {/* رأس الصفحة */}
-        {/* ================================================= */}
 
         <div className="topbar">
-
           <div>
-            <h1>
-              تقارير حالتي
-            </h1>
+            <h1>تقارير المبيعات</h1>
 
             <div className="greet">
-              متابعة مبيعاتك وأرباحك ومخزونك
-              وحالتك المالية الحالية
+              متابعة مبيعاتك وأرباحك وحالة حسابك
             </div>
           </div>
-
         </div>
 
-        {/* ================================================= */}
-        {/* رسالة الخطأ */}
-        {/* ================================================= */}
-
-        {error && (
-          <div
-            style={{
-              marginBottom: 20,
-              padding: 14,
-              borderRadius: 12,
-              background: '#FEF2F2',
-              border:
-                '1px solid #FCA5A5',
-              color: '#B91C1C',
-              fontSize: 13,
-              fontWeight: 700,
-            }}
-          >
-            {error}
-          </div>
-        )}
-
-        {/* ================================================= */}
-        {/* اختيار الفترة */}
-        {/* ================================================= */}
+        {/* اختيار نوع التقرير */}
 
         <div
           style={{
-            marginBottom: 20,
             background: '#FFFFFF',
             padding: 16,
             borderRadius: 16,
-            border:
-              '1px solid #E2E8F0',
-            boxShadow:
-              '0 2px 8px rgba(0,0,0,0.02)',
+            border: '1px solid #E2E8F0',
+            marginBottom: 16
           }}
         >
 
-          <label
+          <div
             style={{
               fontSize: 13,
-              fontWeight: 800,
+              fontWeight: 900,
               color: '#334155',
-              display: 'block',
-              marginBottom: 8,
+              marginBottom: 12
             }}
           >
-            تحديد شهر التقرير:
-          </label>
+            نوع التقرير
+          </div>
 
           <div
             style={{
-              display: 'flex',
-              gap: 10,
+              display: 'grid',
+              gridTemplateColumns:
+                '1fr 1fr 1fr',
+              gap: 8,
+              marginBottom: 14
             }}
           >
 
+            <button
+              onClick={() =>
+                setReportType('day')
+              }
+              style={{
+                padding: '10px',
+                borderRadius: 10,
+                border:
+                  reportType === 'day'
+                    ? '2px solid #2563EB'
+                    : '1px solid #CBD5E1',
+                background:
+                  reportType === 'day'
+                    ? '#EFF6FF'
+                    : '#FFFFFF',
+                color:
+                  reportType === 'day'
+                    ? '#1D4ED8'
+                    : '#475569',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              يومي
+            </button>
+
+            <button
+              onClick={() =>
+                setReportType('month')
+              }
+              style={{
+                padding: '10px',
+                borderRadius: 10,
+                border:
+                  reportType === 'month'
+                    ? '2px solid #2563EB'
+                    : '1px solid #CBD5E1',
+                background:
+                  reportType === 'month'
+                    ? '#EFF6FF'
+                    : '#FFFFFF',
+                color:
+                  reportType === 'month'
+                    ? '#1D4ED8'
+                    : '#475569',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              شهري
+            </button>
+
+            <button
+              onClick={() =>
+                setReportType('year')
+              }
+              style={{
+                padding: '10px',
+                borderRadius: 10,
+                border:
+                  reportType === 'year'
+                    ? '2px solid #2563EB'
+                    : '1px solid #CBD5E1',
+                background:
+                  reportType === 'year'
+                    ? '#EFF6FF'
+                    : '#FFFFFF',
+                color:
+                  reportType === 'year'
+                    ? '#1D4ED8'
+                    : '#475569',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              سنوي
+            </button>
+
+          </div>
+
+          {/* اختيار التاريخ */}
+
+          {reportType === 'day' && (
+            <input
+              type="date"
+              value={selectedDay}
+              onChange={(e) =>
+                setSelectedDay(
+                  e.target.value
+                )
+              }
+              style={{
+                width: '100%',
+                padding: '11px 12px',
+                borderRadius: 10,
+                border:
+                  '1.5px solid #CBD5E1',
+                fontSize: 14,
+                fontWeight: 700,
+                background: '#F8FAFC'
+              }}
+            />
+          )}
+
+          {reportType === 'month' && (
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) =>
+                setSelectedMonth(
+                  e.target.value
+                )
+              }
+              style={{
+                width: '100%',
+                padding: '11px 12px',
+                borderRadius: 10,
+                border:
+                  '1.5px solid #CBD5E1',
+                fontSize: 14,
+                fontWeight: 700,
+                background: '#F8FAFC'
+              }}
+            />
+          )}
+
+          {reportType === 'year' && (
             <select
               value={selectedYear}
               onChange={(e) =>
@@ -517,14 +564,14 @@ export default function DistributorSalesPage() {
                 )
               }
               style={{
-                flex: 1,
-                padding: '10px 12px',
+                width: '100%',
+                padding: '11px 12px',
                 borderRadius: 10,
                 border:
                   '1.5px solid #CBD5E1',
-                fontWeight: 800,
                 fontSize: 14,
-                background: '#F8FAFC',
+                fontWeight: 700,
+                background: '#F8FAFC'
               }}
             >
               <option value="2025">
@@ -539,1044 +586,612 @@ export default function DistributorSalesPage() {
                 2027
               </option>
 
+              <option value="2028">
+                2028
+              </option>
             </select>
+          )}
 
-            <select
-              value={
-                selectedMonthNum
-              }
-              onChange={(e) =>
-                setSelectedMonthNum(
-                  e.target.value
-                )
-              }
+        </div>
+
+        {/* عنوان الفترة */}
+
+        <div
+          style={{
+            background: '#F8FAFC',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 12,
+            padding: '10px 14px',
+            marginBottom: 16,
+            fontSize: 13,
+            fontWeight: 800,
+            color: '#475569'
+          }}
+        >
+          التقرير الحالي:
+          {' '}
+          <span
+            style={{
+              color: '#0F172A',
+              marginRight: 6
+            }}
+          >
+            {reportTitle}
+          </span>
+        </div>
+
+        {/* بطاقات التقرير */}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              '1fr 1fr',
+            gap: 12,
+            marginBottom: 16
+          }}
+        >
+
+          {/* عدد المبيعات */}
+
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #BFDBFE'
+            }}
+          >
+            <div
               style={{
-                flex: 1,
-                padding: '10px 12px',
-                borderRadius: 10,
-                border:
-                  '1.5px solid #CBD5E1',
+                fontSize: 12,
                 fontWeight: 800,
-                fontSize: 14,
-                direction: 'ltr',
-                background: '#F8FAFC',
+                color: '#1D4ED8'
               }}
             >
-              <option value="01">
-                شهر 01
-              </option>
+              الكروت المباعة
+            </div>
 
-              <option value="02">
-                شهر 02
-              </option>
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: '#1E3A8A',
+                marginTop: 5
+              }}
+            >
+              {soldCardsCount}
+              {' '}
+              <span
+                style={{
+                  fontSize: 12
+                }}
+              >
+                كرت
+              </span>
+            </div>
+          </div>
 
-              <option value="03">
-                شهر 03
-              </option>
+          {/* إجمالي المبيعات */}
 
-              <option value="04">
-                شهر 04
-              </option>
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #F3F0FF, #EDE9FE)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #DDD6FE'
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#6D28D9'
+              }}
+            >
+              إجمالي المبيعات
+            </div>
 
-              <option value="05">
-                شهر 05
-              </option>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 900,
+                color: '#4C1D95',
+                marginTop: 5
+              }}
+            >
+              {formatNumber(salesTotal)}
+              {' '}
+              <span
+                style={{
+                  fontSize: 11
+                }}
+              >
+                ر.ي
+              </span>
+            </div>
+          </div>
 
-              <option value="06">
-                شهر 06
-              </option>
+          {/* عمولة الموزع */}
 
-              <option value="07">
-                شهر 07
-              </option>
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #ECFDF5, #D1FAE5)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #A7F3D0'
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#047857'
+              }}
+            >
+              عمولتك ({commissionRate}%)
+            </div>
 
-              <option value="08">
-                شهر 08
-              </option>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 900,
+                color: '#059669',
+                marginTop: 5
+              }}
+            >
+              {formatNumber(
+                distributorCommission
+              )}
+              {' '}
+              <span
+                style={{
+                  fontSize: 11
+                }}
+              >
+                ر.ي
+              </span>
+            </div>
+          </div>
 
-              <option value="09">
-                شهر 09
-              </option>
+          {/* حصة المدير */}
 
-              <option value="10">
-                شهر 10
-              </option>
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #FED7AA'
+            }}
+          >
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#C2410C'
+              }}
+            >
+              حصة المدير للفترة
+            </div>
 
-              <option value="11">
-                شهر 11
-              </option>
+            <div
+              style={{
+                fontSize: 20,
+                fontWeight: 900,
+                color: '#9A3412',
+                marginTop: 5
+              }}
+            >
+              {formatNumber(
+                managerShare
+              )}
+              {' '}
+              <span
+                style={{
+                  fontSize: 11
+                }}
+              >
+                ر.ي
+              </span>
+            </div>
+          </div>
 
-              <option value="12">
-                شهر 12
-              </option>
+        </div>
 
-            </select>
+        {/* الدين الحالي */}
+
+        <div
+          style={{
+            background:
+              currentDebt > 0
+                ? 'linear-gradient(135deg, #991B1B, #DC2626)'
+                : 'linear-gradient(135deg, #065F46, #059669)',
+            borderRadius: 16,
+            padding: '18px 20px',
+            color: '#FFFFFF',
+            marginBottom: 16,
+            boxShadow:
+              '0 4px 12px rgba(0,0,0,0.08)'
+          }}
+        >
+
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              opacity: 0.9,
+              marginBottom: 5
+            }}
+          >
+            المبلغ الحالي المستحق للمدير
+          </div>
+
+          <div
+            style={{
+              fontSize: 25,
+              fontWeight: 900
+            }}
+          >
+            {formatNumber(currentDebt)}
+            {' '}
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500
+              }}
+            >
+              ر.ي
+            </span>
+          </div>
+
+        </div>
+
+        {/* المخزون */}
+
+        <div
+          className="panel"
+          style={{
+            background: '#FFFFFF',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 16
+          }}
+        >
+
+          <h3
+            style={{
+              margin:
+                '0 0 12px 0',
+              fontSize: 15,
+              fontWeight: 900,
+              color: '#0F172A'
+            }}
+          >
+            المخزون الحالي
+          </h3>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent:
+                'space-between',
+              alignItems:
+                'center',
+              background: '#F8FAFC',
+              padding: '12px 14px',
+              borderRadius: 12,
+              border:
+                '1px solid #E2E8F0'
+            }}
+          >
+
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: '#475569'
+                }}
+              >
+                الكروت المتبقية لديك
+              </div>
+
+              <div
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  color: '#0F172A',
+                  marginTop: 4
+                }}
+              >
+                {myCards.length}
+                {' '}
+                كرت
+              </div>
+            </div>
+
+            <div
+              style={{
+                textAlign: 'left'
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#64748B'
+                }}
+              >
+                القيمة الإجمالية
+              </div>
+
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 900,
+                  color: '#2563EB',
+                  marginTop: 4
+                }}
+              >
+                {formatNumber(
+                  inventoryValue
+                )}
+                {' '}
+                ر.ي
+              </div>
+            </div>
 
           </div>
 
         </div>
 
-        {/* ================================================= */}
-        {/* حالة التحميل */}
-        {/* ================================================= */}
+        {/* ملخص الباقات */}
 
-        {reportLoading ? (
+        <div
+          className="panel"
+          style={{
+            background: '#FFFFFF',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 16
+          }}
+        >
 
-          <div
+          <h3
             style={{
-              background: '#FFFFFF',
-              borderRadius: 16,
-              padding: 30,
-              textAlign: 'center',
-              color: '#64748B',
-              border:
-                '1px solid #E2E8F0',
-              fontWeight: 700,
+              margin:
+                '0 0 12px 0',
+              fontSize: 15,
+              fontWeight: 900,
+              color: '#0F172A'
             }}
           >
-            جاري تحميل التقرير...
-          </div>
+            ملخص الباقات المباعة
+          </h3>
 
-        ) : (
-
-          <>
-
-            {/* ============================================= */}
-            {/* بطاقات المبيعات والعمولة */}
-            {/* ============================================= */}
+          {Object.keys(
+            salesByPackage
+          ).length === 0 ? (
 
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns:
-                  '1fr 1fr',
-                gap: 12,
-                marginBottom: 12,
+                padding: '12px 0',
+                textAlign: 'center',
+                fontSize: 13,
+                color: '#64748B'
               }}
             >
-
-              <div
-                style={{
-                  background:
-                    'linear-gradient(135deg, #F3F0FB 0%, #EDE9FE 100%)',
-                  padding: 16,
-                  borderRadius: 16,
-                  border:
-                    '1px solid #DDD6FE',
-                }}
-              >
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: '#6D28D9',
-                    fontWeight: 800,
-                  }}
-                >
-                  مبيعات الفترة
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 900,
-                    color: '#4C1D95',
-                    marginTop: 4,
-                  }}
-                >
-                  {formatNumber(
-                    monthlyRevenue
-                  )}
-
-                  <span
-                    style={{
-                      fontSize: 12,
-                    }}
-                  >
-                    {' '}
-                    ر.ي
-                  </span>
-
-                </div>
-
-              </div>
-
-              <div
-                style={{
-                  background:
-                    'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-                  padding: 16,
-                  borderRadius: 16,
-                  border:
-                    '1px solid #A7F3D0',
-                }}
-              >
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: '#047857',
-                    fontWeight: 800,
-                  }}
-                >
-                  عمولتك ({commissionRate}%)
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 20,
-                    fontWeight: 900,
-                    color: '#059669',
-                    marginTop: 4,
-                  }}
-                >
-                  {formatNumber(
-                    monthlyCommission
-                  )}
-
-                  <span
-                    style={{
-                      fontSize: 12,
-                    }}
-                  >
-                    {' '}
-                    ر.ي
-                  </span>
-
-                </div>
-
-              </div>
-
+              لا توجد مبيعات في الفترة المحددة
             </div>
 
-            {/* ============================================= */}
-            {/* مستحق المدير من مبيعات الفترة */}
-            {/* ============================================= */}
+          ) : (
 
-            <div
-              style={{
-                background:
-                  '#FFF7ED',
-                border:
-                  '1px solid #FED7AA',
-                borderRadius: 16,
-                padding: 16,
-                marginBottom: 12,
-              }}
-            >
+            Object.entries(
+              salesByPackage
+            ).map(
+              ([name, data]) => (
 
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#C2410C',
-                  fontWeight: 800,
-                }}
-              >
-                مستحق المدير الناتج عن
-                مبيعات هذه الفترة
-                ({managerRate}%)
-              </div>
-
-              <div
-                style={{
-                  fontSize: 20,
-                  fontWeight: 900,
-                  color: '#9A3412',
-                  marginTop: 4,
-                }}
-              >
-                {formatNumber(
-                  monthlyManagerDue
-                )}{' '}
-                <span
+                <div
+                  key={name}
                   style={{
-                    fontSize: 12,
+                    display: 'flex',
+                    justifyContent:
+                      'space-between',
+                    alignItems:
+                      'center',
+                    padding: '11px 0',
+                    borderBottom:
+                      '1px solid #F1F5F9'
                   }}
                 >
-                  ر.ي
-                </span>
-              </div>
 
-            </div>
-
-            {/* ============================================= */}
-            {/* السداد خلال الفترة */}
-            {/* ============================================= */}
-
-            <div
-              style={{
-                background:
-                  '#F0FDFA',
-                border:
-                  '1px solid #99F6E4',
-                borderRadius: 16,
-                padding: 16,
-                marginBottom: 20,
-              }}
-            >
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent:
-                    'space-between',
-                  alignItems: 'center',
-                }}
-              >
-
-                <div>
                   <div
                     style={{
-                      fontSize: 12,
-                      color: '#0F766E',
+                      fontSize: 13,
                       fontWeight: 800,
+                      color: '#334155'
                     }}
                   >
-                    إجمالي السداد خلال
-                    الفترة المحددة
+                    {name}
                   </div>
 
                   <div
                     style={{
-                      fontSize: 20,
-                      fontWeight: 900,
-                      color: '#0F766E',
-                      marginTop: 4,
+                      textAlign: 'left'
                     }}
                   >
-                    {formatNumber(
-                      monthlyPaidAmount
-                    )}{' '}
-                    <span
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 900,
+                        color: '#0F172A'
+                      }}
+                    >
+                      {data.count}
+                      {' '}
+                      كرت
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#059669',
+                        marginTop: 2
+                      }}
+                    >
+                      {formatNumber(
+                        data.revenue
+                      )}
+                      {' '}
+                      ر.ي
+                    </div>
+                  </div>
+
+                </div>
+
+              )
+            )
+
+          )}
+
+        </div>
+
+        {/* سجل المبيعات */}
+
+        <div
+          className="panel"
+          style={{
+            background: '#FFFFFF',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 16,
+            padding: 16,
+            marginBottom: 20
+          }}
+        >
+
+          <h3
+            style={{
+              margin:
+                '0 0 12px 0',
+              fontSize: 15,
+              fontWeight: 900,
+              color: '#0F172A'
+            }}
+          >
+            سجل المبيعات
+          </h3>
+
+          {dataLoading ? (
+
+            <div
+              style={{
+                textAlign: 'center',
+                padding: 20,
+                fontSize: 13,
+                color: '#64748B'
+              }}
+            >
+              جاري تحميل التقرير...
+            </div>
+
+          ) : filteredSales.length === 0 ? (
+
+            <div
+              style={{
+                textAlign: 'center',
+                padding: 16,
+                fontSize: 13,
+                color: '#64748B'
+              }}
+            >
+              لا توجد عمليات بيع في الفترة المحددة
+            </div>
+
+          ) : (
+
+            filteredSales.map(
+              (item) => (
+
+                <div
+                  key={item.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent:
+                      'space-between',
+                    alignItems:
+                      'center',
+                    padding: '12px 0',
+                    borderBottom:
+                      '1px solid #F1F5F9'
+                  }}
+                >
+
+                  <div>
+
+                    <div
+                      style={{
+                        fontWeight: 900,
+                        fontSize: 13,
+                        color: '#0F172A'
+                      }}
+                    >
+                      {item.package_name}
+                    </div>
+
+                    <div
                       style={{
                         fontSize: 12,
+                        color: '#059669',
+                        fontWeight: 700,
+                        marginTop: 3
                       }}
                     >
+                      {formatNumber(
+                        item.price
+                      )}
+                      {' '}
                       ر.ي
-                    </span>
+                    </div>
+
                   </div>
-
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: '#0F766E',
-                    fontWeight: 700,
-                    background:
-                      '#CCFBF1',
-                    padding:
-                      '7px 10px',
-                    borderRadius: 10,
-                  }}
-                >
-                  {filteredPayments.length}{' '}
-                  عملية سداد
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* ============================================= */}
-            {/* الدين الحالي الحقيقي */}
-            {/* ============================================= */}
-
-            <div
-              style={{
-                background:
-                  currentDebt > 0
-                    ? 'linear-gradient(135deg, #991B1B 0%, #DC2626 100%)'
-                    : 'linear-gradient(135deg, #065F46 0%, #059669 100%)',
-
-                borderRadius: 16,
-
-                padding:
-                  '18px 20px',
-
-                color: '#FFFFFF',
-
-                marginBottom: 20,
-
-                boxShadow:
-                  '0 4px 12px rgba(0,0,0,0.08)',
-              }}
-            >
-
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent:
-                    'space-between',
-                  alignItems: 'center',
-                }}
-              >
-
-                <div>
 
                   <div
                     style={{
-                      fontSize: 12,
-                      color: '#F8FAFC',
+                      fontSize: 11,
                       fontWeight: 700,
-                      marginBottom: 4,
+                      color: '#475569',
+                      background: '#F1F5F9',
+                      padding: '6px 9px',
+                      borderRadius: 8
                     }}
                   >
-                    المبلغ الحالي المستحق
-                    للمدير
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 24,
-                      fontWeight: 900,
-                    }}
-                  >
-                    {formatNumber(
-                      currentDebt
-                    )}{' '}
-
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight:
-                          'normal',
-                      }}
-                    >
-                      ر.ي
-                    </span>
-
+                    {formatNumericDate(
+                      item.sold_at
+                    )}
                   </div>
 
                 </div>
 
-                <div
-                  style={{
-                    textAlign: 'left',
-                    fontSize: 11,
-                    background:
-                      'rgba(255,255,255,0.18)',
-                    padding:
-                      '7px 10px',
-                    borderRadius: 10,
-                  }}
-                >
-                  <div>
-                    الحالة المالية الحالية
-                  </div>
+              )
+            )
 
-                  <div
-                    style={{
-                      marginTop: 3,
-                      fontWeight: 800,
-                    }}
-                  >
-                    {currentDebt > 0
-                      ? 'يوجد مستحق'
-                      : 'لا يوجد مستحق'}
-                  </div>
+          )}
 
-                </div>
-
-              </div>
-
-            </div>
-
-            {/* ============================================= */}
-            {/* ملخص الباقات */}
-            {/* ============================================= */}
-
-            <div
-              className="panel"
-              style={{
-                marginBottom: 20,
-                background:
-                  '#FFFFFF',
-                borderRadius: 16,
-                border:
-                  '1px solid #E2E8F0',
-                padding: 16,
-              }}
-            >
-
-              <h3
-                style={{
-                  margin:
-                    '0 0 12px 0',
-                  fontSize: 15,
-                  fontWeight: 900,
-                  color: '#0F172A',
-                }}
-              >
-                ملخص الباقات المباعة
-              </h3>
-
-              {Object.keys(
-                salesByPackage
-              ).length === 0 ? (
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: '#64748B',
-                    padding:
-                      '10px 0',
-                    textAlign:
-                      'center',
-                  }}
-                >
-                  لا توجد مبيعات مسجلة
-                  في هذه الفترة
-                </div>
-
-              ) : (
-
-                Object.entries(
-                  salesByPackage
-                ).map(
-                  ([name, data]) => (
-
-                    <div
-                      key={name}
-                      style={{
-                        display:
-                          'flex',
-
-                        justifyContent:
-                          'space-between',
-
-                        padding:
-                          '10px 0',
-
-                        fontSize: 13,
-
-                        borderBottom:
-                          '1px solid #F1F5F9',
-                      }}
-                    >
-
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color:
-                            '#334155',
-                        }}
-                      >
-                        {name}
-                      </span>
-
-                      <span
-                        style={{
-                          fontWeight: 900,
-                          color:
-                            '#0F172A',
-                        }}
-                      >
-                        {data.count} كرت{' '}
-
-                        <span
-                          style={{
-                            color:
-                              '#059669',
-
-                            fontWeight: 700,
-                          }}
-                        >
-                          (
-                          {formatNumber(
-                            data.revenue
-                          )}{' '}
-                          ر.ي)
-                        </span>
-
-                      </span>
-
-                    </div>
-
-                  )
-                )
-
-              )}
-
-            </div>
-
-            {/* ============================================= */}
-            {/* المخزون الحالي */}
-            {/* ============================================= */}
-
-            <div
-              className="panel"
-              style={{
-                background:
-                  '#FFFFFF',
-
-                border:
-                  '1px solid #E2E8F0',
-
-                borderRadius: 16,
-
-                padding: 16,
-
-                marginBottom: 20,
-              }}
-            >
-
-              <h3
-                style={{
-                  margin:
-                    '0 0 12px 0',
-
-                  fontSize: 15,
-
-                  fontWeight: 900,
-
-                  color: '#0F172A',
-                }}
-              >
-                حالة المخزون الحالي
-              </h3>
-
-              <div
-                style={{
-                  display:
-                    'flex',
-
-                  justifyContent:
-                    'space-between',
-
-                  alignItems:
-                    'center',
-
-                  fontSize: 13,
-
-                  background:
-                    '#FAF5FF',
-
-                  padding:
-                    '12px 14px',
-
-                  borderRadius: 12,
-
-                  border:
-                    '1px solid #F3E8FF',
-                }}
-              >
-
-                <span
-                  style={{
-                    fontWeight: 700,
-
-                    color:
-                      '#6B21A8',
-                  }}
-                >
-                  قيمة الكروت الموجودة
-                  لديك ({myCards.length} كرت)
-                </span>
-
-                <span
-                  style={{
-                    fontWeight: 900,
-
-                    color:
-                      '#7E22CE',
-
-                    fontSize: 15,
-                  }}
-                >
-                  {formatNumber(
-                    remainingInventoryValue
-                  )}{' '}
-                  ر.ي
-                </span>
-
-              </div>
-
-            </div>
-
-            {/* ============================================= */}
-            {/* سجل السدادات */}
-            {/* ============================================= */}
-
-            <div
-              className="panel"
-              style={{
-                background:
-                  '#FFFFFF',
-
-                border:
-                  '1px solid #E2E8F0',
-
-                borderRadius: 16,
-
-                padding: 16,
-
-                marginBottom: 20,
-              }}
-            >
-
-              <h3
-                style={{
-                  margin:
-                    '0 0 12px 0',
-
-                  fontSize: 15,
-
-                  fontWeight: 900,
-
-                  color: '#0F172A',
-                }}
-              >
-                سجل السدادات
-              </h3>
-
-              {filteredPayments.length ===
-              0 ? (
-
-                <div
-                  style={{
-                    fontSize: 13,
-
-                    color:
-                      '#64748B',
-
-                    padding:
-                      '10px 0',
-
-                    textAlign:
-                      'center',
-                  }}
-                >
-                  لا توجد عمليات سداد
-                  مسجلة في هذه الفترة
-                </div>
-
-              ) : (
-
-                filteredPayments.map(
-                  (payment) => (
-
-                    <div
-                      key={
-                        payment.id
-                      }
-                      style={{
-                        display:
-                          'flex',
-
-                        justifyContent:
-                          'space-between',
-
-                        alignItems:
-                          'center',
-
-                        padding:
-                          '10px 0',
-
-                        borderBottom:
-                          '1px solid #F1F5F9',
-                      }}
-                    >
-
-                      <div>
-
-                        <div
-                          style={{
-                            fontWeight: 800,
-
-                            fontSize: 13,
-
-                            color:
-                              '#0F172A',
-                          }}
-                        >
-                          سداد نقدي
-                        </div>
-
-                        {payment.notes && (
-
-                          <div
-                            style={{
-                              fontSize: 11,
-
-                              color:
-                                '#64748B',
-
-                              marginTop: 3,
-                            }}
-                          >
-                            {
-                              payment.notes
-                            }
-                          </div>
-
-                        )}
-
-                      </div>
-
-                      <div
-                        style={{
-                          textAlign:
-                            'left',
-                        }}
-                      >
-
-                        <div
-                          style={{
-                            fontWeight: 900,
-
-                            fontSize: 14,
-
-                            color:
-                              '#059669',
-                          }}
-                        >
-                          {formatNumber(
-                            payment.amount
-                          )}{' '}
-                          ر.ي
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: 11,
-
-                            color:
-                              '#64748B',
-
-                            marginTop: 3,
-                          }}
-                        >
-                          {formatNumericDate(
-                            payment.created_at
-                          )}
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                  )
-                )
-
-              )}
-
-            </div>
-
-            {/* ============================================= */}
-            {/* سجل المبيعات */}
-            {/* ============================================= */}
-
-            <div
-              className="panel"
-              style={{
-                background:
-                  '#FFFFFF',
-
-                border:
-                  '1px solid #E2E8F0',
-
-                borderRadius: 16,
-
-                padding: 16,
-              }}
-            >
-
-              <h3
-                style={{
-                  margin:
-                    '0 0 12px 0',
-
-                  fontSize: 15,
-
-                  fontWeight: 900,
-
-                  color: '#0F172A',
-                }}
-              >
-                سجل المبيعات التفصيلي
-              </h3>
-
-              {filteredSales.length ===
-              0 ? (
-
-                <div
-                  style={{
-                    fontSize: 13,
-
-                    color:
-                      '#64748B',
-
-                    padding:
-                      '10px 0',
-
-                    textAlign:
-                      'center',
-                  }}
-                >
-                  لا توجد عمليات بيع
-                  مسجلة في هذه الفترة
-                </div>
-
-              ) : (
-
-                filteredSales.map(
-                  (
-                    item,
-                    index
-                  ) => (
-
-                    <div
-                      key={
-                        item.id ||
-                        index
-                      }
-                      style={{
-                        display:
-                          'flex',
-
-                        justifyContent:
-                          'space-between',
-
-                        alignItems:
-                          'center',
-
-                        padding:
-                          '10px 0',
-
-                        borderBottom:
-                          '1px solid #F1F5F9',
-                      }}
-                    >
-
-                      <div>
-
-                        <div
-                          style={{
-                            fontWeight: 800,
-
-                            fontSize: 13,
-
-                            color:
-                              '#0F172A',
-                          }}
-                        >
-                          {
-                            item.package_name
-                          }
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: 12,
-
-                            color:
-                              '#64748B',
-
-                            marginTop: 2,
-                          }}
-                        >
-                          قيمة البيع:{' '}
-
-                          {formatNumber(
-                            item.price
-                          )}{' '}
-
-                          ر.ي
-                        </div>
-
-                      </div>
-
-                      <div
-                        style={{
-                          fontSize: 12,
-
-                          fontWeight: 700,
-
-                          color:
-                            '#475569',
-
-                          background:
-                            '#F1F5F9',
-
-                          padding:
-                            '4px 8px',
-
-                          borderRadius: 8,
-                        }}
-                      >
-                        {formatNumericDate(
-                          item.sold_at
-                        )}
-                      </div>
-
-                    </div>
-
-                  )
-                )
-
-              )}
-
-            </div>
-
-            {/* ============================================= */}
-            {/* إجمالي السدادات التاريخية */}
-            {/* ============================================= */}
-
-            <div
-              style={{
-                marginTop: 16,
-
-                padding: 12,
-
-                borderRadius: 12,
-
-                background:
-                  '#F8FAFC',
-
-                border:
-                  '1px solid #E2E8F0',
-
-                fontSize: 12,
-
-                color:
-                  '#475569',
-
-                display:
-                  'flex',
-
-                justifyContent:
-                  'space-between',
-              }}
-            >
-
-              <span
-                style={{
-                  fontWeight: 700,
-                }}
-              >
-                إجمالي السدادات المسجلة
-              </span>
-
-              <strong
-                style={{
-                  color:
-                    '#059669',
-
-                  fontSize: 14,
-                }}
-              >
-                {formatNumber(
-                  totalPaidAmount
-                )}{' '}
-                ر.ي
-              </strong>
-
-            </div>
-
-          </>
-
-        )}
+        </div>
 
       </div>
 
