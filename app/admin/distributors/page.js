@@ -11,16 +11,28 @@ export default function DistributorsPage() {
   const [list, setList] = useState([]);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
 
+  // نافذة تأكيد العمليات المالية
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     type: null,
     distributorId: null,
     distributorName: '',
     amount: 0
+  });
+
+  // نافذة تأكيد حذف الموزع
+  const [deleteModal, setDeleteModal] = useState({
+    isOpen: false,
+    distributorId: null,
+    distributorName: '',
+    balance: 0,
+    debt: 0,
+    cardsCount: 0
   });
 
   const formatNum = (num) => {
@@ -38,12 +50,16 @@ export default function DistributorsPage() {
   async function loadList() {
     setError('');
 
-    const { data: distributors, error: loadError } =
-      await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'distributor')
-        .order('created_at', { ascending: false });
+    const {
+      data: distributors,
+      error: loadError
+    } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'distributor')
+      .order('created_at', {
+        ascending: false
+      });
 
     if (loadError) {
       setError(
@@ -53,42 +69,51 @@ export default function DistributorsPage() {
       return;
     }
 
-    if (!distributors || distributors.length === 0) {
+    if (
+      !distributors ||
+      distributors.length === 0
+    ) {
       setList([]);
       setPersonalCards({});
       setDebts({});
       return;
     }
 
-    const listWithDetails = await Promise.all(
-      distributors.map(async (dist) => {
-        const { count: myCardsCount } =
-          await supabase
+    const listWithDetails =
+      await Promise.all(
+        distributors.map(async (dist) => {
+          const {
+            count: myCardsCount
+          } = await supabase
             .from('cards')
             .select('*', {
               count: 'exact',
               head: true
             })
             .eq('assigned_to', dist.id)
-            .eq('status', 'with_distributor');
+            .eq(
+              'status',
+              'with_distributor'
+            );
 
-        const permanentNetDebt = Number(
-          dist.debt_balance ??
-          dist.debt ??
-          0
-        );
+          const permanentNetDebt =
+            Number(
+              dist.debt_balance ??
+              dist.debt ??
+              0
+            );
 
-        return {
-          ...dist,
-          debt: permanentNetDebt,
-          balance: Number(
-            dist.balance || 0
-          ),
-          myCardsCount:
-            myCardsCount || 0
-        };
-      })
-    );
+          return {
+            ...dist,
+            debt: permanentNetDebt,
+            balance: Number(
+              dist.balance || 0
+            ),
+            myCardsCount:
+              myCardsCount || 0
+          };
+        })
+      );
 
     setList(listWithDetails);
 
@@ -113,7 +138,7 @@ export default function DistributorsPage() {
   }, [profile]);
 
   // =====================================================
-  // طلب تأكيد العملية
+  // طلب تأكيد العملية المالية
   // =====================================================
 
   function requestConfirmation(
@@ -142,7 +167,7 @@ export default function DistributorsPage() {
   }
 
   // =====================================================
-  // تنفيذ العملية بعد التأكيد
+  // تنفيذ العملية المالية بعد التأكيد
   // =====================================================
 
   async function handleConfirmedAction() {
@@ -262,6 +287,7 @@ export default function DistributorsPage() {
 
   // =====================================================
   // سداد الدين
+  // يستخدم RPC ولا يعدل الدين مباشرة
   // =====================================================
 
   async function executePayDebt(
@@ -378,39 +404,81 @@ export default function DistributorsPage() {
   }
 
   // =====================================================
-  // حذف الموزع
-  //
-  // الرصيد لا يمنع الحذف.
-  // الدين هو المانع.
-  //
-  // الحماية النهائية موجودة في PostgreSQL:
-  // prevent_distributor_deletion_if_debt()
+  // فتح نافذة حذف الموزع
   // =====================================================
 
-  async function deleteDistributor(
-    id,
-    name
+  function requestDeleteDistributor(
+    distributor
   ) {
-    if (busyId === id) {
+    setError('');
+
+    setDeleteModal({
+      isOpen: true,
+      distributorId: distributor.id,
+      distributorName:
+        distributor.full_name || '',
+      balance: Number(
+        distributor.balance || 0
+      ),
+      debt: Number(
+        distributor.debt || 0
+      ),
+      cardsCount: Number(
+        distributor.myCardsCount || 0
+      )
+    });
+  }
+
+  // =====================================================
+  // إغلاق نافذة الحذف
+  // =====================================================
+
+  function closeDeleteModal() {
+    if (
+      busyId ===
+      deleteModal.distributorId
+    ) {
       return;
     }
 
-    const confirmed =
-      window.confirm(
-        `سيتم حذف حساب "${name}" نهائيًا من التطبيق.\n\n` +
-        `وجود رصيد لدى الموزع لا يمنع الحذف.\n` +
-        `الكروت غير المباعة الموجودة معه ستعود تلقائيًا إلى المخزون.\n` +
-        `المبيعات والسجلات المالية التاريخية لن يتم حذفها من الصفحة.\n\n` +
-        `إذا كان على الموزع دين قائم، ستمنع قاعدة البيانات عملية الحذف تلقائيًا.\n\n` +
-        `هل تريد المتابعة؟`
-      );
+    setDeleteModal({
+      isOpen: false,
+      distributorId: null,
+      distributorName: '',
+      balance: 0,
+      debt: 0,
+      cardsCount: 0
+    });
+  }
 
-    if (!confirmed) {
+  // =====================================================
+  // تنفيذ حذف الموزع
+  //
+  // الرصيد لا يمنع الحذف.
+  // الحماية النهائية من الدين موجودة في PostgreSQL.
+  // Trigger:
+  // prevent_distributor_deletion_if_debt()
+  //
+  // Trigger:
+  // reset_orphaned_cards()
+  // يعيد الكروت with_distributor إلى available.
+  // =====================================================
+
+  async function executeDeleteDistributor() {
+    const {
+      distributorId,
+      distributorName
+    } = deleteModal;
+
+    if (
+      !distributorId ||
+      busyId === distributorId
+    ) {
       return;
     }
 
     setError('');
-    setBusyId(id);
+    setBusyId(distributorId);
 
     try {
       const {
@@ -418,45 +486,59 @@ export default function DistributorsPage() {
       } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', id)
+        .eq('id', distributorId)
         .eq('role', 'distributor');
 
       if (deleteError) {
         throw deleteError;
       }
 
+      // تنظيف البيانات المحلية
       setTopUps((prev) => {
         const next = { ...prev };
-        delete next[id];
+        delete next[distributorId];
         return next;
       });
 
       setPersonalCards((prev) => {
         const next = { ...prev };
-        delete next[id];
+        delete next[distributorId];
         return next;
       });
 
       setDebts((prev) => {
         const next = { ...prev };
-        delete next[id];
+        delete next[distributorId];
         return next;
       });
 
       setList((prev) =>
         prev.filter(
-          (item) => item.id !== id
+          (item) =>
+            item.id !== distributorId
         )
       );
 
+      closeDeleteModal();
+
       alert(
-        `✓ تم حذف حساب الموزع "${name}" بنجاح`
+        `✓ تم حذف حساب الموزع "${distributorName}" بنجاح`
       );
     } catch (err) {
       console.error(
         'Delete distributor error:',
         err
       );
+
+      // إبقاء نافذة الحذف مغلقة عند الخطأ
+      setDeleteModal({
+        isOpen: false,
+        distributorId: null,
+        distributorName: '',
+        balance: 0,
+        debt: 0,
+        cardsCount: 0
+      });
 
       setError(
         'تعذّر حذف حساب الموزع: ' +
@@ -512,10 +594,11 @@ export default function DistributorsPage() {
     backgroundColor: '#fee2e2',
     color: '#dc2626',
     opacity: 1,
-    padding: '6px 12px',
-    borderRadius: 8,
-    border: '1px solid #fca5a5',
-    fontWeight: 700,
+    padding: '7px 13px',
+    borderRadius: 9,
+    border:
+      '1px solid #fca5a5',
+    fontWeight: 800,
     fontSize: 12,
     cursor: 'pointer'
   };
@@ -557,13 +640,15 @@ export default function DistributorsPage() {
           والمستحقات المباشرة
         </p>
 
+        {/* رسالة الخطأ */}
+
         {error && (
           <div
             className="error-note"
             style={{
               background: '#fef2f2',
               color: '#dc2626',
-              padding: '12px',
+              padding: '12px 14px',
               borderRadius: '10px',
               marginBottom: '16px',
               border:
@@ -577,9 +662,9 @@ export default function DistributorsPage() {
           </div>
         )}
 
-        {/* =============================================
+        {/* =================================================
             الطلبات المعلقة
-        ============================================= */}
+        ================================================= */}
 
         <div
           className="panel"
@@ -682,13 +767,12 @@ export default function DistributorsPage() {
                     busyId === d.id
                   }
                   onClick={() =>
-                    deleteDistributor(
-                      d.id,
-                      d.full_name
+                    requestDeleteDistributor(
+                      d
                     )
                   }
                 >
-                  حذف
+                  🗑️ حذف
                 </button>
 
               </div>
@@ -699,9 +783,9 @@ export default function DistributorsPage() {
 
         </div>
 
-        {/* =============================================
+        {/* =================================================
             كل الموزعين
-        ============================================= */}
+        ================================================= */}
 
         <div className="panel">
 
@@ -748,11 +832,16 @@ export default function DistributorsPage() {
               const currentNetDebt =
                 Number(d.debt) || 0;
 
-              // =================================================
-              // مهم:
-              // الرصيد لا يمنع حذف الحساب.
-              // الدين فقط هو الذي يمنع زر الحذف في الواجهة.
-              // =================================================
+              /*
+               * ملاحظة:
+               * الرصيد لا يمنع الحذف.
+               *
+               * الدين الظاهر في الصفحة يستخدم
+               * لتوضيح الحالة فقط.
+               *
+               * الحماية الحقيقية والنهائية موجودة
+               * داخل PostgreSQL trigger.
+               */
 
               const canDelete =
                 currentNetDebt <= 0;
@@ -874,15 +963,12 @@ export default function DistributorsPage() {
                             : 'حذف حساب الموزع'
                         }
                         onClick={() =>
-                          deleteDistributor(
-                            d.id,
-                            d.full_name
+                          requestDeleteDistributor(
+                            d
                           )
                         }
                       >
-                        {busyId === d.id
-                          ? '...'
-                          : 'حذف'}
+                        🗑️ حذف
                       </button>
 
                     </div>
@@ -899,6 +985,8 @@ export default function DistributorsPage() {
                       gap: 10
                     }}
                   >
+
+                    {/* الرصيد */}
 
                     <div
                       style={{
@@ -956,6 +1044,8 @@ export default function DistributorsPage() {
                       </div>
 
                     </div>
+
+                    {/* الدين */}
 
                     <div
                       style={{
@@ -1019,7 +1109,9 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* شحن المخزون */}
+                  {/* =================================================
+                      شحن المخزون
+                  ================================================= */}
 
                   <div
                     style={{
@@ -1134,7 +1226,9 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* السداد النقدي */}
+                  {/* =================================================
+                      السداد النقدي
+                  ================================================= */}
 
                   <div
                     style={{
@@ -1249,7 +1343,9 @@ export default function DistributorsPage() {
 
                   </div>
 
-                  {/* الكرت الشخصي */}
+                  {/* =================================================
+                      الكرت الشخصي
+                  ================================================= */}
 
                   <div
                     style={{
@@ -1329,23 +1425,20 @@ export default function DistributorsPage() {
 
       </div>
 
-      {/* =============================================
+      {/* =====================================================
           نافذة تأكيد العملية المالية
-      ============================================= */}
+      ===================================================== */}
 
       {confirmModal.isOpen && (
 
         <div
           style={{
             position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            inset: 0,
             background:
               'rgba(15, 23, 42, 0.65)',
             backdropFilter:
-              'blur(4px)',
+              'blur(5px)',
             display: 'flex',
             alignItems:
               'center',
@@ -1504,6 +1597,433 @@ export default function DistributorsPage() {
               >
                 إلغاء
               </button>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =====================================================
+          نافذة تأكيد حذف الموزع - تصميم احترافي
+      ===================================================== */}
+
+      {deleteModal.isOpen && (
+
+        <div
+          onClick={(e) => {
+            if (
+              e.target === e.currentTarget
+            ) {
+              closeDeleteModal();
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background:
+              'rgba(15, 23, 42, 0.72)',
+            backdropFilter:
+              'blur(7px)',
+            display: 'flex',
+            alignItems:
+              'center',
+            justifyContent:
+              'center',
+            zIndex: 100000,
+            padding: 18,
+            direction: 'rtl'
+          }}
+        >
+
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              background: '#ffffff',
+              borderRadius: 24,
+              overflow: 'hidden',
+              boxShadow:
+                '0 30px 80px rgba(15, 23, 42, 0.35)',
+              animation:
+                'fadeIn 0.2s ease-out'
+            }}
+          >
+
+            {/* الشريط الأحمر */}
+
+            <div
+              style={{
+                height: 6,
+                background:
+                  'linear-gradient(90deg, #b91c1c, #dc2626, #ef4444)'
+              }}
+            />
+
+            <div
+              style={{
+                padding: 24
+              }}
+            >
+
+              {/* أيقونة الحذف */}
+
+              <div
+                style={{
+                  width: 70,
+                  height: 70,
+                  margin:
+                    '0 auto 16px',
+                  borderRadius:
+                    '50%',
+                  background:
+                    '#fef2f2',
+                  border:
+                    '1px solid #fecaca',
+                  display: 'flex',
+                  alignItems:
+                    'center',
+                  justifyContent:
+                    'center',
+                  boxShadow:
+                    '0 8px 20px rgba(220, 38, 38, 0.10)'
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 32,
+                    lineHeight: 1
+                  }}
+                >
+                  🗑️
+                </span>
+              </div>
+
+              {/* العنوان */}
+
+              <h3
+                style={{
+                  margin: 0,
+                  textAlign:
+                    'center',
+                  color: '#111827',
+                  fontSize: 21,
+                  fontWeight: 900
+                }}
+              >
+                تأكيد حذف الموزع
+              </h3>
+
+              <p
+                style={{
+                  textAlign:
+                    'center',
+                  color: '#64748b',
+                  fontSize: 13,
+                  margin:
+                    '8px 0 20px',
+                  lineHeight: 1.7
+                }}
+              >
+                يرجى التأكد قبل تنفيذ عملية الحذف
+                النهائية.
+              </p>
+
+              {/* اسم الموزع */}
+
+              <div
+                style={{
+                  background:
+                    '#f8fafc',
+                  border:
+                    '1px solid #e2e8f0',
+                  borderRadius: 15,
+                  padding:
+                    '14px 16px',
+                  textAlign:
+                    'center',
+                  marginBottom: 14
+                }}
+              >
+
+                <div
+                  style={{
+                    color: '#111827',
+                    fontWeight: 900,
+                    fontSize: 18
+                  }}
+                >
+                  {deleteModal.distributorName}
+                </div>
+
+                <div
+                  style={{
+                    color: '#94a3b8',
+                    fontSize: 11,
+                    marginTop: 4
+                  }}
+                >
+                  حساب موزع
+                </div>
+
+              </div>
+
+              {/* معلومات الحساب */}
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns:
+                    '1fr 1fr',
+                  gap: 10,
+                  marginBottom: 14
+                }}
+              >
+
+                {/* الرصيد */}
+
+                <div
+                  style={{
+                    background:
+                      '#f0fdf4',
+                    border:
+                      '1px solid #bbf7d0',
+                    borderRadius: 13,
+                    padding: 11,
+                    textAlign:
+                      'center'
+                  }}
+                >
+
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: '#166534',
+                      fontWeight: 700
+                    }}
+                  >
+                    الرصيد الحالي
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 15,
+                      color: '#059669',
+                      fontWeight: 900,
+                      marginTop: 3
+                    }}
+                  >
+                    {formatNum(
+                      deleteModal.balance
+                    )}{' '}
+                    ريال
+                  </div>
+
+                </div>
+
+                {/* الدين */}
+
+                <div
+                  style={{
+                    background:
+                      deleteModal.debt >
+                      0
+                        ? '#fef2f2'
+                        : '#f0fdf4',
+                    border:
+                      deleteModal.debt >
+                      0
+                        ? '1px solid #fecaca'
+                        : '1px solid #bbf7d0',
+                    borderRadius: 13,
+                    padding: 11,
+                    textAlign:
+                      'center'
+                  }}
+                >
+
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color:
+                        deleteModal.debt >
+                        0
+                          ? '#991b1b'
+                          : '#166534',
+                      fontWeight: 700
+                    }}
+                  >
+                    الدين الحالي
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 15,
+                      color:
+                        deleteModal.debt >
+                        0
+                          ? '#dc2626'
+                          : '#059669',
+                      fontWeight: 900,
+                      marginTop: 3
+                    }}
+                  >
+                    {formatNum(
+                      deleteModal.debt
+                    )}{' '}
+                    ريال
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* الكروت */}
+
+              {deleteModal.cardsCount >
+                0 && (
+                <div
+                  style={{
+                    background:
+                      '#eff6ff',
+                    border:
+                      '1px solid #bfdbfe',
+                    borderRadius: 13,
+                    padding:
+                      '10px 12px',
+                    marginBottom: 14,
+                    color: '#1e40af',
+                    fontSize: 12,
+                    lineHeight: 1.7
+                  }}
+                >
+                  📦 يوجد حاليًا{' '}
+                  <strong>
+                    {
+                      deleteModal.cardsCount
+                    }
+                  </strong>{' '}
+                  كرت غير مباع مع هذا الموزع.
+                  <br />
+                  ستعود هذه الكروت تلقائيًا إلى المخزون
+                  عند حذف الحساب.
+                </div>
+              )}
+
+              {/* التنبيه */}
+
+              <div
+                style={{
+                  background:
+                    '#fff7ed',
+                  border:
+                    '1px solid #fed7aa',
+                  borderRadius: 13,
+                  padding:
+                    '11px 13px',
+                  marginBottom: 20,
+                  color: '#9a3412',
+                  fontSize: 12,
+                  lineHeight: 1.8
+                }}
+              >
+                <strong>
+                  ⚠️ تنبيه مهم
+                </strong>
+                <br />
+                حذف الحساب عملية نهائية.
+                <br />
+                <span
+                  style={{
+                    color: '#166534'
+                  }}
+                >
+                  ✓ وجود رصيد لا يمنع الحذف.
+                </span>
+                <br />
+                <span
+                  style={{
+                    color: '#991b1b'
+                  }}
+                >
+                  ✓ وجود دين قائم يمنع الحذف تلقائيًا
+                  من قاعدة البيانات.
+                </span>
+              </div>
+
+              {/* أزرار الحذف والإلغاء */}
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 10
+                }}
+              >
+
+                <button
+                  onClick={
+                    executeDeleteDistributor
+                  }
+                  disabled={
+                    busyId ===
+                    deleteModal.distributorId
+                  }
+                  style={{
+                    flex: 1,
+                    background:
+                      'linear-gradient(135deg, #dc2626, #b91c1c)',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding:
+                      '13px 10px',
+                    borderRadius: 13,
+                    fontWeight: 900,
+                    fontSize: 13,
+                    cursor:
+                      busyId ===
+                      deleteModal.distributorId
+                        ? 'wait'
+                        : 'pointer',
+                    boxShadow:
+                      '0 5px 15px rgba(220, 38, 38, 0.25)'
+                  }}
+                >
+                  {busyId ===
+                  deleteModal.distributorId
+                    ? 'جاري الحذف...'
+                    : '🗑️ نعم، تأكيد الحذف'}
+                </button>
+
+                <button
+                  onClick={
+                    closeDeleteModal
+                  }
+                  disabled={
+                    busyId ===
+                    deleteModal.distributorId
+                  }
+                  style={{
+                    flex: 1,
+                    background:
+                      '#f1f5f9',
+                    color:
+                      '#475569',
+                    border:
+                      '1px solid #e2e8f0',
+                    padding:
+                      '13px 10px',
+                    borderRadius: 13,
+                    fontWeight: 800,
+                    fontSize: 13,
+                    cursor:
+                      'pointer'
+                  }}
+                >
+                  إلغاء
+                </button>
+
+              </div>
 
             </div>
 
