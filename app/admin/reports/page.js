@@ -98,14 +98,18 @@ export default function ReportsPage() {
 
     try {
       /*
-       * الموزعون:
+       * ================================
+       * الموزعون
+       * ================================
        *
-       * debt_balance هو الرصيد الرسمي الحالي
-       * للدين في النظام.
+       * debt_balance هو الدين الحالي
+       * الرسمي للموزع.
        *
-       * لا نقوم بإعادة حساب الدين من المبيعات
-       * أو السدادات داخل صفحة التقارير.
+       * مهم:
+       * لا نقوم بحساب الدين من المبيعات
+       * ولا من السدادات داخل هذه الصفحة.
        */
+
       const {
         data: distributorData,
         error: distributorError
@@ -127,11 +131,23 @@ export default function ReportsPage() {
       }
 
       /*
-       * المبيعات الفعلية فقط.
+       * ================================
+       * المبيعات الفعلية
+       * ================================
        *
-       * لا يتم احتساب with_distributor
-       * أو available كمبيعات.
+       * يتم احتساب الكروت التي حالتها:
+       *
+       * sold
+       *
+       * فقط.
+       *
+       * الكروت:
+       * available
+       * with_distributor
+       *
+       * لا تدخل في المبيعات.
        */
+
       const {
         data: salesData,
         error: salesError
@@ -157,10 +173,13 @@ export default function ReportsPage() {
       }
 
       /*
-       * المخزون الحالي لدى الموزعين.
+       * ================================
+       * المخزون الحالي
+       * ================================
        *
        * with_distributor فقط.
        */
+
       const {
         data: inventoryData,
         error: inventoryError
@@ -205,8 +224,11 @@ export default function ReportsPage() {
   }, [profile]);
 
   /*
-   * المبيعات الخاصة بالفترة المختارة.
+   * =====================================
+   * المبيعات حسب الفترة
+   * =====================================
    */
+
   const filteredSales = useMemo(() => {
     return sales.filter((sale) => {
       if (!sale.sold_at) return false;
@@ -243,21 +265,30 @@ export default function ReportsPage() {
   ]);
 
   /*
-   * بناء تقرير كل موزع.
+   * =====================================
+   * بناء تقرير كل موزع
+   * =====================================
    */
+
   const rows = useMemo(() => {
     const map = {};
 
     /*
-     * إنشاء سجل لكل موزع حتى يظهر
-     * حتى لو لم تكن لديه مبيعات.
+     * إنشاء سجل لجميع الموزعين.
      */
+
     distributors.forEach((distributor) => {
       map[distributor.id] = {
         id: distributor.id,
+
         name:
           distributor.full_name ||
           'موزع بدون اسم',
+
+        /*
+         * نسبة العمولة الرسمية
+         * الخاصة بالموزع.
+         */
 
         commissionRate:
           Number(
@@ -265,10 +296,11 @@ export default function ReportsPage() {
           ),
 
         /*
-         * هذا هو الدين الرسمي.
+         * الدين الحالي الرسمي.
          *
-         * لا يتم حسابه من المبيعات.
+         * لا تتم إعادة حسابه.
          */
+
         currentDebt:
           Number(
             distributor.debt_balance ?? 0
@@ -277,14 +309,20 @@ export default function ReportsPage() {
         salesCount: 0,
         salesValue: 0,
 
+        distributorCommission: 0,
+        managerShare: 0,
+
         inventoryCount: 0,
         inventoryValue: 0
       };
     });
 
     /*
-     * المبيعات للفترة المختارة.
+     * =================================
+     * إضافة المبيعات
+     * =================================
      */
+
     filteredSales.forEach((sale) => {
       if (
         !sale.assigned_to ||
@@ -297,14 +335,20 @@ export default function ReportsPage() {
         sale.packages?.price || 0
       );
 
-      map[sale.assigned_to].salesCount += 1;
+      const distributor =
+        map[sale.assigned_to];
 
-      map[sale.assigned_to].salesValue += price;
+      distributor.salesCount += 1;
+
+      distributor.salesValue += price;
     });
 
     /*
-     * المخزون الحالي.
+     * =================================
+     * إضافة المخزون
+     * =================================
      */
+
     inventory.forEach((card) => {
       if (
         !card.assigned_to ||
@@ -317,15 +361,34 @@ export default function ReportsPage() {
         card.packages?.price || 0
       );
 
-      map[card.assigned_to].inventoryCount += 1;
+      const distributor =
+        map[card.assigned_to];
 
-      map[card.assigned_to].inventoryValue += price;
+      distributor.inventoryCount += 1;
+
+      distributor.inventoryValue += price;
     });
 
     /*
-     * حصة المدير حسب نسبة العمولة
-     * المخزنة للموزع.
+     * =================================
+     * الحساب المالي للمبيعات
+     * =================================
+     *
+     * عمولة الموزع:
+     *
+     * المبيعات × نسبة العمولة
+     *
+     * حصة المدير:
+     *
+     * المبيعات - عمولة الموزع
+     *
+     * ملاحظة:
+     * هذه الحسابات خاصة بالفترة
+     * المحددة فقط.
+     *
+     * ولا علاقة لها بحساب الدين الحالي.
      */
+
     Object.values(map).forEach((row) => {
       row.distributorCommission =
         row.salesValue *
@@ -337,8 +400,10 @@ export default function ReportsPage() {
     });
 
     /*
-     * ترتيب الموزعين حسب المبيعات.
+     * ترتيب الموزعين حسب قيمة
+     * المبيعات في الفترة.
      */
+
     return Object.values(map).sort(
       (a, b) =>
         b.salesValue -
@@ -351,8 +416,11 @@ export default function ReportsPage() {
   ]);
 
   /*
-   * إجماليات الشبكة.
+   * =====================================
+   * ملخص الشبكة
+   * =====================================
    */
+
   const networkSummary = useMemo(() => {
     const salesCount =
       filteredSales.length;
@@ -367,14 +435,6 @@ export default function ReportsPage() {
         0
       );
 
-    const managerShare =
-      rows.reduce(
-        (sum, row) =>
-          sum +
-          Number(row.managerShare || 0),
-        0
-      );
-
     const distributorCommission =
       rows.reduce(
         (sum, row) =>
@@ -385,11 +445,28 @@ export default function ReportsPage() {
         0
       );
 
+    const managerShare =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(
+            row.managerShare || 0
+          ),
+        0
+      );
+
+    /*
+     * مجموع الدين الحالي الرسمي
+     * لجميع الموزعين.
+     */
+
     const currentDebt =
       rows.reduce(
         (sum, row) =>
           sum +
-          Number(row.currentDebt || 0),
+          Number(
+            row.currentDebt || 0
+          ),
         0
       );
 
@@ -397,7 +474,9 @@ export default function ReportsPage() {
       rows.reduce(
         (sum, row) =>
           sum +
-          Number(row.inventoryCount || 0),
+          Number(
+            row.inventoryCount || 0
+          ),
         0
       );
 
@@ -405,32 +484,40 @@ export default function ReportsPage() {
       rows.reduce(
         (sum, row) =>
           sum +
-          Number(row.inventoryValue || 0),
+          Number(
+            row.inventoryValue || 0
+          ),
         0
       );
 
     return {
       salesCount,
       salesValue,
-      managerShare,
       distributorCommission,
+      managerShare,
       currentDebt,
       inventoryCount,
       inventoryValue
     };
-  }, [filteredSales, rows]);
+  }, [
+    filteredSales,
+    rows
+  ]);
 
   const reportTitle = useMemo(() => {
     if (reportType === 'day') {
-      return selectedDay || 'اليوم المحدد';
+      return selectedDay ||
+        'اليوم المحدد';
     }
 
     if (reportType === 'month') {
-      return selectedMonth || 'الشهر المحدد';
+      return selectedMonth ||
+        'الشهر المحدد';
     }
 
     if (reportType === 'year') {
-      return selectedYear || 'السنة المحددة';
+      return selectedYear ||
+        'السنة المحددة';
     }
 
     return '';
@@ -461,7 +548,9 @@ export default function ReportsPage() {
         }}
       >
 
-        {/* رأس الصفحة */}
+        {/* =================================
+            رأس الصفحة
+            ================================= */}
 
         <div
           style={{
@@ -475,6 +564,7 @@ export default function ReportsPage() {
         >
 
           <div>
+
             <h1
               style={{
                 fontSize: 28,
@@ -494,9 +584,9 @@ export default function ReportsPage() {
                 color: '#64748B'
               }}
             >
-              تقرير شامل لجميع الموزعين والمبيعات
-              والدين الحالي والمخزون
+              التقرير المالي والتشغيلي لجميع الموزعين
             </div>
+
           </div>
 
           <button
@@ -519,7 +609,9 @@ export default function ReportsPage() {
 
         </div>
 
-        {/* اختيار التقرير */}
+        {/* =================================
+            اختيار الفترة
+            ================================= */}
 
         <div
           className="no-print"
@@ -558,14 +650,15 @@ export default function ReportsPage() {
               ['month', 'شهري'],
               ['year', 'سنوي']
             ].map(([type, label]) => (
+
               <button
                 key={type}
                 onClick={() =>
                   setReportType(type)
                 }
                 style={{
-                  minHeight: 54,
-                  borderRadius: 12,
+                  minHeight: 58,
+                  borderRadius: 13,
                   border:
                     reportType === type
                       ? '2px solid #0F766E'
@@ -585,6 +678,7 @@ export default function ReportsPage() {
               >
                 {label}
               </button>
+
             ))}
 
           </div>
@@ -606,7 +700,7 @@ export default function ReportsPage() {
                 }
                 style={{
                   width: '100%',
-                  minHeight: 52,
+                  minHeight: 54,
                   padding: '0 14px',
                   borderRadius: 12,
                   border:
@@ -629,7 +723,7 @@ export default function ReportsPage() {
                 }
                 style={{
                   width: '100%',
-                  minHeight: 52,
+                  minHeight: 54,
                   padding: '0 14px',
                   borderRadius: 12,
                   border:
@@ -651,7 +745,7 @@ export default function ReportsPage() {
                 }
                 style={{
                   width: '100%',
-                  minHeight: 52,
+                  minHeight: 54,
                   padding: '0 14px',
                   borderRadius: 12,
                   border:
@@ -661,6 +755,7 @@ export default function ReportsPage() {
                   background: '#F8FAFC'
                 }}
               >
+
                 {Array.from(
                   {
                     length: 7
@@ -668,17 +763,20 @@ export default function ReportsPage() {
                   (_, index) =>
                     String(
                       new Date().getFullYear() -
-                        3 +
-                        index
+                      3 +
+                      index
                     )
                 ).map((year) => (
+
                   <option
                     key={year}
                     value={year}
                   >
                     {year}
                   </option>
+
                 ))}
+
               </select>
             )}
 
@@ -686,7 +784,9 @@ export default function ReportsPage() {
 
         </div>
 
-        {/* الفترة الحالية */}
+        {/* =================================
+            اسم الفترة
+            ================================= */}
 
         <div
           style={{
@@ -694,14 +794,16 @@ export default function ReportsPage() {
             border:
               '1px solid #E2E8F0',
             borderRadius: 14,
-            padding: '14px 18px',
+            padding: '15px 18px',
             marginBottom: 24,
             fontSize: 15,
             fontWeight: 800,
             color: '#475569'
           }}
         >
+
           التقرير الحالي:
+
           <span
             style={{
               color: '#0F172A',
@@ -710,9 +812,12 @@ export default function ReportsPage() {
           >
             {reportTitle}
           </span>
+
         </div>
 
-        {/* ملخص الشبكة */}
+        {/* =================================
+            ملخص الشبكة
+            ================================= */}
 
         <div
           style={{
@@ -726,7 +831,9 @@ export default function ReportsPage() {
 
           <SummaryCard
             title="المبيعات الفعلية"
-            value={networkSummary.salesCount}
+            value={
+              networkSummary.salesCount
+            }
             suffix="كرت"
             background="#EFF6FF"
             border="#BFDBFE"
@@ -734,7 +841,7 @@ export default function ReportsPage() {
           />
 
           <SummaryCard
-            title="قيمة المبيعات"
+            title="إجمالي قيمة المبيعات"
             value={formatNumber(
               networkSummary.salesValue
             )}
@@ -742,6 +849,17 @@ export default function ReportsPage() {
             background="#F5F3FF"
             border="#DDD6FE"
             valueColor="#6D28D9"
+          />
+
+          <SummaryCard
+            title="عمولات الموزعين"
+            value={formatNumber(
+              networkSummary.distributorCommission
+            )}
+            suffix="ر.ي"
+            background="#ECFDF5"
+            border="#A7F3D0"
+            valueColor="#059669"
           />
 
           <SummaryCard
@@ -756,31 +874,21 @@ export default function ReportsPage() {
           />
 
           <SummaryCard
-            title="الدين الحالي للموزعين"
+            title="إجمالي الدين الحالي"
             value={formatNumber(
               networkSummary.currentDebt
             )}
             suffix="ر.ي"
-            background={
-              networkSummary.currentDebt > 0
-                ? '#FEF2F2'
-                : '#ECFDF5'
-            }
-            border={
-              networkSummary.currentDebt > 0
-                ? '#FCA5A5'
-                : '#A7F3D0'
-            }
-            valueColor={
-              networkSummary.currentDebt > 0
-                ? '#DC2626'
-                : '#059669'
-            }
+            background="#FEF2F2"
+            border="#FCA5A5"
+            valueColor="#DC2626"
           />
 
         </div>
 
-        {/* جدول الموزعين */}
+        {/* =================================
+            جميع الموزعين
+            ================================= */}
 
         <div
           style={{
@@ -810,33 +918,35 @@ export default function ReportsPage() {
           >
 
             <div>
+
               <h2
                 style={{
                   margin: 0,
-                  fontSize: 19,
+                  fontSize: 20,
                   fontWeight: 900,
                   color: '#0F172A'
                 }}
               >
-                جميع الموزعين
+                تقرير جميع الموزعين
               </h2>
 
               <div
                 style={{
-                  marginTop: 5,
+                  marginTop: 6,
                   fontSize: 13,
                   color: '#64748B',
                   fontWeight: 700
                 }}
               >
-                الدين المعروض هو الرصيد الرسمي
-                المسجل في حساب كل موزع
+                الدين الحالي هو الرصيد الرسمي
+                المسجل على حساب الموزع
               </div>
+
             </div>
 
             <div
               style={{
-                padding: '8px 14px',
+                padding: '9px 15px',
                 borderRadius: 20,
                 background: '#E2E8F0',
                 color: '#334155',
@@ -853,7 +963,7 @@ export default function ReportsPage() {
 
             <div
               style={{
-                padding: 50,
+                padding: 55,
                 textAlign: 'center',
                 color: '#64748B',
                 fontSize: 15,
@@ -867,7 +977,7 @@ export default function ReportsPage() {
 
             <div
               style={{
-                padding: 50,
+                padding: 55,
                 textAlign: 'center',
                 color: '#64748B',
                 fontSize: 15,
@@ -891,7 +1001,7 @@ export default function ReportsPage() {
                 <div
                   key={row.id}
                   style={{
-                    padding: '24px',
+                    padding: '28px 24px',
                     borderTop:
                       index === 0
                         ? 'none'
@@ -906,14 +1016,14 @@ export default function ReportsPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: 12,
-                      marginBottom: 18
+                      marginBottom: 20
                     }}
                   >
 
                     <div
                       style={{
-                        width: 14,
-                        height: 14,
+                        width: 15,
+                        height: 15,
                         borderRadius: '50%',
                         background: '#0F766E',
                         flexShrink: 0
@@ -922,7 +1032,7 @@ export default function ReportsPage() {
 
                     <div
                       style={{
-                        fontSize: 20,
+                        fontSize: 21,
                         fontWeight: 900,
                         color: '#0F172A'
                       }}
@@ -959,11 +1069,26 @@ export default function ReportsPage() {
                       valueColor="#059669"
                     />
 
+                    {/* عمولة الموزع */}
+
+                    <ReportBox
+                      title={`عمولة الموزع (${row.commissionRate}%)`}
+                      description="نسبة العمولة من مبيعات الفترة"
+                      value={formatNumber(
+                        row.distributorCommission
+                      )}
+                      suffix="ر.ي"
+                      background="#ECFDF5"
+                      border="#A7F3D0"
+                      titleColor="#047857"
+                      valueColor="#059669"
+                    />
+
                     {/* حصة المدير */}
 
                     <ReportBox
                       title="حصة المدير"
-                      description={`بعد عمولة الموزع ${row.commissionRate}%`}
+                      description="قيمة المبيعات بعد خصم عمولة الموزع"
                       value={formatNumber(
                         row.managerShare
                       )}
@@ -974,11 +1099,11 @@ export default function ReportsPage() {
                       valueColor="#C2410C"
                     />
 
-                    {/* الدين الرسمي */}
+                    {/* الدين الحالي */}
 
                     <ReportBox
                       title="الدين الحالي"
-                      description="الرصيد الرسمي من حساب الموزع"
+                      description="الرصيد الرسمي الحالي للموزع"
                       value={formatNumber(
                         row.currentDebt
                       )}
@@ -1066,6 +1191,12 @@ export default function ReportsPage() {
   );
 }
 
+/*
+ * =====================================
+ * بطاقة ملخص
+ * =====================================
+ */
+
 function SummaryCard({
   title,
   value,
@@ -1080,8 +1211,8 @@ function SummaryCard({
         background,
         border: `1px solid ${border}`,
         borderRadius: 18,
-        padding: '22px 24px',
-        minHeight: 125,
+        padding: '23px 24px',
+        minHeight: 130,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center'
@@ -1124,6 +1255,12 @@ function SummaryCard({
   );
 }
 
+/*
+ * =====================================
+ * بطاقة بيانات الموزع
+ * =====================================
+ */
+
 function ReportBox({
   title,
   description,
@@ -1140,9 +1277,9 @@ function ReportBox({
       style={{
         background,
         border: `1px solid ${border}`,
-        borderRadius: 16,
-        padding: '20px 22px',
-        minHeight: 145,
+        borderRadius: 17,
+        padding: '21px 22px',
+        minHeight: 150,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'center'
@@ -1151,10 +1288,10 @@ function ReportBox({
 
       <div
         style={{
-          fontSize: 14,
+          fontSize: 15,
           fontWeight: 900,
           color: titleColor,
-          marginBottom: 6
+          marginBottom: 7
         }}
       >
         {title}
@@ -1162,10 +1299,10 @@ function ReportBox({
 
       <div
         style={{
-          fontSize: 12,
+          fontSize: 12.5,
           fontWeight: 700,
           color: '#64748B',
-          marginBottom: 12,
+          marginBottom: 13,
           lineHeight: 1.5
         }}
       >
@@ -1174,9 +1311,10 @@ function ReportBox({
 
       <div
         style={{
-          fontSize: 25,
+          fontSize: 26,
           fontWeight: 900,
-          color: valueColor
+          color: valueColor,
+          lineHeight: 1.2
         }}
       >
         {value}
