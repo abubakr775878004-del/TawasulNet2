@@ -11,7 +11,6 @@ export default function DistributorsPage() {
   const [list, setList] = useState([]);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
-
   const [topUps, setTopUps] = useState({});
   const [personalCards, setPersonalCards] = useState({});
   const [debts, setDebts] = useState({});
@@ -33,17 +32,18 @@ export default function DistributorsPage() {
   };
 
   // =====================================================
-  // تحميل الموزعين
+  // تحميل قائمة الموزعين
   // =====================================================
 
   async function loadList() {
     setError('');
 
-    const { data: distributors, error: loadError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'distributor')
-      .order('created_at', { ascending: false });
+    const { data: distributors, error: loadError } =
+      await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'distributor')
+        .order('created_at', { ascending: false });
 
     if (loadError) {
       setError(
@@ -62,24 +62,30 @@ export default function DistributorsPage() {
 
     const listWithDetails = await Promise.all(
       distributors.map(async (dist) => {
-        const { count: myCardsCount } = await supabase
-          .from('cards')
-          .select('*', {
-            count: 'exact',
-            head: true
-          })
-          .eq('assigned_to', dist.id)
-          .eq('status', 'with_distributor');
+        const { count: myCardsCount } =
+          await supabase
+            .from('cards')
+            .select('*', {
+              count: 'exact',
+              head: true
+            })
+            .eq('assigned_to', dist.id)
+            .eq('status', 'with_distributor');
 
         const permanentNetDebt = Number(
-          dist.debt_balance ?? dist.debt ?? 0
+          dist.debt_balance ??
+          dist.debt ??
+          0
         );
 
         return {
           ...dist,
           debt: permanentNetDebt,
-          balance: Number(dist.balance || 0),
-          myCardsCount: myCardsCount || 0
+          balance: Number(
+            dist.balance || 0
+          ),
+          myCardsCount:
+            myCardsCount || 0
         };
       })
     );
@@ -90,7 +96,9 @@ export default function DistributorsPage() {
     const initialDebts = {};
 
     listWithDetails.forEach((d) => {
-      initialCards[d.id] = d.personal_card || '';
+      initialCards[d.id] =
+        d.personal_card || '';
+
       initialDebts[d.id] = '';
     });
 
@@ -105,7 +113,7 @@ export default function DistributorsPage() {
   }, [profile]);
 
   // =====================================================
-  // طلب تأكيد عملية مالية
+  // طلب تأكيد العملية
   // =====================================================
 
   function requestConfirmation(
@@ -114,9 +122,13 @@ export default function DistributorsPage() {
     name,
     amount
   ) {
-    const numericAmount = parseFloat(amount);
+    const numericAmount =
+      parseFloat(amount);
 
-    if (!numericAmount || numericAmount <= 0) {
+    if (
+      !numericAmount ||
+      numericAmount <= 0
+    ) {
       return;
     }
 
@@ -162,14 +174,21 @@ export default function DistributorsPage() {
   // شحن رصيد المخزون
   // =====================================================
 
-  async function executeAddBalance(id, amount) {
+  async function executeAddBalance(
+    id,
+    amount
+  ) {
     setError('');
     setBusyId(id);
 
     try {
-      const numericAmount = Number(amount);
+      const numericAmount =
+        Number(amount);
 
-      if (!numericAmount || numericAmount <= 0) {
+      if (
+        !numericAmount ||
+        numericAmount <= 0
+      ) {
         throw new Error(
           'مبلغ شحن المخزون يجب أن يكون أكبر من صفر'
         );
@@ -184,17 +203,23 @@ export default function DistributorsPage() {
         .eq('id', id)
         .single();
 
-      if (fetchErr || !targetDist) {
+      if (
+        fetchErr ||
+        !targetDist
+      ) {
         throw new Error(
           'تعذّر العثور على بيانات الموزع'
         );
       }
 
       const currentBalance =
-        Number(targetDist.balance || 0);
+        Number(
+          targetDist.balance || 0
+        );
 
       const newBalance =
-        currentBalance + numericAmount;
+        currentBalance +
+        numericAmount;
 
       const {
         error: updateError
@@ -219,7 +244,6 @@ export default function DistributorsPage() {
       alert(
         '✓ تمت إضافة رصيد المخزون للموزع بنجاح'
       );
-
     } catch (err) {
       console.error(
         'Add balance error:',
@@ -238,15 +262,18 @@ export default function DistributorsPage() {
 
   // =====================================================
   // سداد الدين
-  // يستخدم RPC الآمن
   // =====================================================
 
-  async function executePayDebt(id, amount) {
+  async function executePayDebt(
+    id,
+    amount
+  ) {
     setError('');
     setBusyId(id);
 
     try {
-      const numericAmount = Number(amount);
+      const numericAmount =
+        Number(amount);
 
       if (
         !numericAmount ||
@@ -299,7 +326,6 @@ export default function DistributorsPage() {
       alert(
         '✓ تم تسجيل السداد وخصم المبلغ من دين الموزع بنجاح'
       );
-
     } catch (err) {
       console.error(
         'Pay debt RPC error:',
@@ -320,7 +346,10 @@ export default function DistributorsPage() {
   // تحديث حالة الموزع
   // =====================================================
 
-  async function updateStatus(id, status) {
+  async function updateStatus(
+    id,
+    status
+  ) {
     setError('');
     setBusyId(id);
 
@@ -337,7 +366,6 @@ export default function DistributorsPage() {
       }
 
       await loadList();
-
     } catch (err) {
       setError(
         'تعذّر تنفيذ الإجراء: ' +
@@ -350,7 +378,13 @@ export default function DistributorsPage() {
   }
 
   // =====================================================
-  // حذف الموزع - حذف آمن
+  // حذف الموزع
+  //
+  // الرصيد لا يمنع الحذف.
+  // الدين هو المانع.
+  //
+  // الحماية النهائية موجودة في PostgreSQL:
+  // prevent_distributor_deletion_if_debt()
   // =====================================================
 
   async function deleteDistributor(
@@ -361,95 +395,24 @@ export default function DistributorsPage() {
       return;
     }
 
+    const confirmed =
+      window.confirm(
+        `سيتم حذف حساب "${name}" نهائيًا من التطبيق.\n\n` +
+        `وجود رصيد لدى الموزع لا يمنع الحذف.\n` +
+        `الكروت غير المباعة الموجودة معه ستعود تلقائيًا إلى المخزون.\n` +
+        `المبيعات والسجلات المالية التاريخية لن يتم حذفها من الصفحة.\n\n` +
+        `إذا كان على الموزع دين قائم، ستمنع قاعدة البيانات عملية الحذف تلقائيًا.\n\n` +
+        `هل تريد المتابعة؟`
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
     setError('');
     setBusyId(id);
 
     try {
-      // -------------------------------------------------
-      // نقرأ الدين الحالي من profiles قبل الحذف.
-      //
-      // هذا ليس بديلًا عن Trigger قاعدة البيانات.
-      // الـTrigger يبقى الحماية النهائية.
-      // -------------------------------------------------
-
-      const {
-        data: distributor,
-        error: fetchError
-      } = await supabase
-        .from('profiles')
-        .select(
-          'id, full_name, role, debt_balance, balance'
-        )
-        .eq('id', id)
-        .eq('role', 'distributor')
-        .single();
-
-      if (fetchError || !distributor) {
-        throw new Error(
-          'تعذّر العثور على حساب الموزع'
-        );
-      }
-
-      const currentDebt = Number(
-        distributor.debt_balance || 0
-      );
-
-      const currentBalance = Number(
-        distributor.balance || 0
-      );
-
-      // -------------------------------------------------
-      // حماية إضافية:
-      // لا نحذف حسابًا يظهر عليه دين في profiles.
-      //
-      // حتى لو كان ledger = 0، لا نخاطر بحذف الحساب
-      // قبل معالجة عدم التزامن بين debt_balance والledger.
-      // -------------------------------------------------
-
-      if (currentDebt > 0) {
-        throw new Error(
-          `لا يمكن حذف حساب "${name}" حاليًا لأن عليه دينًا مسجلًا بقيمة ${formatNum(
-            currentDebt
-          )} ريال. يجب تسوية الدين أولًا.`
-        );
-      }
-
-      // -------------------------------------------------
-      // الرصيد المتبقي ليس دينًا، لكن لا نسمح بحذف
-      // حساب يحتوي على رصيد مخزون بدون تنبيه واضح.
-      // -------------------------------------------------
-
-      if (currentBalance > 0) {
-        throw new Error(
-          `لا يمكن حذف حساب "${name}" حاليًا لأن لديه رصيد مخزون متبقيًا بقيمة ${formatNum(
-            currentBalance
-          )} ريال. يجب تصفية الرصيد أولًا.`
-        );
-      }
-
-      const confirmed = window.confirm(
-        `حذف حساب "${name}" نهائيًا؟\n\n` +
-        `لن تقوم الصفحة بحذف المبيعات أو المدفوعات التاريخية يدويًا.\n` +
-        `ستتعامل قاعدة البيانات مع الكروت غير المباعة المرتبطة بالموزع حسب قواعد الحماية الحالية.\n\n` +
-        `هل تريد المتابعة؟`
-      );
-
-      if (!confirmed) {
-        return;
-      }
-
-      // -------------------------------------------------
-      // الحذف من profiles.
-      //
-      // حماية قاعدة البيانات الحالية:
-      // 1. RLS: profiles_admin_delete
-      // 2. check_debt_before_delete
-      // 3. reset_orphaned_cards
-      // 4. audit_profiles_deletion
-      //
-      // لذلك لا نحذف أي جداول مالية من الواجهة.
-      // -------------------------------------------------
-
       const {
         error: deleteError
       } = await supabase
@@ -462,7 +425,6 @@ export default function DistributorsPage() {
         throw deleteError;
       }
 
-      // إزالة البيانات المحلية الخاصة بالحساب
       setTopUps((prev) => {
         const next = { ...prev };
         delete next[id];
@@ -490,7 +452,6 @@ export default function DistributorsPage() {
       alert(
         `✓ تم حذف حساب الموزع "${name}" بنجاح`
       );
-
     } catch (err) {
       console.error(
         'Delete distributor error:',
@@ -498,8 +459,9 @@ export default function DistributorsPage() {
       );
 
       setError(
-        err?.message ||
-        'تعذّر حذف حساب الموزع'
+        'تعذّر حذف حساب الموزع: ' +
+        (err?.message ||
+          'خطأ غير معروف')
       );
     } finally {
       setBusyId(null);
@@ -521,7 +483,8 @@ export default function DistributorsPage() {
         .from('profiles')
         .update({
           personal_card:
-            personalCards[id] || null
+            personalCards[id] ||
+            null
         })
         .eq('id', id);
 
@@ -530,7 +493,6 @@ export default function DistributorsPage() {
       }
 
       await loadList();
-
     } catch (err) {
       setError(
         'تعذّر حفظ الكرت الشخصي: ' +
@@ -562,13 +524,15 @@ export default function DistributorsPage() {
     return null;
   }
 
-  const pending = list.filter(
-    (d) => d.status === 'pending'
-  );
+  const pending =
+    list.filter(
+      (d) => d.status === 'pending'
+    );
 
-  const others = list.filter(
-    (d) => d.status !== 'pending'
-  );
+  const others =
+    list.filter(
+      (d) => d.status !== 'pending'
+    );
 
   return (
     <div className="app">
@@ -585,7 +549,9 @@ export default function DistributorsPage() {
 
         <p
           className="greet"
-          style={{ marginBottom: 20 }}
+          style={{
+            marginBottom: 20
+          }}
         >
           إدارة طلبات التسجيل والحسابات الحالية
           والمستحقات المباشرة
@@ -600,7 +566,8 @@ export default function DistributorsPage() {
               padding: '12px',
               borderRadius: '10px',
               marginBottom: '16px',
-              border: '1px solid #fca5a5',
+              border:
+                '1px solid #fca5a5',
               fontSize: '13px',
               fontWeight: 'bold',
               lineHeight: 1.7
@@ -616,7 +583,9 @@ export default function DistributorsPage() {
 
         <div
           className="panel"
-          style={{ marginBottom: 24 }}
+          style={{
+            marginBottom: 24
+          }}
         >
 
           <div className="panel-head">
@@ -653,7 +622,10 @@ export default function DistributorsPage() {
               <div className="req-user">
 
                 <div className="ini">
-                  {d.full_name?.slice(0, 2)}
+                  {d.full_name?.slice(
+                    0,
+                    2
+                  )}
                 </div>
 
                 <div>
@@ -735,7 +707,9 @@ export default function DistributorsPage() {
 
           <div
             className="panel-head"
-            style={{ marginBottom: 16 }}
+            style={{
+              marginBottom: 16
+            }}
           >
 
             <h3>
@@ -763,7 +737,8 @@ export default function DistributorsPage() {
           <div
             style={{
               display: 'flex',
-              flexDirection: 'column',
+              flexDirection:
+                'column',
               gap: 16
             }}
           >
@@ -773,16 +748,22 @@ export default function DistributorsPage() {
               const currentNetDebt =
                 Number(d.debt) || 0;
 
+              // =================================================
+              // مهم:
+              // الرصيد لا يمنع حذف الحساب.
+              // الدين فقط هو الذي يمنع زر الحذف في الواجهة.
+              // =================================================
+
               const canDelete =
-                currentNetDebt <= 0 &&
-                Number(d.balance || 0) <= 0;
+                currentNetDebt <= 0;
 
               return (
 
                 <div
                   key={d.id}
                   style={{
-                    background: '#ffffff',
+                    background:
+                      '#ffffff',
                     border:
                       '1px solid #e2e8f0',
                     borderRadius: 16,
@@ -790,7 +771,8 @@ export default function DistributorsPage() {
                     boxShadow:
                       '0 4px 12px rgba(0, 0, 0, 0.03)',
                     display: 'flex',
-                    flexDirection: 'column',
+                    flexDirection:
+                      'column',
                     gap: 14
                   }}
                 >
@@ -882,15 +864,13 @@ export default function DistributorsPage() {
                               : 'not-allowed'
                         }}
                         disabled={
-                          busyId === d.id ||
+                          busyId ===
+                            d.id ||
                           !canDelete
                         }
                         title={
                           !canDelete
-                            ? currentNetDebt >
-                              0
-                              ? 'لا يمكن حذف موزع عليه دين'
-                              : 'لا يمكن حذف موزع لديه رصيد مخزون'
+                            ? 'لا يمكن حذف موزع عليه دين'
                             : 'حذف حساب الموزع'
                         }
                         onClick={() =>
@@ -1006,8 +986,7 @@ export default function DistributorsPage() {
                           fontWeight: 700
                         }}
                       >
-                        المبلغ الصافي المستحق
-                        للمدير
+                        المبلغ الصافي المستحق للمدير
                       </div>
 
                       <div
@@ -1068,8 +1047,7 @@ export default function DistributorsPage() {
                         gap: 4
                       }}
                     >
-                      📦 شحن كروت ومخزون
-                      للموزع:
+                      📦 شحن كروت ومخزون للموزع:
                     </div>
 
                     <div
@@ -1123,14 +1101,11 @@ export default function DistributorsPage() {
                         style={{
                           background:
                             '#2563eb',
-                          color:
-                            '#fff',
-                          border:
-                            'none',
+                          color: '#fff',
+                          border: 'none',
                           padding:
                             '9px 14px',
-                          borderRadius:
-                            10,
+                          borderRadius: 10,
                           fontSize: 12,
                           fontWeight: 700,
                           cursor:
@@ -1187,8 +1162,7 @@ export default function DistributorsPage() {
                         gap: 4
                       }}
                     >
-                      💵 تسجيل سداد نقدي
-                      مقبوض (خصم دين):
+                      💵 تسجيل سداد نقدي مقبوض (خصم دين):
                     </div>
 
                     <div
@@ -1255,8 +1229,7 @@ export default function DistributorsPage() {
                             '#059669',
                           color:
                             '#fff',
-                          border:
-                            'none',
+                          border: 'none',
                           padding:
                             '9px 14px',
                           borderRadius:
@@ -1491,7 +1464,8 @@ export default function DistributorsPage() {
                     'balance'
                       ? '#2563eb'
                       : '#059669',
-                  color: '#ffffff',
+                  color:
+                    '#ffffff',
                   border: 'none',
                   padding: '12px',
                   borderRadius: 12,
