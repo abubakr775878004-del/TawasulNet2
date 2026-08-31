@@ -159,16 +159,14 @@ export default function ReportsPage() {
 
       /*
        * ==========================================================
-       * السدادات التاريخية لكل موزع
+       * إجمالي السدادات لكل موزع
        * ==========================================================
        */
 
       const paymentsMap = {};
 
       (payments || []).forEach((payment) => {
-        if (!payment.distributor_id) {
-          return;
-        }
+        if (!payment.distributor_id) return;
 
         paymentsMap[payment.distributor_id] =
           (paymentsMap[payment.distributor_id] || 0) +
@@ -177,7 +175,7 @@ export default function ReportsPage() {
 
       /*
        * ==========================================================
-       * إنشاء سجل لجميع الموزعين
+       * إنشاء بيانات جميع الموزعين
        * ==========================================================
        */
 
@@ -205,7 +203,7 @@ export default function ReportsPage() {
 
       /*
        * ==========================================================
-       * تحليل المبيعات الفعلية
+       * حساب المبيعات الفعلية
        * ==========================================================
        */
 
@@ -224,8 +222,9 @@ export default function ReportsPage() {
           .toLowerCase();
 
         /*
-         * لا توجد عملية بيع إلا إذا كانت حالة الكرت sold
-         * ويوجد لها sold_at.
+         * لا تعتبر العملية بيعًا إلا إذا:
+         * 1- حالة الكرت sold
+         * 2- يوجد sold_at
          */
 
         if (status !== 'sold' || !card.sold_at) {
@@ -237,10 +236,10 @@ export default function ReportsPage() {
         );
 
         /*
-         * manager_price هي القيمة المالية المسجلة للمدير.
+         * استخدام manager_price المحفوظ.
          *
-         * للسجلات القديمة التي لا تحتوي عليها:
-         * نستخدم 90% من سعر الباقة.
+         * للسجلات القديمة:
+         * 90% من سعر الباقة.
          */
 
         let managerPrice = Number(card.manager_price);
@@ -253,7 +252,7 @@ export default function ReportsPage() {
         }
 
         /*
-         * حماية من قيمة أكبر من سعر البيع.
+         * حماية من قيمة أكبر من سعر الكرت.
          */
 
         if (
@@ -264,25 +263,18 @@ export default function ReportsPage() {
         }
 
         /*
-         * ========================================================
-         * إجمالي المبيعات التاريخية
-         * ========================================================
-         *
-         * يستخدم فقط لحساب الدين الحالي.
+         * إجمالي حصة المدير التاريخية.
+         * تستخدم لحساب الدين الحالي.
          */
 
         distributorMap[distributorId].totalManagerSales +=
           managerPrice;
 
         /*
-         * ========================================================
-         * مبيعات الفترة المحددة
-         * ========================================================
+         * تطبيق الفلتر الزمني على المبيعات فقط.
          */
 
-        if (
-          !isSaleInSelectedPeriod(card.sold_at)
-        ) {
+        if (!isSaleInSelectedPeriod(card.sold_at)) {
           return;
         }
 
@@ -304,11 +296,7 @@ export default function ReportsPage() {
        * حساب الدين الحالي
        * ==========================================================
        *
-       * الدين لا يعتمد على الفلتر.
-       *
-       * الدين =
-       * إجمالي حصة المدير من كل المبيعات
-       * - إجمالي السدادات
+       * الدين الحالي مستقل عن الفلتر.
        */
 
       Object.values(distributorMap).forEach((distributor) => {
@@ -334,9 +322,8 @@ export default function ReportsPage() {
       });
 
       /*
-       * ترتيب الموزعين:
-       * الأعلى مبيعًا أولًا.
-       * ثم الدين الحالي عند تساوي المبيعات.
+       * الأعلى مبيعًا يظهر أولًا.
+       * عند التساوي يظهر صاحب الدين الأعلى أولًا.
        */
 
       const result = Object.values(distributorMap).sort(
@@ -391,7 +378,7 @@ export default function ReportsPage() {
       <div
         className="main"
         style={{
-          paddingBottom: '40px',
+          paddingBottom: '50px',
         }}
       >
         {/* =====================================================
@@ -402,19 +389,20 @@ export default function ReportsPage() {
           style={{
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             flexWrap: 'wrap',
-            gap: '14px',
-            marginBottom: '20px',
+            gap: '18px',
+            marginBottom: '28px',
           }}
         >
           <div>
             <h1
               style={{
-                fontSize: '24px',
+                fontSize: '30px',
+                lineHeight: 1.2,
                 fontWeight: 900,
                 color: '#0F172A',
-                margin: '0 0 5px',
+                margin: '0 0 8px',
               }}
             >
               تقارير المدير
@@ -422,13 +410,14 @@ export default function ReportsPage() {
 
             <p
               style={{
-                fontSize: '13px',
+                fontSize: '15px',
                 color: '#64748B',
                 fontWeight: 600,
                 margin: 0,
+                lineHeight: 1.7,
               }}
             >
-              المبيعات الفعلية وحصة المدير والدين الحالي لجميع الموزعين
+              ملخص واضح للمبيعات الفعلية وحصة المدير والدين الحالي لجميع الموزعين
             </p>
           </div>
 
@@ -436,14 +425,16 @@ export default function ReportsPage() {
             onClick={() => window.print()}
             className="no-print"
             style={{
-              padding: '10px 17px',
-              borderRadius: '11px',
+              padding: '13px 21px',
+              minHeight: '48px',
+              borderRadius: '13px',
               border: '1px solid #CBD5E1',
               background: '#FFFFFF',
               color: '#0F172A',
-              fontWeight: 800,
-              fontSize: '13px',
+              fontWeight: 900,
+              fontSize: '14px',
               cursor: 'pointer',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
             }}
           >
             🖨️ طباعة التقرير
@@ -451,7 +442,7 @@ export default function ReportsPage() {
         </div>
 
         {/* =====================================================
-            الفترات
+            اختيار الفترة
         ====================================================== */}
 
         <div
@@ -459,9 +450,9 @@ export default function ReportsPage() {
           style={{
             display: 'grid',
             gridTemplateColumns:
-              'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '10px',
-            marginBottom: '22px',
+              'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: '13px',
+            marginBottom: '30px',
           }}
         >
           {['all', 'day', 'month', 'year'].map(
@@ -473,8 +464,9 @@ export default function ReportsPage() {
                   key={item}
                   onClick={() => setFilter(item)}
                   style={{
-                    padding: '12px 14px',
-                    borderRadius: '13px',
+                    padding: '17px 18px',
+                    minHeight: '78px',
+                    borderRadius: '15px',
                     border: active
                       ? '2px solid #0F766E'
                       : '1px solid #E2E8F0',
@@ -483,16 +475,19 @@ export default function ReportsPage() {
                       : '#FFFFFF',
                     cursor: 'pointer',
                     textAlign: 'right',
+                    boxShadow: active
+                      ? '0 5px 15px rgba(15,118,110,0.10)'
+                      : '0 2px 5px rgba(0,0,0,0.03)',
                   }}
                 >
                   <div
                     style={{
-                      fontSize: '14px',
+                      fontSize: '16px',
                       fontWeight: 900,
                       color: active
                         ? '#0F766E'
                         : '#0F172A',
-                      marginBottom: '3px',
+                      marginBottom: '6px',
                     }}
                   >
                     {filterConfig[item].label}
@@ -500,9 +495,10 @@ export default function ReportsPage() {
 
                   <div
                     style={{
-                      fontSize: '10.5px',
+                      fontSize: '12px',
                       color: '#64748B',
                       fontWeight: 700,
+                      lineHeight: 1.5,
                     }}
                   >
                     {filterConfig[item].sub}
@@ -514,32 +510,40 @@ export default function ReportsPage() {
         </div>
 
         {/* =====================================================
-            ملخص التقرير
+            بطاقات ملخص الشبكة
         ====================================================== */}
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns:
-              'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: '14px',
-            marginBottom: '22px',
+              'repeat(auto-fit, minmax(260px, 1fr))',
+            gap: '18px',
+            marginBottom: '30px',
           }}
         >
+          {/* عدد المبيعات */}
+
           <div
             style={{
               background: '#FFFFFF',
               border: '1px solid #E2E8F0',
-              borderRadius: '15px',
-              padding: '18px',
+              borderRadius: '18px',
+              padding: '24px',
+              minHeight: '145px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              boxShadow:
+                '0 3px 8px rgba(15,23,42,0.04)',
             }}
           >
             <div
               style={{
-                fontSize: '12px',
+                fontSize: '14px',
                 color: '#64748B',
-                fontWeight: 700,
-                marginBottom: '7px',
+                fontWeight: 800,
+                marginBottom: '12px',
               }}
             >
               عدد المبيعات
@@ -547,7 +551,8 @@ export default function ReportsPage() {
 
             <div
               style={{
-                fontSize: '24px',
+                fontSize: '32px',
+                lineHeight: 1,
                 fontWeight: 900,
                 color: '#0F766E',
               }}
@@ -556,8 +561,10 @@ export default function ReportsPage() {
 
               <span
                 style={{
-                  fontSize: '13px',
-                  marginRight: '5px',
+                  fontSize: '15px',
+                  marginRight: '7px',
+                  fontWeight: 800,
+                  color: '#475569',
                 }}
               >
                 كرت
@@ -565,20 +572,28 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* إجمالي المبيعات */}
+
           <div
             style={{
               background: '#FFFFFF',
               border: '1px solid #E2E8F0',
-              borderRadius: '15px',
-              padding: '18px',
+              borderRadius: '18px',
+              padding: '24px',
+              minHeight: '145px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              boxShadow:
+                '0 3px 8px rgba(15,23,42,0.04)',
             }}
           >
             <div
               style={{
-                fontSize: '12px',
+                fontSize: '14px',
                 color: '#64748B',
-                fontWeight: 700,
-                marginBottom: '7px',
+                fontWeight: 800,
+                marginBottom: '12px',
               }}
             >
               إجمالي قيمة المبيعات
@@ -586,7 +601,8 @@ export default function ReportsPage() {
 
             <div
               style={{
-                fontSize: '24px',
+                fontSize: '32px',
+                lineHeight: 1,
                 fontWeight: 900,
                 color: '#0F172A',
               }}
@@ -595,8 +611,10 @@ export default function ReportsPage() {
 
               <span
                 style={{
-                  fontSize: '13px',
-                  marginRight: '5px',
+                  fontSize: '15px',
+                  marginRight: '7px',
+                  fontWeight: 800,
+                  color: '#475569',
                 }}
               >
                 ريال
@@ -604,20 +622,28 @@ export default function ReportsPage() {
             </div>
           </div>
 
+          {/* حصة المدير */}
+
           <div
             style={{
               background: '#F0FDF4',
               border: '1px solid #BBF7D0',
-              borderRadius: '15px',
-              padding: '18px',
+              borderRadius: '18px',
+              padding: '24px',
+              minHeight: '145px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              boxShadow:
+                '0 3px 8px rgba(16,185,129,0.06)',
             }}
           >
             <div
               style={{
-                fontSize: '12px',
+                fontSize: '14px',
                 color: '#166534',
-                fontWeight: 700,
-                marginBottom: '7px',
+                fontWeight: 800,
+                marginBottom: '12px',
               }}
             >
               حصة المدير
@@ -625,7 +651,8 @@ export default function ReportsPage() {
 
             <div
               style={{
-                fontSize: '24px',
+                fontSize: '32px',
+                lineHeight: 1,
                 fontWeight: 900,
                 color: '#059669',
               }}
@@ -634,8 +661,10 @@ export default function ReportsPage() {
 
               <span
                 style={{
-                  fontSize: '13px',
-                  marginRight: '5px',
+                  fontSize: '15px',
+                  marginRight: '7px',
+                  fontWeight: 800,
+                  color: '#166534',
                 }}
               >
                 ريال
@@ -645,71 +674,79 @@ export default function ReportsPage() {
         </div>
 
         {/* =====================================================
-            تقرير الموزعين
+            عنوان قائمة الموزعين
+        ====================================================== */}
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '10px',
+            marginBottom: '15px',
+          }}
+        >
+          <div>
+            <h2
+              style={{
+                fontSize: '20px',
+                fontWeight: 900,
+                color: '#0F172A',
+                margin: 0,
+              }}
+            >
+              أداء جميع الموزعين
+            </h2>
+
+            <div
+              style={{
+                fontSize: '13px',
+                color: '#64748B',
+                fontWeight: 700,
+                marginTop: '5px',
+              }}
+            >
+              المبيعات المعروضة حسب الفترة: {currentFilter.label}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: '#F1F5F9',
+              color: '#475569',
+              borderRadius: '20px',
+              padding: '7px 14px',
+              fontSize: '13px',
+              fontWeight: 900,
+            }}
+          >
+            {rows.length} موزع
+          </div>
+        </div>
+
+        {/* =====================================================
+            قائمة الموزعين
         ====================================================== */}
 
         <div
           style={{
             background: '#FFFFFF',
             border: '1px solid #E2E8F0',
-            borderRadius: '18px',
+            borderRadius: '20px',
             overflow: 'hidden',
+            boxShadow:
+              '0 4px 12px rgba(15,23,42,0.04)',
           }}
         >
-          <div
-            style={{
-              padding: '17px 20px',
-              background: '#F8FAFC',
-              borderBottom: '1px solid #E2E8F0',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '8px',
-            }}
-          >
-            <div>
-              <h2
-                style={{
-                  fontSize: '15px',
-                  fontWeight: 900,
-                  color: '#0F172A',
-                  margin: 0,
-                }}
-              >
-                أداء الموزعين
-              </h2>
-
-              <div
-                style={{
-                  fontSize: '11px',
-                  color: '#64748B',
-                  fontWeight: 700,
-                  marginTop: '4px',
-                }}
-              >
-                الفترة: {currentFilter.label}
-              </div>
-            </div>
-
-            <span
-              style={{
-                fontSize: '12px',
-                fontWeight: 800,
-                color: '#475569',
-              }}
-            >
-              {rows.length} موزع
-            </span>
-          </div>
-
           {busy && (
             <div
               style={{
-                padding: '35px 20px',
+                padding: '55px 20px',
                 textAlign: 'center',
                 color: '#64748B',
-                fontWeight: 700,
+                fontWeight: 800,
+                fontSize: '15px',
               }}
             >
               جاري تحميل التقرير...
@@ -719,10 +756,11 @@ export default function ReportsPage() {
           {!busy && rows.length === 0 && (
             <div
               style={{
-                padding: '35px 20px',
+                padding: '55px 20px',
                 textAlign: 'center',
                 color: '#64748B',
-                fontWeight: 700,
+                fontWeight: 800,
+                fontSize: '15px',
               }}
             >
               لا توجد بيانات للموزعين.
@@ -735,70 +773,107 @@ export default function ReportsPage() {
               <div
                 key={row.id}
                 style={{
-                  padding: '17px 20px',
+                  padding: '25px 28px',
                   borderTop:
                     index > 0
-                      ? '1px solid #F1F5F9'
+                      ? '1px solid #E2E8F0'
                       : 'none',
                 }}
               >
-                {/* اسم الموزع */}
+                {/* =================================================
+                    اسم الموزع
+                ================================================== */}
 
                 <div
                   style={{
                     display: 'flex',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    gap: '9px',
-                    marginBottom: '12px',
+                    gap: '12px',
+                    marginBottom: '18px',
                   }}
                 >
-                  <span
+                  <div
                     style={{
-                      width: '9px',
-                      height: '9px',
-                      borderRadius: '50%',
-                      background:
-                        row.salesCount > 0
-                          ? '#0F766E'
-                          : '#CBD5E1',
-                    }}
-                  />
-
-                  <span
-                    style={{
-                      fontSize: '15px',
-                      fontWeight: 900,
-                      color: '#0F172A',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
                     }}
                   >
-                    {row.name}
-                  </span>
+                    <span
+                      style={{
+                        width: '11px',
+                        height: '11px',
+                        borderRadius: '50%',
+                        background:
+                          row.salesCount > 0
+                            ? '#0F766E'
+                            : '#CBD5E1',
+                        flexShrink: 0,
+                      }}
+                    />
+
+                    <span
+                      style={{
+                        fontSize: '19px',
+                        fontWeight: 900,
+                        color: '#0F172A',
+                      }}
+                    >
+                      {row.name}
+                    </span>
+                  </div>
+
+                  {index < 3 &&
+                    row.salesCount > 0 && (
+                      <span
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 900,
+                          color: '#0F766E',
+                          background: '#F0FDFA',
+                          border: '1px solid #99F6E4',
+                          borderRadius: '20px',
+                          padding: '6px 11px',
+                        }}
+                      >
+                        #{index + 1}
+                      </span>
+                    )}
                 </div>
+
+                {/* =================================================
+                    بيانات الموزع
+                ================================================== */}
 
                 <div
                   style={{
                     display: 'grid',
                     gridTemplateColumns:
-                      'repeat(auto-fit, minmax(160px, 1fr))',
-                    gap: '10px',
+                      'repeat(auto-fit, minmax(220px, 1fr))',
+                    gap: '14px',
                   }}
                 >
                   {/* عدد المبيعات */}
 
                   <div
                     style={{
+                      minHeight: '105px',
                       background: '#F8FAFC',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '11px',
-                      padding: '11px 14px',
+                      borderRadius: '14px',
+                      padding: '17px 19px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: '10.5px',
+                        fontSize: '12px',
                         color: '#64748B',
-                        fontWeight: 700,
-                        marginBottom: '5px',
+                        fontWeight: 800,
+                        marginBottom: '9px',
                       }}
                     >
                       عدد المبيعات
@@ -806,12 +881,22 @@ export default function ReportsPage() {
 
                     <div
                       style={{
-                        fontSize: '16px',
+                        fontSize: '23px',
                         fontWeight: 900,
                         color: '#0F766E',
                       }}
                     >
-                      {formatNum(row.salesCount)} كرت
+                      {formatNum(row.salesCount)}
+
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          marginRight: '6px',
+                          color: '#475569',
+                        }}
+                      >
+                        كرت
+                      </span>
                     </div>
                   </div>
 
@@ -819,18 +904,22 @@ export default function ReportsPage() {
 
                   <div
                     style={{
+                      minHeight: '105px',
                       background: '#FFFFFF',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '11px',
-                      padding: '11px 14px',
+                      borderRadius: '14px',
+                      padding: '17px 19px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: '10.5px',
+                        fontSize: '12px',
                         color: '#64748B',
-                        fontWeight: 700,
-                        marginBottom: '5px',
+                        fontWeight: 800,
+                        marginBottom: '9px',
                       }}
                     >
                       قيمة المبيعات
@@ -838,12 +927,22 @@ export default function ReportsPage() {
 
                     <div
                       style={{
-                        fontSize: '16px',
+                        fontSize: '23px',
                         fontWeight: 900,
                         color: '#0F172A',
                       }}
                     >
-                      {formatNum(row.grossSales)} ريال
+                      {formatNum(row.grossSales)}
+
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          marginRight: '6px',
+                          color: '#475569',
+                        }}
+                      >
+                        ريال
+                      </span>
                     </div>
                   </div>
 
@@ -851,18 +950,22 @@ export default function ReportsPage() {
 
                   <div
                     style={{
+                      minHeight: '105px',
                       background: '#F0FDF4',
                       border: '1px solid #BBF7D0',
-                      borderRadius: '11px',
-                      padding: '11px 14px',
+                      borderRadius: '14px',
+                      padding: '17px 19px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: '10.5px',
+                        fontSize: '12px',
                         color: '#166534',
-                        fontWeight: 700,
-                        marginBottom: '5px',
+                        fontWeight: 800,
+                        marginBottom: '9px',
                       }}
                     >
                       حصة المدير
@@ -870,12 +973,22 @@ export default function ReportsPage() {
 
                     <div
                       style={{
-                        fontSize: '16px',
+                        fontSize: '23px',
                         fontWeight: 900,
                         color: '#059669',
                       }}
                     >
-                      {formatNum(row.managerSales)} ريال
+                      {formatNum(row.managerSales)}
+
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          marginRight: '6px',
+                          color: '#166534',
+                        }}
+                      >
+                        ريال
+                      </span>
                     </div>
                   </div>
 
@@ -883,6 +996,7 @@ export default function ReportsPage() {
 
                   <div
                     style={{
+                      minHeight: '105px',
                       background:
                         row.remainingDebt > 0
                           ? '#FEF2F2'
@@ -891,19 +1005,22 @@ export default function ReportsPage() {
                         row.remainingDebt > 0
                           ? '1px solid #FCA5A5'
                           : '1px solid #BBF7D0',
-                      borderRadius: '11px',
-                      padding: '11px 14px',
+                      borderRadius: '14px',
+                      padding: '17px 19px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
                     }}
                   >
                     <div
                       style={{
-                        fontSize: '10.5px',
+                        fontSize: '12px',
                         color:
                           row.remainingDebt > 0
                             ? '#991B1B'
                             : '#166534',
-                        fontWeight: 800,
-                        marginBottom: '5px',
+                        fontWeight: 900,
+                        marginBottom: '9px',
                       }}
                     >
                       الدين الحالي
@@ -911,7 +1028,7 @@ export default function ReportsPage() {
 
                     <div
                       style={{
-                        fontSize: '16px',
+                        fontSize: '23px',
                         fontWeight: 900,
                         color:
                           row.remainingDebt > 0
@@ -919,7 +1036,20 @@ export default function ReportsPage() {
                             : '#059669',
                       }}
                     >
-                      {formatNum(row.remainingDebt)} ريال
+                      {formatNum(row.remainingDebt)}
+
+                      <span
+                        style={{
+                          fontSize: '13px',
+                          marginRight: '6px',
+                          color:
+                            row.remainingDebt > 0
+                              ? '#991B1B'
+                              : '#166534',
+                        }}
+                      >
+                        ريال
+                      </span>
                     </div>
                   </div>
                 </div>
