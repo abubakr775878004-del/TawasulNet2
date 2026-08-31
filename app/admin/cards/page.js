@@ -35,10 +35,12 @@ export default function CardsPage() {
   const [addingCard, setAddingCard] = useState(false);
   const [addingBulk, setAddingBulk] = useState(false);
 
+  // تحميل الباقات والكروت
   async function loadAll() {
     setLoadingData(true);
 
     try {
+      // حذف الكروت المباعة التي مر عليها أكثر من 24 ساعة
       const oneDayAgo = new Date();
       oneDayAgo.setHours(oneDayAgo.getHours() - 24);
 
@@ -48,19 +50,22 @@ export default function CardsPage() {
         .eq('status', 'sold')
         .lt('sold_at', oneDayAgo.toISOString());
 
-      const [{ data: pkgs, error: packagesError }, { data: crds, error: cardsError }] =
-        await Promise.all([
-          supabase
-            .from('packages')
-            .select('*')
-            .order('created_at', { ascending: true }),
+      const [
+        { data: pkgs, error: packagesError },
+        { data: crds, error: cardsError },
+      ] = await Promise.all([
+        supabase
+          .from('packages')
+          .select('*')
+          .order('created_at', { ascending: true }),
 
-          supabase
-            .from('cards')
-            .select('*, packages(name)')
-            .order('created_at', { ascending: false })
-            .limit(200),
-        ]);
+        // الحفاظ على نفس النظام الأصلي: آخر 200 كرت
+        supabase
+          .from('cards')
+          .select('*, packages(name)')
+          .order('created_at', { ascending: false })
+          .limit(200),
+      ]);
 
       if (packagesError) {
         console.error('Packages loading error:', packagesError);
@@ -85,26 +90,37 @@ export default function CardsPage() {
     }
   }, [profile]);
 
+  // التصفية حسب الباقة والتاريخ معًا
   const filteredCards = useMemo(() => {
     return cards.filter((c) => {
-      const cardDate = c.created_at ? c.created_at.split('T')[0] : '';
+      const cardDate = c.created_at
+        ? c.created_at.split('T')[0]
+        : '';
 
       const matchDate =
         !previewDate || cardDate === previewDate;
 
       const matchPackage =
-        !previewPackageId || c.package_id === previewPackageId;
+        !previewPackageId ||
+        c.package_id === previewPackageId;
 
       return matchDate && matchPackage;
     });
   }, [cards, previewDate, previewPackageId]);
 
+  // إحصائيات الكروت الظاهرة
   const statistics = useMemo(() => {
     return {
       total: cards.length,
-      available: cards.filter((c) => c.status === 'available').length,
-      withDistributor: cards.filter((c) => c.status === 'with_distributor').length,
-      sold: cards.filter((c) => c.status === 'sold').length,
+      available: cards.filter(
+        (c) => c.status === 'available'
+      ).length,
+      withDistributor: cards.filter(
+        (c) => c.status === 'with_distributor'
+      ).length,
+      sold: cards.filter(
+        (c) => c.status === 'sold'
+      ).length,
     };
   }, [cards]);
 
@@ -115,7 +131,9 @@ export default function CardsPage() {
     ) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filteredCards.map((c) => c.id)));
+      setSelected(
+        new Set(filteredCards.map((c) => c.id))
+      );
     }
   }
 
@@ -131,6 +149,7 @@ export default function CardsPage() {
     setSelected(next);
   }
 
+  // إضافة كرت واحد
   async function addCard(e) {
     e.preventDefault();
 
@@ -153,11 +172,13 @@ export default function CardsPage() {
 
       if (insertError) {
         console.error(insertError);
-        setError(
-          insertError.code === '23505'
-            ? 'هذا الكرت موجود مسبقًا'
-            : 'تعذّرت إضافة الكرت'
-        );
+
+        if (insertError.code === '23505') {
+          setError('هذا الكرت موجود مسبقًا');
+        } else {
+          setError('تعذّرت إضافة الكرت');
+        }
+
         return;
       }
 
@@ -168,6 +189,7 @@ export default function CardsPage() {
     }
   }
 
+  // إضافة مجموعة كروت
   async function addBulkCards(e) {
     e.preventDefault();
 
@@ -175,7 +197,7 @@ export default function CardsPage() {
     setBulkDone('');
 
     if (!bulkPackageId) {
-      setBulkError('اختر الباقة أولاً');
+      setBulkError('اختر الباقة أولًا');
       return;
     }
 
@@ -193,14 +215,19 @@ export default function CardsPage() {
     ];
 
     if (codes.length === 0) {
-      setBulkError('لم يتم العثور على أرقام كروت صحيحة');
+      setBulkError(
+        'لم يتم العثور على أرقام كروت صحيحة'
+      );
       return;
     }
 
     setAddingBulk(true);
 
     try {
-      const { error: insertError, data } = await supabase
+      const {
+        error: insertError,
+        data,
+      } = await supabase
         .from('cards')
         .insert(
           codes.map((c) => ({
@@ -213,16 +240,23 @@ export default function CardsPage() {
       if (insertError) {
         console.error(insertError);
 
-        setBulkError(
-          insertError.code === '23505'
-            ? 'يوجد كرت مكرر في القائمة أو موجود مسبقًا'
-            : 'حدث خطأ أثناء إضافة الكروت'
-        );
+        if (insertError.code === '23505') {
+          setBulkError(
+            'يوجد كرت مكرر أو كرت موجود مسبقًا'
+          );
+        } else {
+          setBulkError(
+            'حدث خطأ أثناء إضافة الكروت'
+          );
+        }
 
         return;
       }
 
-      setBulkDone(`تمت إضافة ${data?.length || codes.length} كرت بنجاح`);
+      setBulkDone(
+        `تمت إضافة ${data?.length || codes.length} كرت بنجاح`
+      );
+
       setBulkText('');
 
       await loadAll();
@@ -231,21 +265,30 @@ export default function CardsPage() {
     }
   }
 
+  // حذف كرت واحد
   async function deleteSingleCard(id) {
-    if (!confirm('هل أنت متأكد من حذف هذا الكرت نهائيًا؟')) {
+    if (
+      !confirm(
+        'هل أنت متأكد من حذف هذا الكرت نهائيًا؟'
+      )
+    ) {
       return;
     }
 
     setDeletingId(id);
 
     try {
-      const { error: deleteError } = await supabase
-        .from('cards')
-        .delete()
-        .eq('id', id);
+      const { error: deleteError } =
+        await supabase
+          .from('cards')
+          .delete()
+          .eq('id', id);
 
       if (deleteError) {
-        alert('فشل حذف الكرت: ' + deleteError.message);
+        alert(
+          'فشل حذف الكرت: ' +
+            deleteError.message
+        );
         return;
       }
 
@@ -261,6 +304,7 @@ export default function CardsPage() {
     }
   }
 
+  // حذف الكروت المحددة
   async function deleteSelected() {
     if (selected.size === 0) {
       return;
@@ -276,17 +320,22 @@ export default function CardsPage() {
 
     const ids = Array.from(selected);
 
-    const { error: deleteError } = await supabase
-      .from('cards')
-      .delete()
-      .in('id', ids);
+    const { error: deleteError } =
+      await supabase
+        .from('cards')
+        .delete()
+        .in('id', ids);
 
     if (deleteError) {
-      alert('فشل الحذف الجماعي: ' + deleteError.message);
+      alert(
+        'فشل الحذف الجماعي: ' +
+          deleteError.message
+      );
       return;
     }
 
     setSelected(new Set());
+
     await loadAll();
   }
 
@@ -301,18 +350,16 @@ export default function CardsPage() {
       return '—';
     }
 
-    return new Date(dateString).toLocaleDateString('ar-YE', {
+    return new Date(
+      dateString
+    ).toLocaleDateString('ar-YE', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
     });
   }
 
-  if (loading) {
-    return null;
-  }
-
-  if (!profile) {
+  if (loading || !profile) {
     return null;
   }
 
@@ -321,8 +368,8 @@ export default function CardsPage() {
       <style jsx>{`
         .cards-page {
           min-height: 100vh;
-          background: var(--bg, #f4f7f6);
-          color: var(--text, #111827);
+          background: #f4f7f6;
+          color: #111827;
           direction: rtl;
         }
 
@@ -332,14 +379,13 @@ export default function CardsPage() {
         }
 
         .page-header {
-          margin-bottom: 24px;
+          margin-bottom: 22px;
         }
 
         .page-header h1 {
           margin: 0 0 7px;
           font-size: 27px;
-          font-weight: 800;
-          letter-spacing: -0.5px;
+          font-weight: 900;
         }
 
         .page-header p {
@@ -348,6 +394,7 @@ export default function CardsPage() {
           font-size: 14px;
         }
 
+        /* الإحصائيات */
         .stats-grid {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
@@ -356,18 +403,17 @@ export default function CardsPage() {
         }
 
         .stat-card {
-          background: white;
+          background: #fff;
           border: 1px solid #e5e7eb;
           border-radius: 16px;
           padding: 17px;
           box-shadow: 0 5px 18px rgba(15, 23, 42, 0.04);
-          min-width: 0;
         }
 
         .stat-top {
           display: flex;
-          align-items: center;
           justify-content: space-between;
+          align-items: center;
           gap: 10px;
         }
 
@@ -381,7 +427,6 @@ export default function CardsPage() {
           margin-top: 8px;
           font-size: 25px;
           font-weight: 900;
-          line-height: 1;
         }
 
         .stat-icon {
@@ -390,13 +435,14 @@ export default function CardsPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          border-radius: 11px;
           background: #f1f5f9;
+          border-radius: 11px;
           font-size: 17px;
         }
 
+        /* البطاقات العامة */
         .panel {
-          background: white;
+          background: #fff;
           border: 1px solid #e5e7eb;
           border-radius: 17px;
           padding: 20px;
@@ -415,7 +461,7 @@ export default function CardsPage() {
         .panel-head h3 {
           margin: 0;
           font-size: 16px;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         .muted {
@@ -423,6 +469,7 @@ export default function CardsPage() {
           font-size: 12px;
         }
 
+        /* النماذج */
         .form-grid {
           display: grid;
           grid-template-columns: minmax(0, 1fr) 190px auto;
@@ -437,9 +484,9 @@ export default function CardsPage() {
         .field label {
           display: block;
           margin-bottom: 7px;
-          font-size: 12px;
-          font-weight: 700;
           color: #475569;
+          font-size: 12px;
+          font-weight: 800;
         }
 
         .input,
@@ -452,8 +499,8 @@ export default function CardsPage() {
           color: #111827;
           border-radius: 11px;
           outline: none;
-          transition: 0.2s ease;
           font-size: 14px;
+          transition: 0.2s;
         }
 
         .input,
@@ -477,7 +524,12 @@ export default function CardsPage() {
         }
 
         .mono {
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
             monospace;
           direction: ltr;
           text-align: left;
@@ -490,10 +542,10 @@ export default function CardsPage() {
           padding: 0 22px;
           background: #2563eb;
           color: white;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
-          transition: 0.2s ease;
           white-space: nowrap;
+          transition: 0.2s;
         }
 
         .btn-primary:hover {
@@ -505,23 +557,13 @@ export default function CardsPage() {
           cursor: not-allowed;
         }
 
-        .bulk-actions {
-          display: flex;
-          gap: 12px;
-          align-items: end;
-          flex-wrap: wrap;
-        }
-
-        .bulk-package {
-          width: 190px;
-        }
-
+        /* الرسائل */
         .note {
           border-radius: 11px;
           padding: 11px 13px;
           margin-bottom: 14px;
           font-size: 13px;
-          font-weight: 700;
+          font-weight: 800;
         }
 
         .error-note {
@@ -536,6 +578,7 @@ export default function CardsPage() {
           color: #047857;
         }
 
+        /* الفلاتر */
         .filter-box {
           background: #f8fafc;
           border: 1px solid #e2e8f0;
@@ -553,9 +596,9 @@ export default function CardsPage() {
         .filter-control label {
           display: block;
           margin-bottom: 6px;
-          font-size: 11px;
-          font-weight: 800;
           color: #64748b;
+          font-size: 11px;
+          font-weight: 900;
         }
 
         .filter-control select,
@@ -576,10 +619,11 @@ export default function CardsPage() {
           border-radius: 9px;
           background: #e2e8f0;
           color: #334155;
-          font-weight: 700;
+          font-weight: 800;
           cursor: pointer;
         }
 
+        /* الجدول */
         .table-wrap {
           width: 100%;
           overflow-x: auto;
@@ -596,7 +640,7 @@ export default function CardsPage() {
           background: #f8fafc;
           color: #64748b;
           font-size: 11px;
-          font-weight: 800;
+          font-weight: 900;
           padding: 13px 10px;
           border-bottom: 1px solid #e2e8f0;
           text-align: right;
@@ -615,12 +659,20 @@ export default function CardsPage() {
         }
 
         .code-cell {
-          font-weight: 700;
+          font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            monospace;
+          font-weight: 800;
           direction: ltr;
           text-align: right;
           white-space: nowrap;
         }
 
+        /* الحالات */
         .status-pill {
           display: inline-flex;
           align-items: center;
@@ -628,7 +680,7 @@ export default function CardsPage() {
           border-radius: 999px;
           padding: 5px 9px;
           font-size: 11px;
-          font-weight: 800;
+          font-weight: 900;
           white-space: nowrap;
         }
 
@@ -647,6 +699,7 @@ export default function CardsPage() {
           color: #b91c1c;
         }
 
+        /* الحذف */
         .delete-btn {
           height: 34px;
           padding: 0 12px;
@@ -655,7 +708,7 @@ export default function CardsPage() {
           background: #fee2e2;
           color: #dc2626;
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
           white-space: nowrap;
         }
@@ -670,21 +723,21 @@ export default function CardsPage() {
         }
 
         .bulk-delete {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
           margin-top: 15px;
           padding: 13px;
           border-radius: 12px;
           background: #fff1f2;
           border: 1px solid #fecdd3;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          gap: 12px;
         }
 
         .bulk-delete-text {
           color: #9f1239;
           font-size: 13px;
-          font-weight: 800;
+          font-weight: 900;
         }
 
         .bulk-delete-btn {
@@ -694,11 +747,12 @@ export default function CardsPage() {
           color: white;
           padding: 9px 15px;
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
           white-space: nowrap;
         }
 
+        /* نسخة الهاتف */
         .mobile-list {
           display: none;
         }
@@ -708,24 +762,29 @@ export default function CardsPage() {
           border-radius: 14px;
           padding: 14px;
           margin-bottom: 10px;
-          background: white;
+          background: #fff;
         }
 
         .mobile-card-top {
           display: flex;
-          align-items: center;
           justify-content: space-between;
+          align-items: center;
           gap: 10px;
           margin-bottom: 12px;
         }
 
         .mobile-code {
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          font-family:
+            ui-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
             monospace;
           direction: ltr;
           text-align: left;
           font-size: 14px;
-          font-weight: 800;
+          font-weight: 900;
           overflow-wrap: anywhere;
         }
 
@@ -752,7 +811,7 @@ export default function CardsPage() {
 
         .mobile-info-value {
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 900;
           overflow-wrap: anywhere;
         }
 
@@ -763,22 +822,15 @@ export default function CardsPage() {
           border-radius: 9px;
           background: #fee2e2;
           color: #dc2626;
-          font-weight: 800;
+          font-weight: 900;
           cursor: pointer;
         }
 
         .empty-state {
+          padding: 40px 15px;
           text-align: center;
-          padding: 38px 15px;
           color: #94a3b8;
           font-size: 13px;
-        }
-
-        .loading-state {
-          text-align: center;
-          padding: 20px;
-          color: #64748b;
-          font-size: 12px;
         }
 
         @media (max-width: 1100px) {
@@ -794,10 +846,6 @@ export default function CardsPage() {
         @media (max-width: 768px) {
           .main {
             padding: 15px;
-          }
-
-          .page-header {
-            margin-bottom: 17px;
           }
 
           .page-header h1 {
@@ -842,7 +890,6 @@ export default function CardsPage() {
           .panel-head {
             align-items: flex-start;
             flex-direction: column;
-            margin-bottom: 13px;
           }
 
           .panel-head h3 {
@@ -858,16 +905,6 @@ export default function CardsPage() {
             width: 100%;
           }
 
-          .bulk-actions {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-          }
-
-          .bulk-package {
-            width: 100%;
-          }
-
           .filters {
             grid-template-columns: 1fr;
           }
@@ -876,10 +913,12 @@ export default function CardsPage() {
             width: 100%;
           }
 
+          /* إخفاء الجدول على الهاتف */
           .table-wrap {
             display: none;
           }
 
+          /* إظهار الكروت بشكل مناسب للهاتف */
           .mobile-list {
             display: block;
           }
@@ -891,10 +930,6 @@ export default function CardsPage() {
 
           .bulk-delete-btn {
             width: 100%;
-          }
-
-          .muted {
-            font-size: 11px;
           }
         }
 
@@ -925,76 +960,101 @@ export default function CardsPage() {
         }
       `}</style>
 
+      {/* القائمة الجانبية الحالية للمشروع */}
       <Sidebar
         role="admin"
         active="/admin/cards"
         name={profile.full_name}
       />
 
-      <div className="main">
-        <div className="page-header">
+      <main className="main">
+        <header className="page-header">
           <h1>المخزون والكروت</h1>
+
           <p>
-            إدارة كروت الإنترنت وإضافة الكروت ومراجعة حالتها وحذف الكروت
-            غير الصحيحة.
+            إدارة الكروت وإضافة الكروت ومراجعة المخزون
+            وحذف الكروت غير الصحيحة.
           </p>
-        </div>
+        </header>
 
         {/* الإحصائيات */}
-        <div className="stats-grid">
+        <section className="stats-grid">
           <div className="stat-card">
             <div className="stat-top">
               <div>
-                <div className="stat-title">إجمالي الكروت</div>
-                <div className="stat-value">{statistics.total}</div>
+                <div className="stat-title">
+                  إجمالي الكروت
+                </div>
+                <div className="stat-value">
+                  {statistics.total}
+                </div>
               </div>
-              <div className="stat-icon">🎫</div>
+
+              <div className="stat-icon">
+                🎫
+              </div>
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-top">
               <div>
-                <div className="stat-title">متاح</div>
+                <div className="stat-title">
+                  متاح
+                </div>
                 <div className="stat-value">
                   {statistics.available}
                 </div>
               </div>
-              <div className="stat-icon">🟢</div>
+
+              <div className="stat-icon">
+                🟢
+              </div>
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-top">
               <div>
-                <div className="stat-title">مع موزع</div>
+                <div className="stat-title">
+                  مع موزع
+                </div>
                 <div className="stat-value">
                   {statistics.withDistributor}
                 </div>
               </div>
-              <div className="stat-icon">🟠</div>
+
+              <div className="stat-icon">
+                🟠
+              </div>
             </div>
           </div>
 
           <div className="stat-card">
             <div className="stat-top">
               <div>
-                <div className="stat-title">مباع</div>
+                <div className="stat-title">
+                  مباع
+                </div>
                 <div className="stat-value">
                   {statistics.sold}
                 </div>
               </div>
-              <div className="stat-icon">🔴</div>
+
+              <div className="stat-icon">
+                🔴
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* إضافة فردية */}
-        <div className="panel">
+        {/* إضافة كرت واحد */}
+        <section className="panel">
           <div className="panel-head">
             <h3>إضافة كرت يدويًا</h3>
+
             <span className="muted">
-              أضف كرتًا واحدًا إلى المخزون
+              إضافة كرت واحد إلى المخزون
             </span>
           </div>
 
@@ -1008,12 +1068,16 @@ export default function CardsPage() {
             <div className="form-grid">
               <div className="field">
                 <label>رقم الكرت</label>
+
                 <input
                   className="input mono"
                   value={code}
                   onChange={(e) =>
                     setCode(
-                      e.target.value.replace(/\D/g, '')
+                      e.target.value.replace(
+                        /\D/g,
+                        ''
+                      )
                     )
                   }
                   placeholder="72419038221501"
@@ -1023,17 +1087,25 @@ export default function CardsPage() {
 
               <div className="field">
                 <label>الباقة</label>
+
                 <select
                   className="select"
                   value={packageId}
                   onChange={(e) =>
-                    setPackageId(e.target.value)
+                    setPackageId(
+                      e.target.value
+                    )
                   }
                 >
-                  <option value="">اختر باقة</option>
+                  <option value="">
+                    اختر باقة
+                  </option>
 
                   {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option
+                      key={p.id}
+                      value={p.id}
+                    >
                       {p.name}
                     </option>
                   ))}
@@ -1045,18 +1117,21 @@ export default function CardsPage() {
                 type="submit"
                 disabled={addingCard}
               >
-                {addingCard ? 'جارٍ الإضافة...' : 'إضافة الكرت'}
+                {addingCard
+                  ? 'جارٍ الإضافة...'
+                  : 'إضافة الكرت'}
               </button>
             </div>
           </form>
-        </div>
+        </section>
 
         {/* إضافة جماعية */}
-        <div className="panel">
+        <section className="panel">
           <div className="panel-head">
             <h3>إضافة مجموعة كروت</h3>
+
             <span className="muted">
-              رقم كرت واحد في كل سطر
+              ضع رقم كرت واحد في كل سطر
             </span>
           </div>
 
@@ -1085,23 +1160,34 @@ export default function CardsPage() {
             />
 
             <div
-              className="bulk-actions"
-              style={{ marginTop: 10 }}
+              className="form-grid"
+              style={{
+                marginTop: 10,
+                gridTemplateColumns:
+                  '190px auto',
+              }}
             >
-              <div className="field bulk-package">
+              <div className="field">
                 <label>الباقة</label>
 
                 <select
                   className="select"
                   value={bulkPackageId}
                   onChange={(e) =>
-                    setBulkPackageId(e.target.value)
+                    setBulkPackageId(
+                      e.target.value
+                    )
                   }
                 >
-                  <option value="">اختر باقة</option>
+                  <option value="">
+                    اختر باقة
+                  </option>
 
                   {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option
+                      key={p.id}
+                      value={p.id}
+                    >
                       {p.name}
                     </option>
                   ))}
@@ -1119,14 +1205,15 @@ export default function CardsPage() {
               </button>
             </div>
           </form>
-        </div>
+        </section>
 
-        {/* الفلاتر */}
-        <div className="panel">
+        {/* التصفية */}
+        <section className="panel">
           <div className="panel-head">
             <h3>البحث والتصفية</h3>
+
             <span className="muted">
-              تصفية حسب الباقة والتاريخ
+              حسب الباقة والتاريخ
             </span>
           </div>
 
@@ -1138,14 +1225,21 @@ export default function CardsPage() {
                 <select
                   value={previewPackageId}
                   onChange={(e) => {
-                    setPreviewPackageId(e.target.value);
+                    setPreviewPackageId(
+                      e.target.value
+                    );
                     setSelected(new Set());
                   }}
                 >
-                  <option value="">كل الباقات</option>
+                  <option value="">
+                    كل الباقات
+                  </option>
 
                   {packages.map((p) => (
-                    <option key={p.id} value={p.id}>
+                    <option
+                      key={p.id}
+                      value={p.id}
+                    >
                       {p.name}
                     </option>
                   ))}
@@ -1159,7 +1253,9 @@ export default function CardsPage() {
                   type="date"
                   value={previewDate}
                   onChange={(e) => {
-                    setPreviewDate(e.target.value);
+                    setPreviewDate(
+                      e.target.value
+                    );
                     setSelected(new Set());
                   }}
                 />
@@ -1174,10 +1270,10 @@ export default function CardsPage() {
               </button>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* قائمة الكروت */}
-        <div className="panel">
+        <section className="panel">
           <div className="panel-head">
             <h3>
               الكروت ({filteredCards.length})
@@ -1185,18 +1281,18 @@ export default function CardsPage() {
 
             {loadingData && (
               <span className="muted">
-                جارٍ تحديث البيانات...
+                جارٍ تحديث الكروت...
               </span>
             )}
           </div>
 
-          {/* نسخة الكمبيوتر */}
+          {/* الكمبيوتر */}
           <div className="table-wrap">
             {filteredCards.length > 0 ? (
               <table>
                 <thead>
                   <tr>
-                    <th style={{ width: 40 }}>
+                    <th>
                       <input
                         type="checkbox"
                         checked={
@@ -1210,7 +1306,7 @@ export default function CardsPage() {
 
                     <th>الكود</th>
                     <th>الباقة</th>
-                    <th>تاريخ الإضافة</th>
+                    <th>التاريخ</th>
                     <th>الحالة</th>
                     <th>الإجراءات</th>
                   </tr>
@@ -1220,7 +1316,8 @@ export default function CardsPage() {
                   {filteredCards.map((c) => {
                     const status =
                       statusLabel[c.status] || [
-                        c.status || 'غير معروف',
+                        c.status ||
+                          'غير معروف',
                         'amber',
                       ];
 
@@ -1229,7 +1326,9 @@ export default function CardsPage() {
                         <td>
                           <input
                             type="checkbox"
-                            checked={selected.has(c.id)}
+                            checked={selected.has(
+                              c.id
+                            )}
                             onChange={() =>
                               toggle(c.id)
                             }
@@ -1241,11 +1340,14 @@ export default function CardsPage() {
                         </td>
 
                         <td>
-                          {c.packages?.name || '—'}
+                          {c.packages?.name ||
+                            '—'}
                         </td>
 
                         <td>
-                          {formatDate(c.created_at)}
+                          {formatDate(
+                            c.created_at
+                          )}
                         </td>
 
                         <td>
@@ -1260,13 +1362,17 @@ export default function CardsPage() {
                           <button
                             className="delete-btn"
                             onClick={() =>
-                              deleteSingleCard(c.id)
+                              deleteSingleCard(
+                                c.id
+                              )
                             }
                             disabled={
-                              deletingId === c.id
+                              deletingId ===
+                              c.id
                             }
                           >
-                            {deletingId === c.id
+                            {deletingId ===
+                            c.id
                               ? 'جارٍ الحذف...'
                               : '🗑 حذف'}
                           </button>
@@ -1278,12 +1384,13 @@ export default function CardsPage() {
               </table>
             ) : (
               <div className="empty-state">
-                لا توجد كروت مطابقة للتصفية الحالية.
+                لا توجد كروت مطابقة
+                للتصفية الحالية.
               </div>
             )}
           </div>
 
-          {/* نسخة الهاتف */}
+          {/* الهاتف */}
           <div className="mobile-list">
             {filteredCards.length > 0 ? (
               <>
@@ -1293,7 +1400,6 @@ export default function CardsPage() {
                     alignItems: 'center',
                     gap: 8,
                     marginBottom: 12,
-                    padding: '4px 2px',
                   }}
                 >
                   <input
@@ -1309,18 +1415,19 @@ export default function CardsPage() {
                   <span
                     style={{
                       fontSize: 12,
-                      fontWeight: 700,
+                      fontWeight: 800,
                       color: '#64748b',
                     }}
                   >
-                    تحديد كل النتائج
+                    تحديد كل الكروت الظاهرة
                   </span>
                 </div>
 
                 {filteredCards.map((c) => {
                   const status =
                     statusLabel[c.status] || [
-                      c.status || 'غير معروف',
+                      c.status ||
+                        'غير معروف',
                       'amber',
                     ];
 
@@ -1333,14 +1440,17 @@ export default function CardsPage() {
                         <div
                           style={{
                             display: 'flex',
-                            alignItems: 'center',
+                            alignItems:
+                              'center',
                             gap: 9,
                             minWidth: 0,
                           }}
                         >
                           <input
                             type="checkbox"
-                            checked={selected.has(c.id)}
+                            checked={selected.has(
+                              c.id
+                            )}
                             onChange={() =>
                               toggle(c.id)
                             }
@@ -1365,7 +1475,8 @@ export default function CardsPage() {
                           </span>
 
                           <span className="mobile-info-value">
-                            {c.packages?.name || '—'}
+                            {c.packages?.name ||
+                              '—'}
                           </span>
                         </div>
 
@@ -1375,7 +1486,9 @@ export default function CardsPage() {
                           </span>
 
                           <span className="mobile-info-value">
-                            {formatDate(c.created_at)}
+                            {formatDate(
+                              c.created_at
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1383,7 +1496,9 @@ export default function CardsPage() {
                       <button
                         className="mobile-delete"
                         onClick={() =>
-                          deleteSingleCard(c.id)
+                          deleteSingleCard(
+                            c.id
+                          )
                         }
                         disabled={
                           deletingId === c.id
@@ -1399,7 +1514,8 @@ export default function CardsPage() {
               </>
             ) : (
               <div className="empty-state">
-                لا توجد كروت مطابقة للتصفية الحالية.
+                لا توجد كروت مطابقة
+                للتصفية الحالية.
               </div>
             )}
           </div>
@@ -1408,7 +1524,8 @@ export default function CardsPage() {
           {selected.size > 0 && (
             <div className="bulk-delete">
               <div className="bulk-delete-text">
-                تم تحديد {selected.size} كرت من النتائج الحالية
+                تم تحديد {selected.size} كرت
+                من النتائج الحالية
               </div>
 
               <button
@@ -1419,8 +1536,8 @@ export default function CardsPage() {
               </button>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }
