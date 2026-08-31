@@ -57,6 +57,8 @@ export default function DistributorsPage() {
       .from('profiles')
       .select('*')
       .eq('role', 'distributor')
+      // الحسابات المؤرشفة/المحذوفة لا تظهر في القائمة
+      .neq('status', 'deleted')
       .order('created_at', {
         ascending: false
       });
@@ -452,16 +454,18 @@ export default function DistributorsPage() {
   }
 
   // =====================================================
-  // تنفيذ حذف الموزع
+  // أرشفة / إزالة الموزع من القائمة
   //
-  // الرصيد لا يمنع الحذف.
-  // الحماية النهائية من الدين موجودة في PostgreSQL.
-  // Trigger:
-  // prevent_distributor_deletion_if_debt()
+  // مهم:
+  // لا نحذف profiles فعليًا.
   //
-  // Trigger:
-  // reset_orphaned_cards()
-  // يعيد الكروت with_distributor إلى available.
+  // السبب:
+  // الكروت المباعة ما زالت مرتبطة بالموزع
+  // عبر cards.assigned_to.
+  //
+  // لذلك نغيّر الحالة إلى deleted.
+  // الحساب يختفي من القائمة، بينما تبقى
+  // الكروت والمبيعات والسجلات المالية محفوظة.
   // =====================================================
 
   async function executeDeleteDistributor() {
@@ -481,16 +485,56 @@ export default function DistributorsPage() {
     setBusyId(distributorId);
 
     try {
+      // منع أرشفة موزع عليه دين قائم
       const {
-        error: deleteError
+        data: currentDistributor,
+        error: fetchError
       } = await supabase
         .from('profiles')
-        .delete()
+        .select('id, role, status, debt_balance')
+        .eq('id', distributorId)
+        .eq('role', 'distributor')
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      if (!currentDistributor) {
+        throw new Error(
+          'تعذّر العثور على حساب الموزع'
+        );
+      }
+
+      const currentDebt =
+        Number(
+          currentDistributor.debt_balance || 0
+        );
+
+      if (currentDebt > 0) {
+        throw new Error(
+          'لا يمكن حذف حساب الموزع لأن عليه دينًا قائمًا بقيمة ' +
+          formatNum(currentDebt) +
+          ' ريال'
+        );
+      }
+
+      // =================================================
+      // الأرشفة بدل الحذف الفعلي
+      // =================================================
+
+      const {
+        error: archiveError
+      } = await supabase
+        .from('profiles')
+        .update({
+          status: 'deleted'
+        })
         .eq('id', distributorId)
         .eq('role', 'distributor');
 
-      if (deleteError) {
-        throw deleteError;
+      if (archiveError) {
+        throw archiveError;
       }
 
       // تنظيف البيانات المحلية
@@ -522,15 +566,14 @@ export default function DistributorsPage() {
       closeDeleteModal();
 
       alert(
-        `✓ تم حذف حساب الموزع "${distributorName}" بنجاح`
+        `✓ تم حذف حساب الموزع "${distributorName}" من قائمة الموزعين بنجاح\n\nتم الحفاظ على الكروت المباعة والسجل المالي.`
       );
     } catch (err) {
       console.error(
-        'Delete distributor error:',
+        'Archive distributor error:',
         err
       );
 
-      // إبقاء نافذة الحذف مغلقة عند الخطأ
       setDeleteModal({
         isOpen: false,
         distributorId: null,
@@ -596,8 +639,7 @@ export default function DistributorsPage() {
     opacity: 1,
     padding: '7px 13px',
     borderRadius: 9,
-    border:
-      '1px solid #fca5a5',
+    border: '1px solid #fca5a5',
     fontWeight: 800,
     fontSize: 12,
     cursor: 'pointer'
@@ -651,8 +693,7 @@ export default function DistributorsPage() {
               padding: '12px 14px',
               borderRadius: '10px',
               marginBottom: '16px',
-              border:
-                '1px solid #fca5a5',
+              border: '1px solid #fca5a5',
               fontSize: '13px',
               fontWeight: 'bold',
               lineHeight: 1.7
@@ -832,17 +873,6 @@ export default function DistributorsPage() {
               const currentNetDebt =
                 Number(d.debt) || 0;
 
-              /*
-               * ملاحظة:
-               * الرصيد لا يمنع الحذف.
-               *
-               * الدين الظاهر في الصفحة يستخدم
-               * لتوضيح الحالة فقط.
-               *
-               * الحماية الحقيقية والنهائية موجودة
-               * داخل PostgreSQL trigger.
-               */
-
               const canDelete =
                 currentNetDebt <= 0;
 
@@ -960,7 +990,7 @@ export default function DistributorsPage() {
                         title={
                           !canDelete
                             ? 'لا يمكن حذف موزع عليه دين'
-                            : 'حذف حساب الموزع'
+                            : 'إزالة حساب الموزع من القائمة'
                         }
                         onClick={() =>
                           requestDeleteDistributor(
@@ -1416,7 +1446,9 @@ export default function DistributorsPage() {
                   </div>
 
                 </div>
+
               );
+
             })}
 
           </div>
@@ -1603,10 +1635,11 @@ export default function DistributorsPage() {
           </div>
 
         </div>
+
       )}
 
       {/* =====================================================
-          نافذة تأكيد حذف الموزع - تصميم احترافي
+          نافذة تأكيد حذف الموزع
       ===================================================== */}
 
       {deleteModal.isOpen && (
@@ -1614,7 +1647,8 @@ export default function DistributorsPage() {
         <div
           onClick={(e) => {
             if (
-              e.target === e.currentTarget
+              e.target ===
+              e.currentTarget
             ) {
               closeDeleteModal();
             }
@@ -1726,8 +1760,9 @@ export default function DistributorsPage() {
                   lineHeight: 1.7
                 }}
               >
-                يرجى التأكد قبل تنفيذ عملية الحذف
-                النهائية.
+                سيتم إزالة الحساب من قائمة
+                الموزعين مع الحفاظ على
+                سجله السابق.
               </p>
 
               {/* اسم الموزع */}
@@ -1754,7 +1789,9 @@ export default function DistributorsPage() {
                     fontSize: 18
                   }}
                 >
-                  {deleteModal.distributorName}
+                  {
+                    deleteModal.distributorName
+                  }
                 </div>
 
                 <div
@@ -1906,8 +1943,8 @@ export default function DistributorsPage() {
                   </strong>{' '}
                   كرت غير مباع مع هذا الموزع.
                   <br />
-                  ستعود هذه الكروت تلقائيًا إلى المخزون
-                  عند حذف الحساب.
+                  ستبقى الكروت المباعة
+                  وسجلاتها محفوظة.
                 </div>
               )}
 
@@ -1928,28 +1965,51 @@ export default function DistributorsPage() {
                   lineHeight: 1.8
                 }}
               >
+
                 <strong>
                   ⚠️ تنبيه مهم
                 </strong>
+
                 <br />
-                حذف الحساب عملية نهائية.
+
+                سيتم إزالة الحساب من قائمة
+                الموزعين الحالية.
+
                 <br />
+
                 <span
                   style={{
-                    color: '#166534'
+                    color:
+                      '#166534'
                   }}
                 >
-                  ✓ وجود رصيد لا يمنع الحذف.
+                  ✓ الكروت المباعة لن تُحذف.
                 </span>
+
                 <br />
+
                 <span
                   style={{
-                    color: '#991b1b'
+                    color:
+                      '#166534'
                   }}
                 >
-                  ✓ وجود دين قائم يمنع الحذف تلقائيًا
-                  من قاعدة البيانات.
+                  ✓ سجلات المبيعات والسداد
+                  ستبقى محفوظة.
                 </span>
+
+                <br />
+
+                <span
+                  style={{
+                    color:
+                      '#991b1b'
+                  }}
+                >
+                  ✓ وجود دين قائم يمنع
+                  عملية الحذف.
+                </span>
+
               </div>
 
               {/* أزرار الحذف والإلغاء */}
@@ -2030,6 +2090,7 @@ export default function DistributorsPage() {
           </div>
 
         </div>
+
       )}
 
     </div>
