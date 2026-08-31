@@ -7,351 +7,194 @@ import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
+function formatNumber(value) {
+  return Math.round(Number(value) || 0).toLocaleString('en-US');
+}
+
+function getDateKey(dateString) {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(dateString) {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) return '';
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+
+  return `${year}-${month}`;
+}
+
+function getYearKey(dateString) {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+
+  if (isNaN(date.getTime())) return '';
+
+  return String(date.getFullYear());
+}
+
+function getCurrentDate() {
+  const today = new Date();
+
+  return [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function getCurrentMonth() {
+  const today = new Date();
+
+  return [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0')
+  ].join('-');
+}
+
+function getCurrentYear() {
+  return String(new Date().getFullYear());
+}
+
 export default function ReportsPage() {
   const { profile, loading } = useProfile('admin');
 
-  const [rows, setRows] = useState([]);
-  const [filter, setFilter] = useState('all');
-  const [busy, setBusy] = useState(true);
+  const [distributors, setDistributors] = useState([]);
+  const [sales, setSales] = useState([]);
+  const [inventory, setInventory] = useState([]);
 
-  const [networkStats, setNetworkStats] = useState({
-    salesCount: 0,
-    grossSales: 0,
-    managerSales: 0,
-  });
+  const [dataLoading, setDataLoading] = useState(true);
 
-  const formatNum = (num) => {
-    const value = Number(num) || 0;
+  const [reportType, setReportType] = useState('month');
 
-    return Math.round(value).toLocaleString('en-US', {
-      maximumFractionDigits: 0,
-    });
-  };
+  const [selectedDay, setSelectedDay] =
+    useState(getCurrentDate());
 
-  const formatDate = (date) => {
-    if (!date) return '';
+  const [selectedMonth, setSelectedMonth] =
+    useState(getCurrentMonth());
 
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-
-    return `${year}-${month}-${day}`;
-  };
-
-  const filterConfig = useMemo(() => {
-    const now = new Date();
-
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate()
-    );
-
-    const startOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      1
-    );
-
-    const startOfYear = new Date(
-      now.getFullYear(),
-      0,
-      1
-    );
-
-    return {
-      all: {
-        label: 'الكل',
-        sub: 'من بداية النظام حتى الآن',
-        start: null,
-        end: now,
-      },
-
-      day: {
-        label: 'اليومي',
-        sub: `${formatDate(startOfToday)} إلى ${formatDate(now)}`,
-        start: startOfToday,
-        end: now,
-      },
-
-      month: {
-        label: 'الشهري',
-        sub: `${formatDate(startOfMonth)} إلى ${formatDate(now)}`,
-        start: startOfMonth,
-        end: now,
-      },
-
-      year: {
-        label: 'السنوي',
-        sub: `${formatDate(startOfYear)} إلى ${formatDate(now)}`,
-        start: startOfYear,
-        end: now,
-      },
-    };
-  }, []);
-
-  const isSaleInSelectedPeriod = (soldAt) => {
-    if (filter === 'all') {
-      return true;
-    }
-
-    if (!soldAt) {
-      return false;
-    }
-
-    const saleDate = new Date(soldAt);
-
-    if (Number.isNaN(saleDate.getTime())) {
-      return false;
-    }
-
-    const config = filterConfig[filter];
-
-    return (
-      saleDate >= config.start &&
-      saleDate <= config.end
-    );
-  };
+  const [selectedYear, setSelectedYear] =
+    useState(getCurrentYear());
 
   async function loadReport() {
-    setBusy(true);
+    if (!profile) return;
+
+    setDataLoading(true);
 
     try {
-      const [
-        { data: distributors, error: distributorsError },
-        { data: cards, error: cardsError },
-        { data: payments, error: paymentsError },
-      ] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('id, full_name, role')
-          .eq('role', 'distributor'),
-
-        supabase
-          .from('cards')
-          .select(`
-            id,
-            assigned_to,
-            status,
-            sold_at,
-            manager_price,
-            packages (
-              price
-            )
-          `),
-
-        supabase
-          .from('payments')
-          .select('distributor_id, amount'),
-      ]);
-
-      if (distributorsError) {
-        throw distributorsError;
-      }
-
-      if (cardsError) {
-        throw cardsError;
-      }
-
-      if (paymentsError) {
-        throw paymentsError;
-      }
-
       /*
-       * ==========================================================
-       * إجمالي السدادات لكل موزع
-       * ==========================================================
-       */
-
-      const paymentsMap = {};
-
-      (payments || []).forEach((payment) => {
-        if (!payment.distributor_id) return;
-
-        paymentsMap[payment.distributor_id] =
-          (paymentsMap[payment.distributor_id] || 0) +
-          Number(payment.amount || 0);
-      });
-
-      /*
-       * ==========================================================
-       * إنشاء بيانات جميع الموزعين
-       * ==========================================================
-       */
-
-      const distributorMap = {};
-
-      (distributors || []).forEach((distributor) => {
-        distributorMap[distributor.id] = {
-          id: distributor.id,
-          name: distributor.full_name || 'موزع',
-
-          salesCount: 0,
-          grossSales: 0,
-          managerSales: 0,
-
-          totalManagerSales: 0,
-          totalPaid: paymentsMap[distributor.id] || 0,
-
-          remainingDebt: 0,
-        };
-      });
-
-      let networkSalesCount = 0;
-      let networkGrossSales = 0;
-      let networkManagerSales = 0;
-
-      /*
-       * ==========================================================
-       * حساب المبيعات الفعلية
-       * ==========================================================
-       */
-
-      (cards || []).forEach((card) => {
-        const distributorId = card.assigned_to;
-
-        if (
-          !distributorId ||
-          !distributorMap[distributorId]
-        ) {
-          return;
-        }
-
-        const status = String(card.status || '')
-          .trim()
-          .toLowerCase();
-
-        /*
-         * لا تعتبر العملية بيعًا إلا إذا:
-         * 1- حالة الكرت sold
-         * 2- يوجد sold_at
-         */
-
-        if (status !== 'sold' || !card.sold_at) {
-          return;
-        }
-
-        const packagePrice = Number(
-          card.packages?.price || 0
-        );
-
-        /*
-         * استخدام manager_price المحفوظ.
-         *
-         * للسجلات القديمة:
-         * 90% من سعر الباقة.
-         */
-
-        let managerPrice = Number(card.manager_price);
-
-        if (
-          !Number.isFinite(managerPrice) ||
-          managerPrice < 0
-        ) {
-          managerPrice = packagePrice * 0.90;
-        }
-
-        /*
-         * حماية من قيمة أكبر من سعر الكرت.
-         */
-
-        if (
-          packagePrice > 0 &&
-          managerPrice > packagePrice
-        ) {
-          managerPrice = packagePrice * 0.90;
-        }
-
-        /*
-         * إجمالي حصة المدير التاريخية.
-         * تستخدم لحساب الدين الحالي.
-         */
-
-        distributorMap[distributorId].totalManagerSales +=
-          managerPrice;
-
-        /*
-         * تطبيق الفلتر الزمني على المبيعات فقط.
-         */
-
-        if (!isSaleInSelectedPeriod(card.sold_at)) {
-          return;
-        }
-
-        distributorMap[distributorId].salesCount += 1;
-
-        distributorMap[distributorId].grossSales +=
-          packagePrice;
-
-        distributorMap[distributorId].managerSales +=
-          managerPrice;
-
-        networkSalesCount += 1;
-        networkGrossSales += packagePrice;
-        networkManagerSales += managerPrice;
-      });
-
-      /*
-       * ==========================================================
-       * حساب الدين الحالي
-       * ==========================================================
+       * الموزعون:
        *
-       * الدين الحالي مستقل عن الفلتر.
+       * debt_balance هو الرصيد الرسمي الحالي
+       * للدين في النظام.
+       *
+       * لا نقوم بإعادة حساب الدين من المبيعات
+       * أو السدادات داخل صفحة التقارير.
        */
+      const {
+        data: distributorData,
+        error: distributorError
+      } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          debt_balance,
+          commission_rate
+        `)
+        .eq('role', 'distributor')
+        .order('full_name', {
+          ascending: true
+        });
 
-      Object.values(distributorMap).forEach((distributor) => {
-        distributor.remainingDebt = Math.max(
-          0,
-          Math.round(
-            distributor.totalManagerSales -
-              distributor.totalPaid
+      if (distributorError) {
+        throw distributorError;
+      }
+
+      /*
+       * المبيعات الفعلية فقط.
+       *
+       * لا يتم احتساب with_distributor
+       * أو available كمبيعات.
+       */
+      const {
+        data: salesData,
+        error: salesError
+      } = await supabase
+        .from('cards')
+        .select(`
+          id,
+          assigned_to,
+          status,
+          sold_at,
+          packages (
+            name,
+            price
           )
-        );
-      });
+        `)
+        .eq('status', 'sold')
+        .order('sold_at', {
+          ascending: false
+        });
+
+      if (salesError) {
+        throw salesError;
+      }
 
       /*
-       * ==========================================================
-       * تحديث ملخص الشبكة
-       * ==========================================================
+       * المخزون الحالي لدى الموزعين.
+       *
+       * with_distributor فقط.
        */
+      const {
+        data: inventoryData,
+        error: inventoryError
+      } = await supabase
+        .from('cards')
+        .select(`
+          id,
+          assigned_to,
+          status,
+          packages (
+            name,
+            price
+          )
+        `)
+        .eq('status', 'with_distributor');
 
-      setNetworkStats({
-        salesCount: networkSalesCount,
-        grossSales: networkGrossSales,
-        managerSales: networkManagerSales,
-      });
+      if (inventoryError) {
+        throw inventoryError;
+      }
 
-      /*
-       * الأعلى مبيعًا يظهر أولًا.
-       * عند التساوي يظهر صاحب الدين الأعلى أولًا.
-       */
-
-      const result = Object.values(distributorMap).sort(
-        (a, b) => {
-          if (b.managerSales !== a.managerSales) {
-            return b.managerSales - a.managerSales;
-          }
-
-          return b.remainingDebt - a.remainingDebt;
-        }
-      );
-
-      setRows(result);
+      setDistributors(distributorData || []);
+      setSales(salesData || []);
+      setInventory(inventoryData || []);
     } catch (error) {
       console.error(
-        'خطأ في تحميل تقارير المدير:',
+        'Manager reports error:',
         error
       );
 
-      setRows([]);
-
-      setNetworkStats({
-        salesCount: 0,
-        grossSales: 0,
-        managerSales: 0,
-      });
+      setDistributors([]);
+      setSales([]);
+      setInventory([]);
     } finally {
-      setBusy(false);
+      setDataLoading(false);
     }
   }
 
@@ -359,704 +202,1009 @@ export default function ReportsPage() {
     if (profile) {
       loadReport();
     }
-  }, [profile, filter]);
+  }, [profile]);
 
-  if (loading) {
+  /*
+   * المبيعات الخاصة بالفترة المختارة.
+   */
+  const filteredSales = useMemo(() => {
+    return sales.filter((sale) => {
+      if (!sale.sold_at) return false;
+
+      if (reportType === 'day') {
+        return (
+          getDateKey(sale.sold_at) ===
+          selectedDay
+        );
+      }
+
+      if (reportType === 'month') {
+        return (
+          getMonthKey(sale.sold_at) ===
+          selectedMonth
+        );
+      }
+
+      if (reportType === 'year') {
+        return (
+          getYearKey(sale.sold_at) ===
+          selectedYear
+        );
+      }
+
+      return true;
+    });
+  }, [
+    sales,
+    reportType,
+    selectedDay,
+    selectedMonth,
+    selectedYear
+  ]);
+
+  /*
+   * بناء تقرير كل موزع.
+   */
+  const rows = useMemo(() => {
+    const map = {};
+
+    /*
+     * إنشاء سجل لكل موزع حتى يظهر
+     * حتى لو لم تكن لديه مبيعات.
+     */
+    distributors.forEach((distributor) => {
+      map[distributor.id] = {
+        id: distributor.id,
+        name:
+          distributor.full_name ||
+          'موزع بدون اسم',
+
+        commissionRate:
+          Number(
+            distributor.commission_rate ?? 10
+          ),
+
+        /*
+         * هذا هو الدين الرسمي.
+         *
+         * لا يتم حسابه من المبيعات.
+         */
+        currentDebt:
+          Number(
+            distributor.debt_balance ?? 0
+          ),
+
+        salesCount: 0,
+        salesValue: 0,
+
+        inventoryCount: 0,
+        inventoryValue: 0
+      };
+    });
+
+    /*
+     * المبيعات للفترة المختارة.
+     */
+    filteredSales.forEach((sale) => {
+      if (
+        !sale.assigned_to ||
+        !map[sale.assigned_to]
+      ) {
+        return;
+      }
+
+      const price = Number(
+        sale.packages?.price || 0
+      );
+
+      map[sale.assigned_to].salesCount += 1;
+
+      map[sale.assigned_to].salesValue += price;
+    });
+
+    /*
+     * المخزون الحالي.
+     */
+    inventory.forEach((card) => {
+      if (
+        !card.assigned_to ||
+        !map[card.assigned_to]
+      ) {
+        return;
+      }
+
+      const price = Number(
+        card.packages?.price || 0
+      );
+
+      map[card.assigned_to].inventoryCount += 1;
+
+      map[card.assigned_to].inventoryValue += price;
+    });
+
+    /*
+     * حصة المدير حسب نسبة العمولة
+     * المخزنة للموزع.
+     */
+    Object.values(map).forEach((row) => {
+      row.distributorCommission =
+        row.salesValue *
+        (row.commissionRate / 100);
+
+      row.managerShare =
+        row.salesValue -
+        row.distributorCommission;
+    });
+
+    /*
+     * ترتيب الموزعين حسب المبيعات.
+     */
+    return Object.values(map).sort(
+      (a, b) =>
+        b.salesValue -
+        a.salesValue
+    );
+  }, [
+    distributors,
+    filteredSales,
+    inventory
+  ]);
+
+  /*
+   * إجماليات الشبكة.
+   */
+  const networkSummary = useMemo(() => {
+    const salesCount =
+      filteredSales.length;
+
+    const salesValue =
+      filteredSales.reduce(
+        (sum, sale) =>
+          sum +
+          Number(
+            sale.packages?.price || 0
+          ),
+        0
+      );
+
+    const managerShare =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.managerShare || 0),
+        0
+      );
+
+    const distributorCommission =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(
+            row.distributorCommission || 0
+          ),
+        0
+      );
+
+    const currentDebt =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.currentDebt || 0),
+        0
+      );
+
+    const inventoryCount =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.inventoryCount || 0),
+        0
+      );
+
+    const inventoryValue =
+      rows.reduce(
+        (sum, row) =>
+          sum +
+          Number(row.inventoryValue || 0),
+        0
+      );
+
+    return {
+      salesCount,
+      salesValue,
+      managerShare,
+      distributorCommission,
+      currentDebt,
+      inventoryCount,
+      inventoryValue
+    };
+  }, [filteredSales, rows]);
+
+  const reportTitle = useMemo(() => {
+    if (reportType === 'day') {
+      return selectedDay || 'اليوم المحدد';
+    }
+
+    if (reportType === 'month') {
+      return selectedMonth || 'الشهر المحدد';
+    }
+
+    if (reportType === 'year') {
+      return selectedYear || 'السنة المحددة';
+    }
+
+    return '';
+  }, [
+    reportType,
+    selectedDay,
+    selectedMonth,
+    selectedYear
+  ]);
+
+  if (loading || !profile) {
     return null;
   }
 
-  const currentFilter = filterConfig[filter];
-
   return (
     <div className="app">
+
       <Sidebar
         role="admin"
         active="/admin/reports"
-        name={profile?.full_name}
+        name={profile.full_name}
       />
 
       <div
         className="main"
         style={{
-          paddingBottom: '50px',
+          paddingBottom: 50
         }}
       >
-        {/* =====================================================
-            رأس الصفحة
-        ====================================================== */}
+
+        {/* رأس الصفحة */}
 
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'flex-start',
+            gap: 20,
             flexWrap: 'wrap',
-            gap: '18px',
-            marginBottom: '28px',
+            marginBottom: 24
           }}
         >
+
           <div>
             <h1
               style={{
-                fontSize: '30px',
-                lineHeight: 1.2,
+                fontSize: 28,
                 fontWeight: 900,
                 color: '#0F172A',
-                margin: '0 0 8px',
+                margin: 0,
+                marginBottom: 8
               }}
             >
               تقارير المدير
             </h1>
 
-            <p
+            <div
               style={{
-                fontSize: '15px',
-                color: '#64748B',
+                fontSize: 14,
                 fontWeight: 600,
-                margin: 0,
-                lineHeight: 1.7,
+                color: '#64748B'
               }}
             >
-              ملخص واضح للمبيعات الفعلية وحصة المدير والدين الحالي لجميع الموزعين
-            </p>
+              تقرير شامل لجميع الموزعين والمبيعات
+              والدين الحالي والمخزون
+            </div>
           </div>
 
           <button
             onClick={() => window.print()}
             className="no-print"
             style={{
-              padding: '13px 21px',
-              minHeight: '48px',
-              borderRadius: '13px',
-              border: '1px solid #CBD5E1',
+              padding: '13px 20px',
+              borderRadius: 12,
+              border:
+                '1px solid #CBD5E1',
               background: '#FFFFFF',
               color: '#0F172A',
               fontWeight: 900,
-              fontSize: '14px',
-              cursor: 'pointer',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
+              fontSize: 14,
+              cursor: 'pointer'
             }}
           >
-            🖨️ طباعة التقرير
+            🖨️ طباعة / PDF
           </button>
+
         </div>
 
-        {/* =====================================================
-            اختيار الفترة
-        ====================================================== */}
+        {/* اختيار التقرير */}
 
         <div
           className="no-print"
           style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(190px, 1fr))',
-            gap: '13px',
-            marginBottom: '30px',
+            background: '#FFFFFF',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 18,
+            padding: 20,
+            marginBottom: 24
           }}
         >
-          {['all', 'day', 'month', 'year'].map(
-            (item) => {
-              const active = filter === item;
 
-              return (
-                <button
-                  key={item}
-                  onClick={() => setFilter(item)}
-                  style={{
-                    padding: '17px 18px',
-                    minHeight: '78px',
-                    borderRadius: '15px',
-                    border: active
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 900,
+              color: '#0F172A',
+              marginBottom: 14
+            }}
+          >
+            الفترة الزمنية
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(3, minmax(0, 1fr))',
+              gap: 12
+            }}
+          >
+
+            {[
+              ['day', 'يومي'],
+              ['month', 'شهري'],
+              ['year', 'سنوي']
+            ].map(([type, label]) => (
+              <button
+                key={type}
+                onClick={() =>
+                  setReportType(type)
+                }
+                style={{
+                  minHeight: 54,
+                  borderRadius: 12,
+                  border:
+                    reportType === type
                       ? '2px solid #0F766E'
-                      : '1px solid #E2E8F0',
-                    background: active
+                      : '1px solid #CBD5E1',
+                  background:
+                    reportType === type
                       ? '#F0FDFA'
                       : '#FFFFFF',
-                    cursor: 'pointer',
-                    textAlign: 'right',
-                    boxShadow: active
-                      ? '0 5px 15px rgba(15,118,110,0.10)'
-                      : '0 2px 5px rgba(0,0,0,0.03)',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: '16px',
-                      fontWeight: 900,
-                      color: active
-                        ? '#0F766E'
-                        : '#0F172A',
-                      marginBottom: '6px',
-                    }}
-                  >
-                    {filterConfig[item].label}
-                  </div>
+                  color:
+                    reportType === type
+                      ? '#0F766E'
+                      : '#334155',
+                  fontSize: 15,
+                  fontWeight: 900,
+                  cursor: 'pointer'
+                }}
+              >
+                {label}
+              </button>
+            ))}
 
-                  <div
-                    style={{
-                      fontSize: '12px',
-                      color: '#64748B',
-                      fontWeight: 700,
-                      lineHeight: 1.5,
-                    }}
+          </div>
+
+          <div
+            style={{
+              marginTop: 14
+            }}
+          >
+
+            {reportType === 'day' && (
+              <input
+                type="date"
+                value={selectedDay}
+                onChange={(event) =>
+                  setSelectedDay(
+                    event.target.value
+                  )
+                }
+                style={{
+                  width: '100%',
+                  minHeight: 52,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border:
+                    '1px solid #CBD5E1',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  background: '#F8FAFC'
+                }}
+              />
+            )}
+
+            {reportType === 'month' && (
+              <input
+                type="month"
+                value={selectedMonth}
+                onChange={(event) =>
+                  setSelectedMonth(
+                    event.target.value
+                  )
+                }
+                style={{
+                  width: '100%',
+                  minHeight: 52,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border:
+                    '1px solid #CBD5E1',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  background: '#F8FAFC'
+                }}
+              />
+            )}
+
+            {reportType === 'year' && (
+              <select
+                value={selectedYear}
+                onChange={(event) =>
+                  setSelectedYear(
+                    event.target.value
+                  )
+                }
+                style={{
+                  width: '100%',
+                  minHeight: 52,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  border:
+                    '1px solid #CBD5E1',
+                  fontSize: 15,
+                  fontWeight: 800,
+                  background: '#F8FAFC'
+                }}
+              >
+                {Array.from(
+                  {
+                    length: 7
+                  },
+                  (_, index) =>
+                    String(
+                      new Date().getFullYear() -
+                        3 +
+                        index
+                    )
+                ).map((year) => (
+                  <option
+                    key={year}
+                    value={year}
                   >
-                    {filterConfig[item].sub}
-                  </div>
-                </button>
-              );
-            }
-          )}
+                    {year}
+                  </option>
+                ))}
+              </select>
+            )}
+
+          </div>
+
         </div>
 
-        {/* =====================================================
-            بطاقات ملخص الشبكة
-        ====================================================== */}
+        {/* الفترة الحالية */}
+
+        <div
+          style={{
+            background: '#F8FAFC',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            marginBottom: 24,
+            fontSize: 15,
+            fontWeight: 800,
+            color: '#475569'
+          }}
+        >
+          التقرير الحالي:
+          <span
+            style={{
+              color: '#0F172A',
+              marginRight: 8
+            }}
+          >
+            {reportTitle}
+          </span>
+        </div>
+
+        {/* ملخص الشبكة */}
 
         <div
           style={{
             display: 'grid',
             gridTemplateColumns:
-              'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: '18px',
-            marginBottom: '30px',
+              'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 16,
+            marginBottom: 28
           }}
         >
-          {/* عدد المبيعات */}
 
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              borderRadius: '18px',
-              padding: '24px',
-              minHeight: '145px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              boxShadow:
-                '0 3px 8px rgba(15,23,42,0.04)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                color: '#64748B',
-                fontWeight: 800,
-                marginBottom: '12px',
-              }}
-            >
-              عدد المبيعات
-            </div>
+          <SummaryCard
+            title="المبيعات الفعلية"
+            value={networkSummary.salesCount}
+            suffix="كرت"
+            background="#EFF6FF"
+            border="#BFDBFE"
+            valueColor="#1D4ED8"
+          />
 
-            <div
-              style={{
-                fontSize: '32px',
-                lineHeight: 1,
-                fontWeight: 900,
-                color: '#0F766E',
-              }}
-            >
-              {formatNum(networkStats.salesCount)}
+          <SummaryCard
+            title="قيمة المبيعات"
+            value={formatNumber(
+              networkSummary.salesValue
+            )}
+            suffix="ر.ي"
+            background="#F5F3FF"
+            border="#DDD6FE"
+            valueColor="#6D28D9"
+          />
 
-              <span
-                style={{
-                  fontSize: '15px',
-                  marginRight: '7px',
-                  fontWeight: 800,
-                  color: '#475569',
-                }}
-              >
-                كرت
-              </span>
-            </div>
-          </div>
+          <SummaryCard
+            title="حصة المدير"
+            value={formatNumber(
+              networkSummary.managerShare
+            )}
+            suffix="ر.ي"
+            background="#FFF7ED"
+            border="#FED7AA"
+            valueColor="#C2410C"
+          />
 
-          {/* إجمالي المبيعات */}
+          <SummaryCard
+            title="الدين الحالي للموزعين"
+            value={formatNumber(
+              networkSummary.currentDebt
+            )}
+            suffix="ر.ي"
+            background={
+              networkSummary.currentDebt > 0
+                ? '#FEF2F2'
+                : '#ECFDF5'
+            }
+            border={
+              networkSummary.currentDebt > 0
+                ? '#FCA5A5'
+                : '#A7F3D0'
+            }
+            valueColor={
+              networkSummary.currentDebt > 0
+                ? '#DC2626'
+                : '#059669'
+            }
+          />
 
-          <div
-            style={{
-              background: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              borderRadius: '18px',
-              padding: '24px',
-              minHeight: '145px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              boxShadow:
-                '0 3px 8px rgba(15,23,42,0.04)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                color: '#64748B',
-                fontWeight: 800,
-                marginBottom: '12px',
-              }}
-            >
-              إجمالي قيمة المبيعات
-            </div>
-
-            <div
-              style={{
-                fontSize: '32px',
-                lineHeight: 1,
-                fontWeight: 900,
-                color: '#0F172A',
-              }}
-            >
-              {formatNum(networkStats.grossSales)}
-
-              <span
-                style={{
-                  fontSize: '15px',
-                  marginRight: '7px',
-                  fontWeight: 800,
-                  color: '#475569',
-                }}
-              >
-                ريال
-              </span>
-            </div>
-          </div>
-
-          {/* حصة المدير */}
-
-          <div
-            style={{
-              background: '#F0FDF4',
-              border: '1px solid #BBF7D0',
-              borderRadius: '18px',
-              padding: '24px',
-              minHeight: '145px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              boxShadow:
-                '0 3px 8px rgba(16,185,129,0.06)',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                color: '#166534',
-                fontWeight: 800,
-                marginBottom: '12px',
-              }}
-            >
-              حصة المدير
-            </div>
-
-            <div
-              style={{
-                fontSize: '32px',
-                lineHeight: 1,
-                fontWeight: 900,
-                color: '#059669',
-              }}
-            >
-              {formatNum(networkStats.managerSales)}
-
-              <span
-                style={{
-                  fontSize: '15px',
-                  marginRight: '7px',
-                  fontWeight: 800,
-                  color: '#166534',
-                }}
-              >
-                ريال
-              </span>
-            </div>
-          </div>
         </div>
 
-        {/* =====================================================
-            عنوان قائمة الموزعين
-        ====================================================== */}
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '10px',
-            marginBottom: '15px',
-          }}
-        >
-          <div>
-            <h2
-              style={{
-                fontSize: '20px',
-                fontWeight: 900,
-                color: '#0F172A',
-                margin: 0,
-              }}
-            >
-              أداء جميع الموزعين
-            </h2>
-
-            <div
-              style={{
-                fontSize: '13px',
-                color: '#64748B',
-                fontWeight: 700,
-                marginTop: '5px',
-              }}
-            >
-              المبيعات المعروضة حسب الفترة: {currentFilter.label}
-            </div>
-          </div>
-
-          <div
-            style={{
-              background: '#F1F5F9',
-              color: '#475569',
-              borderRadius: '20px',
-              padding: '7px 14px',
-              fontSize: '13px',
-              fontWeight: 900,
-            }}
-          >
-            {rows.length} موزع
-          </div>
-        </div>
-
-        {/* =====================================================
-            قائمة الموزعين
-        ====================================================== */}
+        {/* جدول الموزعين */}
 
         <div
           style={{
             background: '#FFFFFF',
-            border: '1px solid #E2E8F0',
-            borderRadius: '20px',
+            border:
+              '1px solid #E2E8F0',
+            borderRadius: 20,
             overflow: 'hidden',
             boxShadow:
-              '0 4px 12px rgba(15,23,42,0.04)',
+              '0 4px 12px rgba(15,23,42,0.04)'
           }}
         >
-          {busy && (
-            <div
-              style={{
-                padding: '55px 20px',
-                textAlign: 'center',
-                color: '#64748B',
-                fontWeight: 800,
-                fontSize: '15px',
-              }}
-            >
-              جاري تحميل التقرير...
-            </div>
-          )}
 
-          {!busy && rows.length === 0 && (
-            <div
-              style={{
-                padding: '55px 20px',
-                textAlign: 'center',
-                color: '#64748B',
-                fontWeight: 800,
-                fontSize: '15px',
-              }}
-            >
-              لا توجد بيانات للموزعين.
-            </div>
-          )}
+          <div
+            style={{
+              padding: '20px 24px',
+              background: '#F8FAFC',
+              borderBottom:
+                '1px solid #E2E8F0',
+              display: 'flex',
+              justifyContent:
+                'space-between',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}
+          >
 
-          {!busy &&
-            rows.length > 0 &&
-            rows.map((row, index) => (
-              <div
-                key={row.id}
+            <div>
+              <h2
                 style={{
-                  padding: '25px 28px',
-                  borderTop:
-                    index > 0
-                      ? '1px solid #E2E8F0'
-                      : 'none',
+                  margin: 0,
+                  fontSize: 19,
+                  fontWeight: 900,
+                  color: '#0F172A'
                 }}
               >
-                {/* =================================================
-                    اسم الموزع
-                ================================================== */}
+                جميع الموزعين
+              </h2>
+
+              <div
+                style={{
+                  marginTop: 5,
+                  fontSize: 13,
+                  color: '#64748B',
+                  fontWeight: 700
+                }}
+              >
+                الدين المعروض هو الرصيد الرسمي
+                المسجل في حساب كل موزع
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: '8px 14px',
+                borderRadius: 20,
+                background: '#E2E8F0',
+                color: '#334155',
+                fontSize: 13,
+                fontWeight: 900
+              }}
+            >
+              {rows.length} موزع
+            </div>
+
+          </div>
+
+          {dataLoading ? (
+
+            <div
+              style={{
+                padding: 50,
+                textAlign: 'center',
+                color: '#64748B',
+                fontSize: 15,
+                fontWeight: 800
+              }}
+            >
+              جاري تحميل التقارير...
+            </div>
+
+          ) : rows.length === 0 ? (
+
+            <div
+              style={{
+                padding: 50,
+                textAlign: 'center',
+                color: '#64748B',
+                fontSize: 15,
+                fontWeight: 800
+              }}
+            >
+              لا يوجد موزعون حاليًا
+            </div>
+
+          ) : (
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column'
+              }}
+            >
+
+              {rows.map((row, index) => (
 
                 <div
+                  key={row.id}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px',
-                    marginBottom: '18px',
+                    padding: '24px',
+                    borderTop:
+                      index === 0
+                        ? 'none'
+                        : '1px solid #E2E8F0'
                   }}
                 >
+
+                  {/* اسم الموزع */}
+
                   <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '12px',
+                      gap: 12,
+                      marginBottom: 18
                     }}
                   >
-                    <span
+
+                    <div
                       style={{
-                        width: '11px',
-                        height: '11px',
+                        width: 14,
+                        height: 14,
                         borderRadius: '50%',
-                        background:
-                          row.salesCount > 0
-                            ? '#0F766E'
-                            : '#CBD5E1',
-                        flexShrink: 0,
+                        background: '#0F766E',
+                        flexShrink: 0
                       }}
                     />
 
-                    <span
+                    <div
                       style={{
-                        fontSize: '19px',
+                        fontSize: 20,
                         fontWeight: 900,
-                        color: '#0F172A',
+                        color: '#0F172A'
                       }}
                     >
                       {row.name}
-                    </span>
+                    </div>
+
                   </div>
 
-                  {index < 3 &&
-                    row.salesCount > 0 && (
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          fontWeight: 900,
-                          color: '#0F766E',
-                          background: '#F0FDFA',
-                          border: '1px solid #99F6E4',
-                          borderRadius: '20px',
-                          padding: '6px 11px',
-                        }}
-                      >
-                        #{index + 1}
-                      </span>
-                    )}
-                </div>
-
-                {/* =================================================
-                    بيانات الموزع
-                ================================================== */}
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns:
-                      'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: '14px',
-                  }}
-                >
-                  {/* عدد المبيعات */}
+                  {/* بيانات الموزع */}
 
                   <div
                     style={{
-                      minHeight: '105px',
-                      background: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '14px',
-                      padding: '17px 19px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(250px, 1fr))',
+                      gap: 16
                     }}
                   >
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#64748B',
-                        fontWeight: 800,
-                        marginBottom: '9px',
-                      }}
-                    >
-                      عدد المبيعات
-                    </div>
 
-                    <div
-                      style={{
-                        fontSize: '23px',
-                        fontWeight: 900,
-                        color: '#0F766E',
-                      }}
-                    >
-                      {formatNum(row.salesCount)}
+                    {/* المبيعات */}
 
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          marginRight: '6px',
-                          color: '#475569',
-                        }}
-                      >
-                        كرت
-                      </span>
-                    </div>
-                  </div>
+                    <ReportBox
+                      title="المبيعات الفعلية"
+                      description={`خلال الفترة: ${reportTitle}`}
+                      value={row.salesCount}
+                      suffix="كرت"
+                      secondary={`${formatNumber(
+                        row.salesValue
+                      )} ر.ي`}
+                      background="#F0FDF4"
+                      border="#BBF7D0"
+                      titleColor="#166534"
+                      valueColor="#059669"
+                    />
 
-                  {/* قيمة المبيعات */}
+                    {/* حصة المدير */}
 
-                  <div
-                    style={{
-                      minHeight: '105px',
-                      background: '#FFFFFF',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '14px',
-                      padding: '17px 19px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#64748B',
-                        fontWeight: 800,
-                        marginBottom: '9px',
-                      }}
-                    >
-                      قيمة المبيعات
-                    </div>
+                    <ReportBox
+                      title="حصة المدير"
+                      description={`بعد عمولة الموزع ${row.commissionRate}%`}
+                      value={formatNumber(
+                        row.managerShare
+                      )}
+                      suffix="ر.ي"
+                      background="#FFF7ED"
+                      border="#FED7AA"
+                      titleColor="#9A3412"
+                      valueColor="#C2410C"
+                    />
 
-                    <div
-                      style={{
-                        fontSize: '23px',
-                        fontWeight: 900,
-                        color: '#0F172A',
-                      }}
-                    >
-                      {formatNum(row.grossSales)}
+                    {/* الدين الرسمي */}
 
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          marginRight: '6px',
-                          color: '#475569',
-                        }}
-                      >
-                        ريال
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* حصة المدير */}
-
-                  <div
-                    style={{
-                      minHeight: '105px',
-                      background: '#F0FDF4',
-                      border: '1px solid #BBF7D0',
-                      borderRadius: '14px',
-                      padding: '17px 19px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color: '#166534',
-                        fontWeight: 800,
-                        marginBottom: '9px',
-                      }}
-                    >
-                      حصة المدير
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: '23px',
-                        fontWeight: 900,
-                        color: '#059669',
-                      }}
-                    >
-                      {formatNum(row.managerSales)}
-
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          marginRight: '6px',
-                          color: '#166534',
-                        }}
-                      >
-                        ريال
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* الدين الحالي */}
-
-                  <div
-                    style={{
-                      minHeight: '105px',
-                      background:
-                        row.remainingDebt > 0
+                    <ReportBox
+                      title="الدين الحالي"
+                      description="الرصيد الرسمي من حساب الموزع"
+                      value={formatNumber(
+                        row.currentDebt
+                      )}
+                      suffix="ر.ي"
+                      background={
+                        row.currentDebt > 0
                           ? '#FEF2F2'
-                          : '#F0FDF4',
-                      border:
-                        row.remainingDebt > 0
-                          ? '1px solid #FCA5A5'
-                          : '1px solid #BBF7D0',
-                      borderRadius: '14px',
-                      padding: '17px 19px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        color:
-                          row.remainingDebt > 0
-                            ? '#991B1B'
-                            : '#166534',
-                        fontWeight: 900,
-                        marginBottom: '9px',
-                      }}
-                    >
-                      الدين الحالي
-                    </div>
+                          : '#F0FDF4'
+                      }
+                      border={
+                        row.currentDebt > 0
+                          ? '#FCA5A5'
+                          : '#BBF7D0'
+                      }
+                      titleColor={
+                        row.currentDebt > 0
+                          ? '#991B1B'
+                          : '#166534'
+                      }
+                      valueColor={
+                        row.currentDebt > 0
+                          ? '#DC2626'
+                          : '#059669'
+                      }
+                    />
 
-                    <div
-                      style={{
-                        fontSize: '23px',
-                        fontWeight: 900,
-                        color:
-                          row.remainingDebt > 0
-                            ? '#DC2626'
-                            : '#059669',
-                      }}
-                    >
-                      {formatNum(row.remainingDebt)}
+                    {/* المخزون */}
 
-                      <span
-                        style={{
-                          fontSize: '13px',
-                          marginRight: '6px',
-                          color:
-                            row.remainingDebt > 0
-                              ? '#991B1B'
-                              : '#166534',
-                        }}
-                      >
-                        ريال
-                      </span>
-                    </div>
+                    <ReportBox
+                      title="المخزون الحالي"
+                      description="كروت لم يتم بيعها بعد"
+                      value={row.inventoryCount}
+                      suffix="كرت"
+                      secondary={`${formatNumber(
+                        row.inventoryValue
+                      )} ر.ي`}
+                      background="#F8FAFC"
+                      border="#E2E8F0"
+                      titleColor="#475569"
+                      valueColor="#0F172A"
+                    />
+
                   </div>
+
                 </div>
-              </div>
-            ))}
+
+              ))}
+
+            </div>
+
+          )}
+
         </div>
+
       </div>
+
+      <style jsx global>{`
+        @media print {
+          .no-print {
+            display: none !important;
+          }
+
+          body {
+            background: #ffffff !important;
+          }
+
+          .app {
+            background: #ffffff !important;
+          }
+
+          .main {
+            padding: 20px !important;
+          }
+        }
+
+        @media (max-width: 700px) {
+          .main {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+          }
+        }
+      `}</style>
+
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  value,
+  suffix,
+  background,
+  border,
+  valueColor
+}) {
+  return (
+    <div
+      style={{
+        background,
+        border: `1px solid ${border}`,
+        borderRadius: 18,
+        padding: '22px 24px',
+        minHeight: 125,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center'
+      }}
+    >
+
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 800,
+          color: '#475569',
+          marginBottom: 10
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 900,
+          color: valueColor,
+          lineHeight: 1.2
+        }}
+      >
+        {value}
+
+        <span
+          style={{
+            fontSize: 14,
+            marginRight: 7,
+            fontWeight: 800
+          }}
+        >
+          {suffix}
+        </span>
+      </div>
+
+    </div>
+  );
+}
+
+function ReportBox({
+  title,
+  description,
+  value,
+  suffix,
+  secondary,
+  background,
+  border,
+  titleColor,
+  valueColor
+}) {
+  return (
+    <div
+      style={{
+        background,
+        border: `1px solid ${border}`,
+        borderRadius: 16,
+        padding: '20px 22px',
+        minHeight: 145,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center'
+      }}
+    >
+
+      <div
+        style={{
+          fontSize: 14,
+          fontWeight: 900,
+          color: titleColor,
+          marginBottom: 6
+        }}
+      >
+        {title}
+      </div>
+
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: '#64748B',
+          marginBottom: 12,
+          lineHeight: 1.5
+        }}
+      >
+        {description}
+      </div>
+
+      <div
+        style={{
+          fontSize: 25,
+          fontWeight: 900,
+          color: valueColor
+        }}
+      >
+        {value}
+
+        <span
+          style={{
+            fontSize: 13,
+            marginRight: 7,
+            fontWeight: 800
+          }}
+        >
+          {suffix}
+        </span>
+      </div>
+
+      {secondary && (
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 15,
+            fontWeight: 900,
+            color: '#334155'
+          }}
+        >
+          {secondary}
+        </div>
+      )}
+
     </div>
   );
 }
