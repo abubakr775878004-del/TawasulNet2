@@ -27,6 +27,16 @@ export default function DistributorPage() {
   const [revealError, setRevealError] = useState('');
   const [copied, setCopied] = useState(false);
 
+  /*
+   * حماية إرسال الكرت إلى واتساب.
+   *
+   * يتم حفظ الكرت الذي تم بدء مشاركته في واتساب
+   * في localStorage حتى لا يمكن إعادة مشاركته
+   * من نفس المتصفح حتى بعد Refresh أو إغلاق الصفحة.
+   */
+  const [whatsappShared, setWhatsappShared] = useState(false);
+  const [whatsappBusy, setWhatsappBusy] = useState(false);
+
   const [personalCopied, setPersonalCopied] = useState(false);
 
   const [noteContent, setNoteContent] = useState('');
@@ -35,17 +45,43 @@ export default function DistributorPage() {
 
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
+
     return val.toLocaleString('en-US', {
       maximumFractionDigits: 0,
     });
   };
 
   /*
+   * التحقق من حالة إرسال الكرت إلى واتساب.
+   */
+  useEffect(() => {
+    if (!revealedCard?.code) {
+      setWhatsappShared(false);
+      return;
+    }
+
+    try {
+      const storageKey =
+        `tawasul_whatsapp_shared_${revealedCard.code}`;
+
+      const alreadyShared =
+        localStorage.getItem(storageKey) === '1';
+
+      setWhatsappShared(alreadyShared);
+    } catch (error) {
+      console.error(
+        'WhatsApp localStorage read error:',
+        error
+      );
+
+      setWhatsappShared(false);
+    }
+  }, [revealedCard]);
+
+  /*
    * جلب بيانات الموزع.
    *
-   * ملاحظة مهمة:
-   * الدين يتم قراءته من قاعدة البيانات، ولا يتم حسابه
-   * من البطاقات الموجودة في المتصفح.
+   * الدين يتم قراءته من قاعدة البيانات.
    */
   async function load(isInitial = false) {
     if (!profile) return;
@@ -53,12 +89,14 @@ export default function DistributorPage() {
     setIsRefreshing(true);
 
     try {
-      const { data: availableCards, error: availableCardsError } =
-        await supabase
-          .from('cards')
-          .select('*, packages(name, price)')
-          .eq('assigned_to', profile.id)
-          .eq('status', 'with_distributor');
+      const {
+        data: availableCards,
+        error: availableCardsError,
+      } = await supabase
+        .from('cards')
+        .select('*, packages(name, price)')
+        .eq('assigned_to', profile.id)
+        .eq('status', 'with_distributor');
 
       if (availableCardsError) {
         console.error(
@@ -72,7 +110,10 @@ export default function DistributorPage() {
       const since = new Date();
       since.setHours(0, 0, 0, 0);
 
-      const { count, error: soldCountError } = await supabase
+      const {
+        count,
+        error: soldCountError,
+      } = await supabase
         .from('cards')
         .select('*', {
           count: 'exact',
@@ -80,7 +121,10 @@ export default function DistributorPage() {
         })
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
-        .gte('sold_at', since.toISOString());
+        .gte(
+          'sold_at',
+          since.toISOString()
+        );
 
       if (soldCountError) {
         console.error(
@@ -91,19 +135,24 @@ export default function DistributorPage() {
 
       setSoldToday(count || 0);
 
-      const { data: salesData, error: salesError } =
-        await supabase
-          .from('cards')
-          .select(
-            'id, code, sold_at, customer_name, packages(name, price)'
-          )
-          .eq('assigned_to', profile.id)
-          .eq('status', 'sold')
-          .gte('sold_at', since.toISOString())
-          .order('sold_at', {
-            ascending: false,
-          })
-          .limit(10);
+      const {
+        data: salesData,
+        error: salesError,
+      } = await supabase
+        .from('cards')
+        .select(
+          'id, code, sold_at, customer_name, packages(name, price)'
+        )
+        .eq('assigned_to', profile.id)
+        .eq('status', 'sold')
+        .gte(
+          'sold_at',
+          since.toISOString()
+        )
+        .order('sold_at', {
+          ascending: false,
+        })
+        .limit(10);
 
       if (salesError) {
         console.error(
@@ -114,18 +163,14 @@ export default function DistributorPage() {
 
       setRecentSales(salesData || []);
 
-      /*
-       * قراءة الدين من profiles فقط.
-       *
-       * لا نقوم هنا بحساب الدين من الكروت.
-       * الدين هو قيمة مالية محفوظة في قاعدة البيانات.
-       */
-      const { data: freshProfile, error: profileError } =
-        await supabase
-          .from('profiles')
-          .select('debt_balance, debt')
-          .eq('id', profile.id)
-          .single();
+      const {
+        data: freshProfile,
+        error: profileError,
+      } = await supabase
+        .from('profiles')
+        .select('debt_balance, debt')
+        .eq('id', profile.id)
+        .single();
 
       if (profileError) {
         console.error(
@@ -218,9 +263,8 @@ export default function DistributorPage() {
 
     try {
       /*
-       * نبحث عن أول كرت متاح للموزع من الباقة المطلوبة.
-       *
-       * هذا الكرت سيتم تمرير ID الخاص به إلى RPC.
+       * نبحث عن أول كرت متاح للموزع
+       * من الباقة المطلوبة.
        */
       const {
         data,
@@ -284,15 +328,6 @@ export default function DistributorPage() {
         return;
       }
 
-      /*
-       * النسب الحالية للنظام:
-       * المدير 90%
-       * الموزع 10%
-       *
-       * يتم تمرير القيم إلى RPC الحالية،
-       * لكن تنفيذ العملية المالية نفسها يجب أن يتم
-       * داخل قاعدة البيانات.
-       */
       const managerShare =
         cardPrice * 0.9;
 
@@ -300,19 +335,13 @@ export default function DistributorPage() {
         cardPrice * 0.1;
 
       /*
-       * العملية المالية الأساسية.
+       * حفظ وقت البيع المحلي مباشرة بعد نجاح RPC.
        *
-       * لا نقوم هنا بتحديث:
-       * - status
-       * - sold_at
-       * - debt_balance
-       * - debt
-       * - sales_log
-       *
-       * بشكل منفصل.
-       *
-       * RPC هي المسؤولة عن تنفيذ العملية كعملية واحدة.
+       * هذا أفضل من استخدام وقت الضغط على واتساب.
        */
+      const saleCompletedAt =
+        new Date().toISOString();
+
       const {
         data: saleResult,
         error: saleError,
@@ -323,7 +352,8 @@ export default function DistributorPage() {
           p_distributor_id: profile.id,
           p_package_id: card.package_id,
           p_price: cardPrice,
-          p_manager_share: managerShare,
+          p_manager_share:
+            managerShare,
           p_distributor_share:
             distributorShare,
           p_customer_name:
@@ -348,10 +378,7 @@ export default function DistributorPage() {
       }
 
       /*
-       * لا نأخذ الدين الجديد من حساب محلي.
-       *
-       * بعد نجاح البيع نعيد قراءة الدين الحقيقي
-       * من قاعدة البيانات.
+       * إعادة قراءة الدين الحقيقي من قاعدة البيانات.
        */
       const {
         data: updatedProfile,
@@ -364,9 +391,7 @@ export default function DistributorPage() {
         .eq('id', profile.id)
         .single();
 
-      if (
-        updatedProfileError
-      ) {
+      if (updatedProfileError) {
         console.error(
           'Error refreshing debt after sale:',
           updatedProfileError
@@ -386,8 +411,7 @@ export default function DistributorPage() {
       }
 
       /*
-       * نحافظ على الكود القادم من نتيجة البيع إن كانت RPC
-       * تعيده، وإلا نستخدم الكرت الذي تم اختياره.
+       * نحافظ على الكود القادم من RPC إن وجد.
        */
       let soldCode = card.code;
 
@@ -405,22 +429,33 @@ export default function DistributorPage() {
         }
       }
 
+      /*
+       * نحتفظ أيضًا بـ:
+       * - id
+       * - وقت البيع
+       *
+       * حتى نستخدمهما عند مشاركة الكرت.
+       */
       setRevealedCard({
+        id: card.id,
         code: soldCode,
         packageName:
           pendingPackage.name,
+        soldAt:
+          saleResult?.sold_at ||
+          saleResult?.sale_time ||
+          saleCompletedAt,
       });
+
+      /*
+       * هذا كرت جديد ولم تتم مشاركته بعد.
+       */
+      setWhatsappShared(false);
 
       setPendingPackage(null);
       setCustomerName('');
       setCopied(false);
 
-      /*
-       * تحديث بيانات الصفحة بعد نجاح البيع.
-       *
-       * هنا نعيد قراءة كل شيء من قاعدة البيانات،
-       * بما في ذلك الدين الحقيقي.
-       */
       await load(true);
     } catch (error) {
       console.error(
@@ -486,64 +521,188 @@ export default function DistributorPage() {
     }
   }
 
+  /*
+   * 30 ذكرًا / دعاءً / حكمة قصيرة.
+   *
+   * يتم اختيار واحدة عشوائيًا عند مشاركة الكرت.
+   */
+  const dailyReminders = [
+    'سبحان الله وبحمده، سبحان الله العظيم.',
+    'أستغفر الله وأتوب إليه.',
+    'لا إله إلا الله وحده لا شريك له.',
+    'سبحان الله، والحمد لله، والله أكبر.',
+    'لا حول ولا قوة إلا بالله.',
+    'اللهم صل وسلم وبارك على نبينا محمد ﷺ.',
+    'الحمد لله على كل نعمة.',
+    'اللهم اغفر لنا وارحمنا.',
+    'اللهم افتح لنا أبواب الخير والرزق.',
+    'اللهم اجعل يومنا خيرًا وبركة.',
+    'رب اغفر لي وتب علي إنك أنت التواب الرحيم.',
+    'اللهم ارزقنا راحة البال وطمأنينة القلب.',
+    'اذكر الله، يطمئن قلبك.',
+    'اللهم ارزقنا رزقًا طيبًا مباركًا فيه.',
+    'يا رب اجعل لنا في كل خطوة خيرًا.',
+    'اللهم اكتب لنا الخير حيث كان.',
+    'اللهم بارك لنا في أعمارنا وأعمالنا.',
+    'اللهم اجعلنا من أهل الحمد والشكر.',
+    'اللهم اجبر خواطرنا وحقق أمنياتنا.',
+    'اللهم يسّر لنا أمورنا واشرح صدورنا.',
+    'ربنا آتنا في الدنيا حسنة وفي الآخرة حسنة وقنا عذاب النار.',
+    'حسبي الله ونعم الوكيل.',
+    'توكل على الله، فالله خير حافظًا.',
+    'ابتسم، فالحمد لله دائمًا وأبدًا.',
+    'من أكثر من الاستغفار جعل الله له فرجًا ومخرجًا.',
+    'اجعل لسانك رطبًا بذكر الله.',
+    'رضيت بالله ربًا، وبالإسلام دينًا، وبمحمد ﷺ نبيًا.',
+    'اللهم اجعل القادم أجمل وأطيب.',
+    'اللهم احفظنا واحفظ أهلنا وأحبابنا.',
+    'اللهم اختم يومنا برضاك ومغفرتك.',
+  ];
+
+  /*
+   * إرسال الكرت إلى واتساب.
+   *
+   * الحماية:
+   * 1. منع الضغط أثناء فتح المشاركة.
+   * 2. منع مشاركة نفس الكرت مرة أخرى.
+   * 3. حفظ حالة المشاركة في localStorage.
+   * 4. وقت الرسالة = وقت البيع وليس وقت الضغط على واتساب.
+   */
   function shareWhatsapp() {
-    if (!revealedCard) return;
+    if (
+      !revealedCard?.code ||
+      whatsappBusy ||
+      whatsappShared
+    ) {
+      return;
+    }
 
-    const dailyReminders = [
-      'أكثروا من الصلاة على النبي (صلى الله عليه وسلم)',
-      'سبحان الله وبحمده، سبحان الله العظيم',
-      'لا تنسَ ذكر الله، فبذكره تطمئن القلوب',
-      'اللهم صل وسلم وبارك على نبينا محمد',
-    ];
+    const code = String(
+      revealedCard.code
+    ).trim();
 
-    const dailyReminder =
-      dailyReminders[
-        Math.floor(
-          Math.random() *
-            dailyReminders.length
-        )
-      ];
+    if (!code) return;
 
-    const now = new Date();
+    const storageKey =
+      `tawasul_whatsapp_shared_${code}`;
 
-    const saleDate =
-      now.toLocaleDateString(
-        'ar-YE',
-        {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }
+    try {
+      /*
+       * فحص إضافي قبل فتح واتساب.
+       */
+      if (
+        localStorage.getItem(
+          storageKey
+        ) === '1'
+      ) {
+        setWhatsappShared(true);
+        return;
+      }
+
+      setWhatsappBusy(true);
+
+      const dailyReminder =
+        dailyReminders[
+          Math.floor(
+            Math.random() *
+              dailyReminders.length
+          )
+        ];
+
+      /*
+       * نستخدم وقت البيع المحفوظ.
+       * إذا لم يكن موجودًا لأي سبب نستخدم الوقت الحالي
+       * كحل احتياطي فقط.
+       */
+      const saleDateTime =
+        revealedCard.soldAt
+          ? new Date(
+              revealedCard.soldAt
+            )
+          : new Date();
+
+      const saleDate =
+        saleDateTime.toLocaleDateString(
+          'ar-YE',
+          {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }
+        );
+
+      const saleTime =
+        saleDateTime.toLocaleTimeString(
+          'ar-YE',
+          {
+            hour: '2-digit',
+            minute: '2-digit',
+          }
+        );
+
+      /*
+       * رسالة واتساب الجديدة.
+       *
+       * تم استخدام تنسيق واتساب الرسمي:
+       * Bold + Inline Code + Italic.
+       */
+      const text = `🌐 *شبكة تواصل* 📶
+
+🎫 *كرت إنترنت*
+
+🔐 *رمز الكرت*
+\`${code}\`
+
+📦 *الباقة:* *${revealedCard.packageName}*
+📅 *${saleDate}*  |  🕐 *${saleTime}*
+
+✨ _${dailyReminder}_
+
+💙 *شكرًا لاختياركم شبكة تواصل*`;
+
+      /*
+       * نحفظ حالة المشاركة قبل فتح واتساب.
+       *
+       * هذا يمنع الضغط المزدوج أو فتح رابطين لنفس الكرت.
+       */
+      localStorage.setItem(
+        storageKey,
+        '1'
       );
 
-    const saleTime =
-      now.toLocaleTimeString(
-        'ar-YE',
-        {
-          hour: '2-digit',
-          minute: '2-digit',
-        }
+      setWhatsappShared(true);
+
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(
+          text
+        )}`,
+        '_blank'
+      );
+    } catch (error) {
+      console.error(
+        'WhatsApp share error:',
+        error
       );
 
-    const text = `🌐 *شبكة تواصل*
+      /*
+       * إذا فشلت عملية فتح المشاركة،
+       * نعيد السماح بالمحاولة.
+       */
+      try {
+        localStorage.removeItem(
+          storageKey
+        );
+      } catch (storageError) {
+        console.error(
+          'WhatsApp localStorage remove error:',
+          storageError
+        );
+      }
 
-🎫 *كرت الإنترنت*
-
-\`${revealedCard.code}\`
-
-📦 *الباقة:* ${revealedCard.packageName}
-📅 ${saleDate} | 🕐 ${saleTime}
-
-✨ ${dailyReminder}
-
-*شكرًا لاختياركم شبكة تواصل*`;
-
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(
-        text
-      )}`,
-      '_blank'
-    );
+      setWhatsappShared(false);
+    } finally {
+      setWhatsappBusy(false);
+    }
   }
 
   async function sendNoteToAdmin(e) {
@@ -1605,6 +1764,10 @@ export default function DistributorPage() {
                   onClick={
                     shareWhatsapp
                   }
+                  disabled={
+                    whatsappShared ||
+                    whatsappBusy
+                  }
                   style={{
                     flex: 1,
                     padding:
@@ -1613,15 +1776,28 @@ export default function DistributorPage() {
                       12,
                     border: 'none',
                     background:
-                      '#25D366',
+                      whatsappShared
+                        ? '#94A3B8'
+                        : '#25D366',
                     color: '#fff',
                     fontWeight:
                       '800',
                     cursor:
-                      'pointer',
+                      whatsappShared ||
+                      whatsappBusy
+                        ? 'not-allowed'
+                        : 'pointer',
+                    opacity:
+                      whatsappBusy
+                        ? 0.75
+                        : 1,
                   }}
                 >
-                  واتساب
+                  {whatsappBusy
+                    ? 'جاري الفتح...'
+                    : whatsappShared
+                      ? '✓ تم الإرسال'
+                      : 'واتساب'}
                 </button>
               </div>
 
