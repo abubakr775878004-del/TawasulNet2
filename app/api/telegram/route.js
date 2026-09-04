@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 import {
   sendTelegramMessage,
-} from '@/lib/telegram';
+} from '../../../lib/telegram';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -11,14 +11,17 @@ export async function POST(req) {
   try {
     const body = await req.json();
 
-    const type = String(body?.type || 'distributor_request').trim();
+    const type = String(
+      body?.type || 'distributor_request'
+    ).trim();
 
-    // ============================================================
-    // 1) إشعار السحب الأسبوعي
-    // ============================================================
-
+    // ==========================================
+    // إرسال إشعار الفائزين الأسبوعيين
+    // ==========================================
     if (type === 'weekly_winner') {
-      const message = String(body?.content || '').trim();
+      const message = String(
+        body?.content || ''
+      ).trim();
 
       if (!message) {
         return NextResponse.json(
@@ -30,22 +33,24 @@ export async function POST(req) {
         );
       }
 
-      const result = await sendTelegramMessage(message);
+      const result =
+        await sendTelegramMessage(message);
 
       return NextResponse.json(
         {
           success: true,
-          message: 'تم إرسال الفائزين إلى تيليجرام بنجاح',
-          telegramMessageId: result.messageId,
+          message:
+            'تم إرسال الفائزين إلى تيليجرام بنجاح',
+          telegramMessageId:
+            result.messageId,
         },
         { status: 200 }
       );
     }
 
-    // ============================================================
-    // 2) طلب كروت من موزع
-    // ============================================================
-
+    // ==========================================
+    // طلب كروت من الموزع
+    // ==========================================
     const distributorName = String(
       body?.distributor_name || ''
     ).trim();
@@ -77,7 +82,9 @@ export async function POST(req) {
     const message = [
       '🚨 <b>طلب جديد من موزع</b>',
       '',
-      `👤 <b>الموزع:</b> ${escapeHtml(distributorName)}`,
+      `👤 <b>الموزع:</b> ${escapeHtml(
+        distributorName
+      )}`,
       '',
       '💬 <b>الرسالة:</b>',
       escapeHtml(content),
@@ -85,25 +92,31 @@ export async function POST(req) {
       '⚡ <b>نظام إدارة شبكة تواصل</b>',
     ].join('\n');
 
-    const result = await sendTelegramMessage(message);
+    const result =
+      await sendTelegramMessage(message);
 
     return NextResponse.json(
       {
         success: true,
-        message: 'تم إرسال الإشعار إلى تيليجرام بنجاح',
-        telegramMessageId: result.messageId,
+        message:
+          'تم إرسال الإشعار إلى تيليجرام بنجاح',
+        telegramMessageId:
+          result.messageId,
       },
       { status: 200 }
     );
-
   } catch (error) {
-    console.error('Telegram route error:', error);
+    console.error(
+      'Telegram route error:',
+      error
+    );
 
     if (error?.name === 'AbortError') {
       return NextResponse.json(
         {
           success: false,
-          error: 'انتهت مهلة الاتصال بخوادم Telegram',
+          error:
+            'انتهت مهلة الاتصال بخوادم Telegram',
         },
         { status: 504 }
       );
