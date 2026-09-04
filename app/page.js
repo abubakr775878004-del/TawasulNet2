@@ -64,10 +64,26 @@ export default function LoginPage() {
         .eq('id', data.user.id)
         .single();
 
+      /*
+       * تشخيص مؤقت:
+       * نعرض الخطأ الحقيقي القادم من Supabase
+       * بدل الرسالة العامة.
+       */
       if (profileError || !profile) {
+        console.error('PROFILE LOOKUP ERROR:', {
+          profileError,
+          profile,
+          userId: data.user.id,
+        });
+
         await supabase.auth.signOut();
 
-        setError('تعذّر العثور على حساب مرتبط بهذا المستخدم');
+        setError(
+          profileError?.message ||
+          profileError?.details ||
+          'تعذّر العثور على حساب مرتبط بهذا المستخدم'
+        );
+
         setLoading(false);
         return;
       }
