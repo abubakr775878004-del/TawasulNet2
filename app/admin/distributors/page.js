@@ -372,6 +372,7 @@ export default function DistributorsPage() {
 
   // =====================================================
   // تحديث حالة الموزع
+  // يستخدم RPC آمن للموافقة والرفض
   // =====================================================
 
   async function updateStatus(
@@ -383,18 +384,29 @@ export default function DistributorsPage() {
 
     try {
       const {
-        error: updateError
-      } = await supabase
-        .from('profiles')
-        .update({ status })
-        .eq('id', id);
+        error: rpcError
+      } = await supabase.rpc(
+        'review_distributor_request',
+        {
+          p_distributor_id: id,
+          p_action:
+            status === 'approved'
+              ? 'approve'
+              : 'reject'
+        }
+      );
 
-      if (updateError) {
-        throw updateError;
+      if (rpcError) {
+        throw rpcError;
       }
 
       await loadList();
     } catch (err) {
+      console.error(
+        'Review distributor error:',
+        err
+      );
+
       setError(
         'تعذّر تنفيذ الإجراء: ' +
         (err?.message ||
