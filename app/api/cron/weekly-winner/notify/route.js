@@ -4,31 +4,34 @@ import { createClient } from '@supabase/supabase-js';
 import {
   buildWeeklyWinnerMessage,
   sendTelegramMessage,
-} from '@/lib/telegram';
+} from '../../../../../lib/telegram';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 function isAuthorized(req) {
-  const secret = process.env.CRON_SECRET?.trim();
+  const secret =
+    process.env.CRON_SECRET?.trim();
 
   if (!secret) {
-    console.error('CRON_SECRET غير موجود');
+    console.error(
+      'CRON_SECRET غير موجود'
+    );
     return false;
   }
 
   const authorization =
     req.headers.get('authorization') || '';
 
-  return authorization === `Bearer ${secret}`;
+  return authorization ===
+    `Bearer ${secret}`;
 }
 
 export async function GET(req) {
   try {
-    // ============================================================
-    // حماية Cron
-    // ============================================================
-
+    // ==========================================
+    // التحقق من Vercel Cron
+    // ==========================================
     if (!isAuthorized(req)) {
       return NextResponse.json(
         {
@@ -39,17 +42,19 @@ export async function GET(req) {
       );
     }
 
-    // ============================================================
-    // Supabase Service Role
-    // ============================================================
-
+    // ==========================================
+    // بيانات Supabase
+    // ==========================================
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 
     const serviceRoleKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (
+      !supabaseUrl ||
+      !serviceRoleKey
+    ) {
       return NextResponse.json(
         {
           success: false,
@@ -71,10 +76,9 @@ export async function GET(req) {
       }
     );
 
-    // ============================================================
-    // تحديد الجمعة الحالية حسب توقيت اليمن
-    // ============================================================
-
+    // ==========================================
+    // الوقت الحالي بتوقيت اليمن
+    // ==========================================
     const localNow = new Date(
       new Date().toLocaleString(
         'en-US',
@@ -86,6 +90,7 @@ export async function GET(req) {
 
     const day = localNow.getDay();
 
+    // الجمعة = 5
     if (day !== 5) {
       return NextResponse.json(
         {
@@ -97,38 +102,49 @@ export async function GET(req) {
       );
     }
 
-    const year = localNow.getFullYear();
+    // ==========================================
+    // استخراج تاريخ الجمعة
+    // ==========================================
+    const year =
+      localNow.getFullYear();
+
     const month =
-      String(localNow.getMonth() + 1).padStart(2, '0');
+      String(
+        localNow.getMonth() + 1
+      ).padStart(2, '0');
+
     const date =
-      String(localNow.getDate()).padStart(2, '0');
+      String(
+        localNow.getDate()
+      ).padStart(2, '0');
 
     const weekKey =
       `${year}-${month}-${date}`;
 
-    // ============================================================
-    // جلب نفس الفائزين المحفوظين
-    // ============================================================
-
-    const { data: winners, error } =
-      await supabase
-        .from('weekly_winners')
-        .select(`
-          id,
-          week_key,
-          rank,
-          card_id,
-          customer_name,
-          distributor_id,
-          distributor_name,
-          draw_at,
-          expires_at,
-          telegram_sent_at
-        `)
-        .eq('week_key', weekKey)
-        .order('rank', {
-          ascending: true,
-        });
+    // ==========================================
+    // جلب الفائزين المحفوظين
+    // ==========================================
+    const {
+      data: winners,
+      error,
+    } = await supabase
+      .from('weekly_winners')
+      .select(`
+        id,
+        week_key,
+        rank,
+        card_id,
+        customer_name,
+        distributor_id,
+        distributor_name,
+        draw_at,
+        expires_at,
+        telegram_sent_at
+      `)
+      .eq('week_key', weekKey)
+      .order('rank', {
+        ascending: true,
+      });
 
     if (error) {
       console.error(
@@ -145,27 +161,29 @@ export async function GET(req) {
       );
     }
 
-    // ============================================================
-    // يجب أن يكون لدينا 3 فائزين بالضبط
-    // ============================================================
-
-    if (!winners || winners.length !== 3) {
+    // ==========================================
+    // يجب أن يكون هناك 3 فائزين بالضبط
+    // ==========================================
+    if (
+      !winners ||
+      winners.length !== 3
+    ) {
       return NextResponse.json(
         {
           success: false,
           error:
             'لم يتم العثور على ثلاثة فائزين محفوظين لهذا الأسبوع',
           week_key: weekKey,
-          winner_count: winners?.length || 0,
+          winner_count:
+            winners?.length || 0,
         },
         { status: 409 }
       );
     }
 
-    // ============================================================
-    // منع إرسال Telegram مرتين
-    // ============================================================
-
+    // ==========================================
+    // منع إرسال الرسالة أكثر من مرة
+    // ==========================================
     const alreadySent =
       winners.every(
         (winner) =>
@@ -185,33 +203,37 @@ export async function GET(req) {
       );
     }
 
-    // ============================================================
-    // إنشاء الرسالة من نفس الفائزين المحفوظين
-    // ============================================================
-
+    // ==========================================
+    // إنشاء نفس رسالة الفائزين المحفوظين
+    // ==========================================
     const message =
-      buildWeeklyWinnerMessage(winners);
+      buildWeeklyWinnerMessage(
+        winners
+      );
 
-    // ============================================================
-    // الإرسال إلى نفس Telegram Bot + نفس Chat
-    // ============================================================
-
+    // ==========================================
+    // إرسال إلى نفس بوت تيليجرام
+    // المستخدم الخاص بطلب الكروت
+    // ==========================================
     const telegramResult =
-      await sendTelegramMessage(message);
+      await sendTelegramMessage(
+        message
+      );
 
-    // ============================================================
+    const sentAt =
+      new Date().toISOString();
+
+    // ==========================================
     // تسجيل وقت الإرسال
-    // ============================================================
-
-    const sentAt = new Date().toISOString();
-
-    const { error: updateError } =
-      await supabase
-        .from('weekly_winners')
-        .update({
-          telegram_sent_at: sentAt,
-        })
-        .eq('week_key', weekKey);
+    // ==========================================
+    const {
+      error: updateError,
+    } = await supabase
+      .from('weekly_winners')
+      .update({
+        telegram_sent_at: sentAt,
+      })
+      .eq('week_key', weekKey);
 
     if (updateError) {
       console.error(
@@ -245,7 +267,6 @@ export async function GET(req) {
       },
       { status: 200 }
     );
-
   } catch (error) {
     console.error(
       'Weekly winner notification error:',
