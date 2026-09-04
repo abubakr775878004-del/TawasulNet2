@@ -23,6 +23,14 @@ export default function SignupPage() {
     e.preventDefault();
     setError('');
 
+    const name = form.name.trim();
+    const email = form.email.trim();
+
+    if (!name) {
+      setError('يرجى إدخال الاسم الكامل');
+      return;
+    }
+
     if (form.password !== form.confirm) {
       setError('كلمتا المرور غير متطابقتين');
       return;
@@ -35,37 +43,51 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const { data, error: authError } = await supabase.auth.signUp({
-      email: form.email.trim(),
-      password: form.password,
+    try {
+      const { data, error: authError } =
+        await supabase.auth.signUp({
+          email,
+          password: form.password,
+          options: {
+            data: {
+              full_name: name,
+              name,
+              signup_type: 'distributor',
+            },
+          },
+        });
 
-      // البيانات التي سيقرأها handle_new_user()
-      options: {
-        data: {
-          full_name: form.name.trim(),
-          signup_type: 'distributor',
-        },
-      },
-    });
+      if (authError) {
+        setError(authError.message);
+        return;
+      }
 
-    if (authError) {
-      setError(authError.message);
+      if (!data?.user) {
+        setError('تعذر إنشاء الحساب. يرجى المحاولة مرة أخرى.');
+        return;
+      }
+
+      /*
+       * مهم:
+       * لا ننشئ profiles يدويًا هنا.
+       *
+       * Trigger:
+       * on_auth_user_created
+       *      ↓
+       * handle_new_user()
+       *
+       * ويجب أن ينشئ الحساب:
+       * role = distributor
+       * status = pending
+       */
+
+      setDone(true);
+    } catch (err) {
+      console.error('Distributor signup error:', err);
+      setError('حدث خطأ أثناء إنشاء الحساب. يرجى المحاولة مرة أخرى.');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    // لا ننشئ profiles يدويًا هنا.
-    // Trigger: handle_new_user() ينشئ الحساب تلقائيًا
-    // كـ distributor / pending.
-
-    if (!data?.user) {
-      setError('تعذر إنشاء الحساب. يرجى المحاولة مرة أخرى.');
-      setLoading(false);
-      return;
-    }
-
-    setDone(true);
-    setLoading(false);
   }
 
   return (
@@ -108,9 +130,8 @@ export default function SignupPage() {
         {done ? (
           <div className="form-card">
             <div className="pending-note">
-              ⏳ تم إرسال طلبك بنجاح. حسابك الآن بحالة "قيد المراجعة" حتى
-              يوافق عليه مدير الشبكة. سيصلك إشعار عند القبول ويمكنك حينها
-              تسجيل الدخول.
+              ⏳ تم إرسال طلبك بنجاح. حسابك الآن بحالة "قيد المراجعة"
+              حتى يوافق عليه مدير الشبكة.
             </div>
           </div>
         ) : (
@@ -137,7 +158,6 @@ export default function SignupPage() {
 
             <div className="field">
               <label>الاسم الكامل</label>
-
               <input
                 required
                 value={form.name}
@@ -149,7 +169,6 @@ export default function SignupPage() {
 
             <div className="field">
               <label>البريد الإلكتروني</label>
-
               <input
                 type="email"
                 required
@@ -162,7 +181,6 @@ export default function SignupPage() {
 
             <div className="field">
               <label>كلمة المرور</label>
-
               <input
                 type="password"
                 required
@@ -175,7 +193,6 @@ export default function SignupPage() {
 
             <div className="field">
               <label>تأكيد كلمة المرور</label>
-
               <input
                 type="password"
                 required
