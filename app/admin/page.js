@@ -20,6 +20,10 @@ export default function AdminPage() {
   const [salesByPackage, setSalesByPackage] = useState({});
   const [recentSales, setRecentSales] = useState([]);
 
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupMessage, setBackupMessage] = useState('');
+  const [backupError, setBackupError] = useState('');
+
   const formatNum = (num) => {
     const val = Math.round(Number(num) || 0);
 
@@ -192,6 +196,142 @@ export default function AdminPage() {
     }
   }
 
+  /*
+   * =========================================================
+   * النسخ الاحتياطي لقاعدة البيانات
+   * =========================================================
+   *
+   * نستعمل جلسة المدير الحالية لإرسال access token
+   * إلى API الموجود في:
+   *
+   * /api/admin/backup/database
+   *
+   * لا يتم وضع SUPABASE_SERVICE_ROLE_KEY في المتصفح.
+   */
+
+  async function handleDatabaseBackup() {
+    if (backupLoading) {
+      return;
+    }
+
+    setBackupLoading(true);
+    setBackupMessage('');
+    setBackupError('');
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        throw new Error(
+          'تعذر الحصول على جلسة تسجيل الدخول.'
+        );
+      }
+
+      if (!session?.access_token) {
+        throw new Error(
+          'انتهت جلسة المدير. يرجى تسجيل الدخول مرة أخرى.'
+        );
+      }
+
+      const response = await fetch(
+        '/api/admin/backup/database',
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          cache: 'no-store',
+        }
+      );
+
+      if (!response.ok) {
+        let errorMessage =
+          'حدث خطأ أثناء إنشاء النسخة الاحتياطية.';
+
+        try {
+          const errorData =
+            await response.json();
+
+          if (errorData?.error) {
+            errorMessage = errorData.error;
+          }
+        } catch {
+          // نتجاهل خطأ قراءة رسالة الخطأ
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      const blob = await response.blob();
+
+      if (!blob || blob.size === 0) {
+        throw new Error(
+          'تم إنشاء استجابة فارغة ولم يتم تنزيل النسخة الاحتياطية.'
+        );
+      }
+
+      /*
+       * نحاول أخذ اسم الملف الذي يرسله الخادم.
+       * وإذا لم يوجد نستخدم اسمًا افتراضيًا.
+       */
+
+      const contentDisposition =
+        response.headers.get(
+          'Content-Disposition'
+        );
+
+      let filename =
+        'tawasul-net-database-backup.json';
+
+      if (contentDisposition) {
+        const filenameMatch =
+          contentDisposition.match(
+            /filename="([^"]+)"/i
+          );
+
+        if (filenameMatch?.[1]) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      const downloadUrl =
+        window.URL.createObjectURL(blob);
+
+      const link =
+        document.createElement('a');
+
+      link.href = downloadUrl;
+      link.download = filename;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(
+        downloadUrl
+      );
+
+      setBackupMessage(
+        'تم إنشاء النسخة الاحتياطية وتنزيلها بنجاح.'
+      );
+    } catch (error) {
+      console.error(
+        'Database backup download error:',
+        error
+      );
+
+      setBackupError(
+        error?.message ||
+          'حدث خطأ أثناء إنشاء النسخة الاحتياطية.'
+      );
+    } finally {
+      setBackupLoading(false);
+    }
+  }
+
   useEffect(() => {
     if (profile) {
       loadData();
@@ -220,7 +360,16 @@ export default function AdminPage() {
             رأس الصفحة
         ====================================================== */}
 
-        <div className="topbar">
+        <div
+          className="topbar"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 15,
+            flexWrap: 'wrap',
+          }}
+        >
           <div>
             <h1>نظرة عامة والتقارير</h1>
 
@@ -228,7 +377,83 @@ export default function AdminPage() {
               مرحبًا بعودتك يا {profile.full_name}
             </div>
           </div>
+
+          {/* ===================================================
+              زر النسخ الاحتياطي
+          ==================================================== */}
+
+          <button
+            type="button"
+            onClick={handleDatabaseBackup}
+            disabled={backupLoading}
+            style={{
+              border: 'none',
+              borderRadius: 12,
+              padding: '12px 18px',
+              background: backupLoading
+                ? '#94A3B8'
+                : '#1E40AF',
+              color: '#FFFFFF',
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: backupLoading
+                ? 'not-allowed'
+                : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              boxShadow:
+                '0 6px 16px rgba(30, 64, 175, 0.18)',
+              transition:
+                'opacity 0.2s ease, transform 0.2s ease',
+              minWidth: 190,
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                fontSize: 17,
+                lineHeight: 1,
+              }}
+            >
+              {backupLoading ? '⏳' : '💾'}
+            </span>
+
+            <span>
+              {backupLoading
+                ? 'جاري إنشاء النسخة...'
+                : 'نسخ احتياطي لقاعدة البيانات'}
+            </span>
+          </button>
         </div>
+
+        {/* =====================================================
+            رسالة النسخ الاحتياطي
+        ====================================================== */}
+
+        {(backupMessage || backupError) && (
+          <div
+            style={{
+              marginBottom: 20,
+              padding: '12px 15px',
+              borderRadius: 10,
+              background: backupError
+                ? '#FEF2F2'
+                : '#ECFDF5',
+              border: backupError
+                ? '1px solid #FECACA'
+                : '1px solid #A7F3D0',
+              color: backupError
+                ? '#B91C1C'
+                : '#047857',
+              fontSize: 13,
+              fontWeight: 700,
+            }}
+          >
+            {backupError || backupMessage}
+          </div>
+        )}
 
         {/* =====================================================
             الإحصائيات الأساسية
