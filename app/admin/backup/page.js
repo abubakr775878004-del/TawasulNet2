@@ -12,7 +12,6 @@ export default function BackupPage() {
   const fileInputRef = useRef(null);
 
   const [loadingBackup, setLoadingBackup] = useState(false);
-  const [loadingRestore, setLoadingRestore] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [backupInfo, setBackupInfo] = useState(null);
@@ -26,24 +25,35 @@ export default function BackupPage() {
   }, []);
 
   async function checkAdmin() {
-    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      window.location.href = '/login';
-      return;
-    }
+      if (userError || !user) {
+        window.location.href = '/login';
+        return;
+      }
 
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('role, status')
-      .eq('id', user.id)
-      .single();
+      const {
+        data: profile,
+        error: profileError,
+      } = await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', user.id)
+        .maybeSingle();
 
-    if (
-      profileError ||
-      profile?.role !== 'admin' ||
-      profile?.status !== 'active'
-    ) {
+      if (
+        profileError ||
+        profile?.role !== 'admin' ||
+        profile?.status !== 'active'
+      ) {
+        window.location.href = '/';
+      }
+    } catch (err) {
+      console.error('Backup page admin check failed:', err);
       window.location.href = '/';
     }
   }
@@ -59,7 +69,9 @@ export default function BackupPage() {
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        throw new Error('انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.');
+        throw new Error(
+          'انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.'
+        );
       }
 
       const response = await fetch('/api/admin/backup/database', {
@@ -67,10 +79,12 @@ export default function BackupPage() {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
         },
+        cache: 'no-store',
       });
 
       if (!response.ok) {
-        let errorMessage = 'حدث خطأ أثناء إنشاء النسخة الاحتياطية.';
+        let errorMessage =
+          'حدث خطأ أثناء إنشاء النسخة الاحتياطية.';
 
         try {
           const data = await response.json();
@@ -114,10 +128,13 @@ export default function BackupPage() {
 
       window.URL.revokeObjectURL(url);
 
-      setMessage('تم إنشاء النسخة الاحتياطية وتحميلها بنجاح.');
+      setMessage(
+        'تم إنشاء النسخة الاحتياطية وتحميلها بنجاح.'
+      );
     } catch (err) {
       setError(
-        err?.message || 'حدث خطأ غير متوقع أثناء إنشاء النسخة الاحتياطية.'
+        err?.message ||
+          'حدث خطأ غير متوقع أثناء إنشاء النسخة الاحتياطية.'
       );
     } finally {
       setLoadingBackup(false);
@@ -138,7 +155,9 @@ export default function BackupPage() {
     }
 
     if (!file.name.toLowerCase().endsWith('.json')) {
-      setError('يرجى اختيار ملف النسخة الاحتياطية بصيغة JSON.');
+      setError(
+        'يرجى اختيار ملف النسخة الاحتياطية بصيغة JSON.'
+      );
       return;
     }
 
@@ -148,6 +167,19 @@ export default function BackupPage() {
 
       if (!data || typeof data !== 'object') {
         throw new Error('ملف النسخة الاحتياطية غير صالح.');
+      }
+
+      /*
+       * نتحقق أن الملف يبدو كنسخة احتياطية صادرة
+       * من نظامنا، بدل قبول أي JSON عشوائي.
+       */
+      if (
+        data.backup_type &&
+        data.backup_type !== 'tawasul_net_database_data'
+      ) {
+        throw new Error(
+          'نوع ملف النسخة الاحتياطية غير متوافق مع نظام شبكة تواصل.'
+        );
       }
 
       setSelectedFile(file);
@@ -161,14 +193,18 @@ export default function BackupPage() {
 
         tables:
           data.tables && typeof data.tables === 'object'
-            ? Object.entries(data.tables).map(([name, value]) => ({
-                name,
-                count: Array.isArray(value)
-                  ? value.length
-                  : Array.isArray(value?.data)
-                    ? value.data.length
-                    : 0,
-              }))
+            ? Object.entries(data.tables).map(
+                ([name, value]) => ({
+                  name,
+                  count: Array.isArray(value)
+                    ? value.length
+                    : Array.isArray(value?.rows)
+                      ? value.rows.length
+                      : Array.isArray(value?.data)
+                        ? value.data.length
+                        : 0,
+                })
+              )
             : [],
       });
     } catch (err) {
@@ -179,84 +215,21 @@ export default function BackupPage() {
     }
   }
 
-  async function restoreBackup() {
-    if (!selectedFile) {
-      setError('يرجى اختيار ملف النسخة الاحتياطية أولًا.');
-      return;
-    }
-
-    if (!confirmed) {
-      setError('يجب تأكيد أنك تريد استعادة هذه النسخة.');
-      return;
-    }
-
-    const confirmedByUser = window.confirm(
-      'هل أنت متأكد من استعادة هذه النسخة؟\n\n' +
-        'سيتم تحديث السجلات الموجودة عند تطابقها، ' +
-        'وإضافة السجلات غير الموجودة فقط، دون حذف البيانات الحالية.'
-    );
-
-    if (!confirmedByUser) {
-      return;
-    }
-
-    setLoadingRestore(true);
+  /*
+   * لا يوجد حاليًا Route فعلي للاستعادة:
+   * /api/admin/backup/restore
+   *
+   * لذلك لا ننفذ أي طلب استعادة حتى يتم إنشاء
+   * API آمن ومراجعته بشكل منفصل.
+   *
+   * هذا يمنع الصفحة من إرسال ملف إلى مسار غير موجود
+   * أو من إنشاء أي عملية استعادة غير آمنة.
+   */
+  function restoreBackup() {
     setMessage('');
-    setError('');
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        throw new Error('انتهت جلسة تسجيل الدخول. يرجى تسجيل الدخول مرة أخرى.');
-      }
-
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-
-      const response = await fetch('/api/admin/backup/restore', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: formData,
-      });
-
-      let data = null;
-
-      try {
-        data = await response.json();
-      } catch {
-        // تجاهل إذا لم يكن الرد JSON
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error || 'حدث خطأ أثناء استعادة النسخة الاحتياطية.'
-        );
-      }
-
-      setMessage(
-        data?.message ||
-          'تمت استعادة النسخة الاحتياطية بنجاح. تم تحديث الموجود وإضافة المفقود دون حذف البيانات.'
-      );
-
-      setConfirmed(false);
-      setSelectedFile(null);
-      setBackupInfo(null);
-
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    } catch (err) {
-      setError(
-        err?.message || 'حدث خطأ غير متوقع أثناء استعادة النسخة الاحتياطية.'
-      );
-    } finally {
-      setLoadingRestore(false);
-    }
+    setError(
+      'استعادة النسخة الاحتياطية غير مفعلة حاليًا. سيتم تفعيلها بعد إنشاء Route آمن للاستعادة.'
+    );
   }
 
   return (
@@ -343,7 +316,8 @@ export default function BackupPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(320px, 1fr))',
             gap: '22px',
           }}
         >
@@ -401,11 +375,14 @@ export default function BackupPage() {
                 border: 0,
                 borderRadius: '12px',
                 padding: '13px 18px',
-                background: loadingBackup ? '#94a3b8' : '#1e40af',
+                background:
+                  loadingBackup ? '#94a3b8' : '#1e40af',
                 color: '#fff',
                 fontSize: '16px',
                 fontWeight: '700',
-                cursor: loadingBackup ? 'not-allowed' : 'pointer',
+                cursor: loadingBackup
+                  ? 'not-allowed'
+                  : 'pointer',
               }}
             >
               {loadingBackup
@@ -456,8 +433,8 @@ export default function BackupPage() {
                 marginBottom: '18px',
               }}
             >
-              اختر ملف النسخة الاحتياطية لاستعادة البيانات. لن يتم حذف البيانات
-              الحالية.
+              اختر ملف النسخة الاحتياطية لمراجعته. لن يتم تنفيذ أي استعادة
+              من هذه الصفحة حاليًا.
             </p>
 
             <input
@@ -544,15 +521,17 @@ export default function BackupPage() {
                 <input
                   type="checkbox"
                   checked={confirmed}
-                  onChange={(event) => setConfirmed(event.target.checked)}
+                  onChange={(event) =>
+                    setConfirmed(event.target.checked)
+                  }
                   style={{
                     marginTop: '5px',
                   }}
                 />
 
                 <span>
-                  أؤكد أنني أريد استعادة هذه النسخة. سيتم تحديث السجلات المطابقة
-                  وإضافة السجلات غير الموجودة فقط، ولن يتم تنفيذ حذف شامل للبيانات.
+                  أؤكد أنني أريد استعادة هذه النسخة. سيتم تنفيذ الاستعادة
+                  فقط بعد تفعيل API آمن ومخصص لها.
                 </span>
               </label>
             )}
@@ -560,28 +539,26 @@ export default function BackupPage() {
             <button
               type="button"
               onClick={restoreBackup}
-              disabled={!selectedFile || !confirmed || loadingRestore}
+              disabled={!selectedFile || !confirmed}
               style={{
                 width: '100%',
                 border: 0,
                 borderRadius: '12px',
                 padding: '13px 18px',
                 background:
-                  !selectedFile || !confirmed || loadingRestore
+                  !selectedFile || !confirmed
                     ? '#cbd5e1'
                     : '#15803d',
                 color: '#fff',
                 fontSize: '16px',
                 fontWeight: '700',
                 cursor:
-                  !selectedFile || !confirmed || loadingRestore
+                  !selectedFile || !confirmed
                     ? 'not-allowed'
                     : 'pointer',
               }}
             >
-              {loadingRestore
-                ? 'جاري الاستعادة...'
-                : 'استعادة النسخة الاحتياطية'}
+              استعادة النسخة الاحتياطية
             </button>
           </section>
         </div>
@@ -598,9 +575,9 @@ export default function BackupPage() {
             lineHeight: 1.8,
           }}
         >
-          <strong>تنبيه مهم:</strong> الاستعادة مصممة لتحديث البيانات الموجودة عند
-          تطابقها وإضافة البيانات غير الموجودة فقط. لا تستخدم هذه الصفحة لحذف
-          قاعدة البيانات أو إعادة ضبطها بالكامل.
+          <strong>تنبيه مهم:</strong> النسخ الاحتياطي يعمل من خلال API محمي
+          على الخادم. لا يتم وضع مفتاح Service Role داخل المتصفح، ولا يتم
+          تنفيذ أي استعادة أو حذف شامل للبيانات من هذه الصفحة حاليًا.
         </div>
       </div>
     </div>
