@@ -40,7 +40,7 @@ async function loadAll() {
 setLoadingData(true);
 
 try {
-  // حذف الكروت المباعة التي مر عليها أكثر من 24 ساعة
+  // الحفاظ على منطق المشروع الحالي كما هو
   const oneDayAgo = new Date();
   oneDayAgo.setHours(oneDayAgo.getHours() - 24);
 
@@ -59,7 +59,6 @@ try {
       .select('*')
       .order('created_at', { ascending: true }),
 
-    // الحفاظ على نفس النظام الأصلي: آخر 200 كرت
     supabase
       .from('cards')
       .select('*, packages(name)')
@@ -166,12 +165,13 @@ if (!code || !packageId) {
 setAddingCard(true);
 
 try {
-  const { error: insertError } = await supabase
-    .from('cards')
-    .insert({
-      code,
-      package_id: packageId,
-    });
+  const { error: insertError } =
+    await supabase
+      .from('cards')
+      .insert({
+        code,
+        package_id: packageId,
+      });
 
   if (insertError) {
     console.error(insertError);
@@ -373,31 +373,90 @@ return null;
 
 return (
 <div className="cards-page">
-<style jsx>{`
-.cards-page {
-min-height: 100vh;
-background: #f4f7f6;
-color: #111827;
-direction: rtl;
-width: 100%;
-overflow-x: hidden;
-}
+<style jsx global>{`
+/*
+* =========================================================
+* الهيكل الرئيسي للوحة المدير
+* =========================================================
+*
+* Sidebar:
+* - ثابت على يمين الشاشة في الكمبيوتر
+* - لا يتحرك مع المحتوى
+* - يأخذ كامل ارتفاع الشاشة
+*
+* Main:
+* - يبدأ إلى يسار القائمة
+* - لا يصعد فوق القائمة
+* - لا يدخل خلفها
+*/
 
-    /*
-     * مساحة المحتوى على الكمبيوتر:
-     * القائمة الجانبية في المشروع بعرض 270px تقريبًا،
-     * لذلك نترك لها مساحة ثابتة حتى لا يظهر المحتوى
-     * وكأنه موضوع خلف القائمة أو في رأس الصفحة.
-     */
-    .main {
+    .cards-page {
       min-height: 100vh;
-      padding: 28px;
-      margin-right: 270px;
+      width: 100%;
+      background: #f4f7f6;
+      color: #111827;
+      direction: rtl;
+      overflow-x: hidden;
       box-sizing: border-box;
-      width: calc(100% - 270px);
     }
 
+    /*
+     * القائمة الجانبية على الكمبيوتر
+     */
+    .cards-page .sidebar {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      left: auto !important;
+      bottom: 0 !important;
+
+      width: 270px !important;
+      height: 100vh !important;
+
+      z-index: 1000 !important;
+
+      display: flex !important;
+      flex-direction: column !important;
+
+      box-sizing: border-box !important;
+      overflow-y: auto !important;
+      overflow-x: hidden !important;
+    }
+
+    /*
+     * المحتوى الرئيسي
+     *
+     * 270px هي المساحة المحجوزة للقائمة الجانبية.
+     */
+    .cards-page .main {
+      min-height: 100vh;
+      width: calc(100% - 270px);
+      margin-right: 270px;
+
+      padding: 28px;
+      box-sizing: border-box;
+
+      overflow-x: hidden;
+    }
+
+    /*
+     * الحاوية الداخلية للمحتوى
+     * حتى لا تتمدد العناصر بشكل غير مريح على الشاشات الكبيرة.
+     */
+    .cards-page .main > * {
+      max-width: 100%;
+    }
+
+    /* =========================================================
+       رأس الصفحة
+       ========================================================= */
+
     .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+
       margin-bottom: 22px;
     }
 
@@ -406,18 +465,26 @@ overflow-x: hidden;
       font-size: 27px;
       font-weight: 900;
       color: #111827;
+      line-height: 1.3;
     }
 
     .page-header p {
       margin: 0;
       color: #64748b;
       font-size: 14px;
+      line-height: 1.7;
     }
 
-    /* الإحصائيات */
+    /* =========================================================
+       الإحصائيات
+       ========================================================= */
+
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(
+        4,
+        minmax(0, 1fr)
+      );
       gap: 14px;
       margin-bottom: 20px;
     }
@@ -428,7 +495,8 @@ overflow-x: hidden;
       border: 1px solid #e5e7eb;
       border-radius: 16px;
       padding: 17px;
-      box-shadow: 0 5px 18px rgba(15, 23, 42, 0.04);
+      box-shadow:
+        0 5px 18px rgba(15, 23, 42, 0.04);
       box-sizing: border-box;
     }
 
@@ -449,36 +517,47 @@ overflow-x: hidden;
       margin-top: 8px;
       font-size: 25px;
       font-weight: 900;
+      line-height: 1.1;
     }
 
     .stat-icon {
       width: 38px;
       height: 38px;
       flex-shrink: 0;
+
       display: flex;
       align-items: center;
       justify-content: center;
+
       background: #f1f5f9;
       border-radius: 11px;
       font-size: 17px;
     }
 
-    /* البطاقات العامة */
+    /* =========================================================
+       البطاقات العامة
+       ========================================================= */
+
     .panel {
+      width: 100%;
+      box-sizing: border-box;
+
       background: #fff;
       border: 1px solid #e5e7eb;
       border-radius: 17px;
+
       padding: 20px;
       margin-bottom: 18px;
-      box-shadow: 0 5px 18px rgba(15, 23, 42, 0.035);
-      box-sizing: border-box;
-      width: 100%;
+
+      box-shadow:
+        0 5px 18px rgba(15, 23, 42, 0.035);
     }
 
     .panel-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
+
       gap: 12px;
       margin-bottom: 16px;
     }
@@ -494,10 +573,17 @@ overflow-x: hidden;
       font-size: 12px;
     }
 
-    /* النماذج */
+    /* =========================================================
+       النماذج
+       ========================================================= */
+
     .form-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 190px auto;
+      grid-template-columns:
+        minmax(0, 1fr)
+        190px
+        auto;
+
       gap: 12px;
       align-items: end;
     }
@@ -509,6 +595,7 @@ overflow-x: hidden;
     .field label {
       display: block;
       margin-bottom: 7px;
+
       color: #475569;
       font-size: 12px;
       font-weight: 800;
@@ -519,11 +606,14 @@ overflow-x: hidden;
     .textarea {
       width: 100%;
       box-sizing: border-box;
+
       border: 1px solid #dbe2ea;
       background: #fff;
       color: #111827;
+
       border-radius: 11px;
       outline: none;
+
       font-size: 14px;
       transition: 0.2s;
     }
@@ -537,6 +627,7 @@ overflow-x: hidden;
     .textarea {
       min-height: 125px;
       padding: 12px;
+
       resize: vertical;
       line-height: 1.8;
     }
@@ -545,7 +636,9 @@ overflow-x: hidden;
     .select:focus,
     .textarea:focus {
       border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      box-shadow:
+        0 0 0 3px
+          rgba(37, 99, 235, 0.1);
     }
 
     .mono {
@@ -556,19 +649,25 @@ overflow-x: hidden;
         Monaco,
         Consolas,
         monospace;
+
       direction: ltr;
       text-align: left;
     }
 
     .btn-primary {
       height: 44px;
+
       border: 0;
       border-radius: 11px;
+
       padding: 0 22px;
+
       background: #2563eb;
       color: white;
+
       font-weight: 900;
       cursor: pointer;
+
       white-space: nowrap;
       transition: 0.2s;
     }
@@ -582,11 +681,15 @@ overflow-x: hidden;
       cursor: not-allowed;
     }
 
-    /* الرسائل */
+    /* =========================================================
+       الرسائل
+       ========================================================= */
+
     .note {
       border-radius: 11px;
       padding: 11px 13px;
       margin-bottom: 14px;
+
       font-size: 13px;
       font-weight: 800;
     }
@@ -603,17 +706,25 @@ overflow-x: hidden;
       color: #047857;
     }
 
-    /* الفلاتر */
+    /* =========================================================
+       الفلاتر
+       ========================================================= */
+
     .filter-box {
       background: #f8fafc;
       border: 1px solid #e2e8f0;
+
       border-radius: 14px;
       padding: 14px;
     }
 
     .filters {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 190px auto;
+      grid-template-columns:
+        minmax(0, 1fr)
+        190px
+        auto;
+
       gap: 10px;
       align-items: end;
     }
@@ -625,6 +736,7 @@ overflow-x: hidden;
     .filter-control label {
       display: block;
       margin-bottom: 6px;
+
       color: #64748b;
       font-size: 11px;
       font-weight: 900;
@@ -634,9 +746,12 @@ overflow-x: hidden;
     .filter-control input {
       width: 100%;
       height: 40px;
+
       box-sizing: border-box;
+
       border: 1px solid #dbe2ea;
       border-radius: 9px;
+
       background: white;
       padding: 0 10px;
     }
@@ -644,16 +759,22 @@ overflow-x: hidden;
     .clear-btn {
       height: 40px;
       padding: 0 16px;
+
       border: 0;
       border-radius: 9px;
+
       background: #e2e8f0;
       color: #334155;
+
       font-weight: 800;
       cursor: pointer;
       white-space: nowrap;
     }
 
-    /* الجدول */
+    /* =========================================================
+       الجدول
+       ========================================================= */
+
     .table-wrap {
       width: 100%;
       overflow-x: auto;
@@ -669,17 +790,23 @@ overflow-x: hidden;
     th {
       background: #f8fafc;
       color: #64748b;
+
       font-size: 11px;
       font-weight: 900;
+
       padding: 13px 10px;
+
       border-bottom: 1px solid #e2e8f0;
+
       text-align: right;
       white-space: nowrap;
     }
 
     td {
       padding: 13px 10px;
+
       border-bottom: 1px solid #f1f5f9;
+
       font-size: 13px;
       vertical-align: middle;
     }
@@ -696,21 +823,30 @@ overflow-x: hidden;
         Monaco,
         Consolas,
         monospace;
+
       font-weight: 800;
       direction: ltr;
       text-align: right;
+
       white-space: nowrap;
     }
 
-    /* الحالات */
+    /* =========================================================
+       الحالات
+       ========================================================= */
+
     .status-pill {
       display: inline-flex;
       align-items: center;
+
       gap: 5px;
+
       border-radius: 999px;
       padding: 5px 9px;
+
       font-size: 11px;
       font-weight: 900;
+
       white-space: nowrap;
     }
 
@@ -729,16 +865,23 @@ overflow-x: hidden;
       color: #b91c1c;
     }
 
-    /* الحذف */
+    /* =========================================================
+       الحذف
+       ========================================================= */
+
     .delete-btn {
       height: 34px;
       padding: 0 12px;
+
       border: 0;
       border-radius: 9px;
+
       background: #fee2e2;
       color: #dc2626;
+
       font-size: 12px;
       font-weight: 900;
+
       cursor: pointer;
       white-space: nowrap;
     }
@@ -756,10 +899,13 @@ overflow-x: hidden;
       display: flex;
       justify-content: space-between;
       align-items: center;
+
       gap: 12px;
       margin-top: 15px;
       padding: 13px;
+
       border-radius: 12px;
+
       background: #fff1f2;
       border: 1px solid #fecdd3;
     }
@@ -773,16 +919,23 @@ overflow-x: hidden;
     .bulk-delete-btn {
       border: 0;
       border-radius: 9px;
+
       background: #dc2626;
       color: white;
+
       padding: 9px 15px;
+
       font-size: 12px;
       font-weight: 900;
+
       cursor: pointer;
       white-space: nowrap;
     }
 
-    /* نسخة الهاتف */
+    /* =========================================================
+       نسخة الهاتف
+       ========================================================= */
+
     .mobile-list {
       display: none;
     }
@@ -790,8 +943,10 @@ overflow-x: hidden;
     .mobile-card {
       border: 1px solid #e5e7eb;
       border-radius: 14px;
+
       padding: 14px;
       margin-bottom: 10px;
+
       background: #fff;
     }
 
@@ -799,6 +954,7 @@ overflow-x: hidden;
       display: flex;
       justify-content: space-between;
       align-items: center;
+
       gap: 10px;
       margin-bottom: 12px;
     }
@@ -811,16 +967,20 @@ overflow-x: hidden;
         Monaco,
         Consolas,
         monospace;
+
       direction: ltr;
       text-align: left;
+
       font-size: 14px;
       font-weight: 900;
+
       overflow-wrap: anywhere;
     }
 
     .mobile-info {
       display: grid;
       grid-template-columns: 1fr 1fr;
+
       gap: 9px;
       margin-bottom: 13px;
     }
@@ -828,66 +988,116 @@ overflow-x: hidden;
     .mobile-info-item {
       background: #f8fafc;
       border-radius: 9px;
+
       padding: 9px;
       min-width: 0;
     }
 
     .mobile-info-label {
       display: block;
+
       color: #94a3b8;
       font-size: 10px;
+
       margin-bottom: 3px;
     }
 
     .mobile-info-value {
       font-size: 12px;
       font-weight: 900;
+
       overflow-wrap: anywhere;
     }
 
     .mobile-delete {
       width: 100%;
       height: 38px;
+
       border: 0;
       border-radius: 9px;
+
       background: #fee2e2;
       color: #dc2626;
+
       font-weight: 900;
       cursor: pointer;
     }
 
     .empty-state {
       padding: 40px 15px;
+
       text-align: center;
       color: #94a3b8;
+
       font-size: 13px;
     }
 
-    /*
-     * الشاشات المتوسطة:
-     * نحافظ على مساحة القائمة الجانبية ونقلل الحواف.
-     */
+    /* =========================================================
+       الشاشات المتوسطة
+       ========================================================= */
+
     @media (max-width: 1100px) {
-      .main {
+      .cards-page .main {
         padding: 22px;
       }
 
       .stats-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+      }
+
+      .form-grid {
+        grid-template-columns:
+          minmax(0, 1fr)
+          180px
+          auto;
       }
     }
 
-    /*
-     * الهاتف:
-     * Sidebar يصبح قائمة منزلقة من اليمين،
-     * لذلك نلغي مساحة الـ270px التي كانت مخصصة له
-     * على الكمبيوتر.
-     */
+    /* =========================================================
+       الهاتف
+       ========================================================= */
+
     @media (max-width: 768px) {
-      .main {
-        padding: 15px;
-        margin-right: 0;
+      /*
+       * Sidebar هنا تتم إدارته بواسطة
+       * components/Sidebar.js
+       *
+       * لا نضع له margin أو مساحة ثابتة.
+       */
+
+      .cards-page .sidebar {
+        width: 270px !important;
+        height: 100vh !important;
+
+        right: 0 !important;
+        left: auto !important;
+
+        top: 0 !important;
+        bottom: 0 !important;
+
+        transform: translateX(100%);
+        transition:
+          transform
+          0.3s
+          cubic-bezier(0.4, 0, 0.2, 1);
+
+        z-index: 999 !important;
+      }
+
+      .cards-page .sidebar.open {
+        transform: translateX(0) !important;
+      }
+
+      /*
+       * المحتوى على الهاتف يأخذ العرض كاملًا.
+       */
+      .cards-page .main {
         width: 100%;
+        margin-right: 0;
+
+        padding: 15px;
+        box-sizing: border-box;
       }
 
       .page-header {
@@ -904,7 +1114,9 @@ overflow-x: hidden;
       }
 
       .stats-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns:
+          repeat(2, minmax(0, 1fr));
+
         gap: 9px;
       }
 
@@ -959,12 +1171,16 @@ overflow-x: hidden;
         width: 100%;
       }
 
-      /* إخفاء الجدول على الهاتف */
+      /*
+       * الجدول مخفي على الهاتف
+       */
       .table-wrap {
         display: none;
       }
 
-      /* إظهار الكروت بشكل مناسب للهاتف */
+      /*
+       * عرض الكروت كقائمة مناسبة للهاتف
+       */
       .mobile-list {
         display: block;
       }
@@ -980,7 +1196,7 @@ overflow-x: hidden;
     }
 
     @media (max-width: 420px) {
-      .main {
+      .cards-page .main {
         padding: 11px;
       }
 
@@ -1006,7 +1222,7 @@ overflow-x: hidden;
     }
   `}</style>
 
-  {/* القائمة الجانبية للمشروع */}
+  {/* القائمة الجانبية الرسمية للمدير */}
   <Sidebar
     role="admin"
     active="/admin/cards"
@@ -1015,12 +1231,14 @@ overflow-x: hidden;
 
   <main className="main">
     <header className="page-header">
-      <h1>المخزون والكروت</h1>
+      <div>
+        <h1>المخزون والكروت</h1>
 
-      <p>
-        إدارة الكروت وإضافة الكروت ومراجعة المخزون
-        وحذف الكروت غير الصحيحة.
-      </p>
+        <p>
+          إدارة الكروت وإضافة الكروت ومراجعة المخزون
+          وحذف الكروت غير الصحيحة.
+        </p>
+      </div>
     </header>
 
     {/* الإحصائيات */}
