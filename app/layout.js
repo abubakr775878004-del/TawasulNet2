@@ -10,12 +10,20 @@ export default function RootLayout({ children }) {
     <html lang="ar" dir="rtl">
       <head>
         {/* مقتطف رمز Google AdSense لإثبات ملكية الموقع */}
-        <script 
-          async 
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9528800147930991" 
-          crossOrigin="anonymous">
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9528800147930991"
+          crossOrigin="anonymous"
+        >
         </script>
+
+        {/* وسم HilltopAds لإثبات ملكية الموقع */}
+        <meta
+          name="d29e1f3f068753f17b09549ea8d0fb98764c163a"
+          content="d29e1f3f068753f17b09549ea8d0fb98764c163a"
+        />
       </head>
+
       <body>
         {children}
       </body>
