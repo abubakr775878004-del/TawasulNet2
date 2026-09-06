@@ -1,411 +1,281 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useEffect, useRef } from 'react';
 
 /*
+ * =========================================================
+ * نظام الإعلانات المركزي — شبكة تواصل
+ * =========================================================
+ *
+ * مزود الإعلان:
+ * HilltopAds
+ *
+ * نوع المنطقة:
+ * MultiTag 300x250
+ *
+ * يستخدم في:
+ * - لوحة المدير
+ * - لوحة الموزع
+ *
+ * لا توجد أي صلاحيات خاصة داخل هذا الملف.
+ * هذا الملف لا يعدل قاعدة البيانات ولا RLS.
+ * =========================================================
+ */
 
-* =========================================================
-* نظام الإعلانات المركزي — شبكة تواصل
-* =========================================================
-* 
-* يعتمد على جدول:
-* public.ads
-* 
-* الحقول المستخدمة:
-* - title
-* - image_url
-* - link_url
-* - placement
-* - active
-* - created_at
-* 
-* أماكن الإعلانات:
-* - admin
-* - distributor
-* 
-* لا توجد أي صلاحيات خاصة داخل هذا الملف.
-* القراءة تتم من خلال Supabase RLS الحالية.
-  */
+/*
+ * =========================================================
+ * HilltopAds
+ * =========================================================
+ */
 
-function AdContent({
-ad,
-compact = false,
-title = 'المساحة الإعلانية',
-subtitle = '',
-}) {
-if (!ad) {
-return (
-<div
-className="panel"
-style={{
-margin: 0,
-padding: compact ? '14px 18px' : 18,
-}}
->
-<div
-className="panel-head"
-style={{
-marginBottom: compact ? 0 : 12,
-}}
->
-<h3>{title}</h3>
+const HILLTOP_AD_SRC =
+  '//quarrelsomebitter.com/b_XqVrsed.G/ly0HY/W_ca/de/mm9JuFZvUQl/kMPgTQcPz/OKTEEp3pMFjKkLtCN/zkM/5qMQTNcDzhM/wv';
 
-      {subtitle && (
-        <span className="muted">
-          {subtitle}
-        </span>
-      )}
-    </div>
+function HilltopAd({ compact = false }) {
+  const containerRef = useRef(null);
 
-    <div
-      style={{
-        border: '1.5px dashed var(--line)',
-        borderRadius: 16,
-        padding: compact ? 18 : 26,
-        textAlign: 'center',
-        background: 'var(--surface-2)',
-      }}
-    >
-      <div
-        style={{
-          fontSize: compact ? 18 : 24,
-          marginBottom: 6,
-        }}
-      >
-        📺
-      </div>
+  useEffect(() => {
+    const container = containerRef.current;
 
-      <div
-        style={{
-          fontWeight: 800,
-          fontSize: 14,
-          marginBottom: 5,
-        }}
-      >
-        مساحة إعلانية
-      </div>
-
-      <div
-        style={{
-          fontSize: 12,
-          color: 'var(--ink-soft)',
-          lineHeight: 1.8,
-        }}
-      >
-        سيتم عرض الإعلان هنا عند توفر إعلان نشط.
-      </div>
-    </div>
-  </div>
-);
-
-}
-
-const content = (
-<div
-style={{
-position: 'relative',
-overflow: 'hidden',
-borderRadius: 16,
-border: '1px solid var(--line)',
-background: 'var(--surface-2)',
-}}
->
-{ad.image_url && (
-<img
-src={ad.image_url}
-alt={ad.title || 'إعلان'}
-style={{
-display: 'block',
-width: '100%',
-maxHeight: compact ? 180 : 320,
-objectFit: 'cover',
-}}
-loading="lazy"
-onError={(event) => {
-event.currentTarget.style.display =
-'none';
-}}
-/>
-)}
-
-  <div
-    style={{
-      padding: compact ? '12px 14px' : '14px 16px',
-      background: 'var(--surface)',
-    }}
-  >
-    <div
-      style={{
-        fontSize: 14,
-        fontWeight: 900,
-        color: 'var(--ink)',
-        marginBottom: ad.image_url ? 4 : 0,
-      }}
-    >
-      {ad.title || 'إعلان'}
-    </div>
-
-    {ad.image_url && (
-      <div
-        style={{
-          fontSize: 11.5,
-          color: 'var(--ink-soft)',
-        }}
-      >
-        إعلان مدعوم
-      </div>
-    )}
-  </div>
-</div>
-
-);
-
-if (ad.link_url) {
-return (
-<a
-href={ad.link_url}
-target="_blank"
-rel="noopener noreferrer sponsored"
-aria-label={ad.title || 'فتح الإعلان'}
-style={{
-display: 'block',
-color: 'inherit',
-textDecoration: 'none',
-}}
->
-{content}
-</a>
-);
-}
-
-return content;
-}
-
-function useActiveAd(placement) {
-const [ad, setAd] = useState(null);
-const [loading, setLoading] = useState(true);
-
-useEffect(() => {
-let mounted = true;
-
-async function loadAd() {
-  setLoading(true);
-
-  try {
-    const { data, error } = await supabase
-      .from('ads')
-      .select(
-        'id, title, image_url, link_url, placement, active, created_at'
-      )
-      .eq('placement', placement)
-      .eq('active', true)
-      .order('created_at', {
-        ascending: false,
-      })
-      .limit(1);
-
-    if (error) {
-      console.error(
-        `Error loading ${placement} ad:`,
-        error
-      );
-
-      if (mounted) {
-        setAd(null);
-      }
-
+    if (!container) {
       return;
     }
 
-    if (mounted) {
-      setAd(
-        Array.isArray(data) &&
-          data.length > 0
-          ? data[0]
-          : null
-      );
+    /*
+     * منع تحميل نفس الإعلان أكثر من مرة داخل
+     * نفس المكوّن.
+     */
+    if (container.dataset.loaded === 'true') {
+      return;
     }
-  } catch (error) {
-    console.error(
-      `Unexpected ${placement} ad error:`,
-      error
-    );
 
-    if (mounted) {
-      setAd(null);
-    }
-  } finally {
-    if (mounted) {
-      setLoading(false);
-    }
-  }
-}
+    container.dataset.loaded = 'true';
 
-loadAd();
+    const script = document.createElement('script');
 
-return () => {
-  mounted = false;
-};
+    script.settings = {};
 
-}, [placement]);
+    script.src = HILLTOP_AD_SRC;
+    script.async = true;
+    script.referrerPolicy = 'no-referrer-when-downgrade';
 
-return {
-ad,
-loading,
-};
+    container.appendChild(script);
+
+    return () => {
+      /*
+       * إزالة السكربت عند مغادرة الصفحة.
+       * هذا يمنع تراكم نسخ متعددة منه أثناء
+       * التنقل داخل التطبيق.
+       */
+      try {
+        script.remove();
+      } catch {
+        // تجاهل خطأ الإزالة إن لم يعد العنصر موجودًا.
+      }
+
+      if (container) {
+        container.dataset.loaded = 'false';
+        container.innerHTML = '';
+      }
+    };
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      aria-label="إعلان"
+      style={{
+        width: '100%',
+        minHeight: compact ? 100 : 250,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        borderRadius: 16,
+        background: 'var(--surface-2)',
+      }}
+    />
+  );
 }
 
 /*
+ * =========================================================
+ * مكوّن محتوى الإعلان
+ * =========================================================
+ */
 
-* =========================================================
-* إعلان المدير
-* =========================================================
-* 
-* يستخدم:
-* placement = 'admin'
-  */
-  export function AdSlotAdmin() {
-  const { ad, loading } =
-  useActiveAd('admin');
-
-return (
-<div
-className="panel"
-style={{
-marginTop: 20,
-}}
->
-<div
-className="panel-head"
-style={{
-display: 'flex',
-justifyContent: 'space-between',
-alignItems: 'center',
-gap: 10,
-flexWrap: 'wrap',
-}}
->
-<h3>المساحة الإعلانية</h3>
-
-    <span className="muted">
-      خاصة بالمدير
-    </span>
-  </div>
-
-  {loading ? (
+function AdContent({
+  compact = false,
+  title = 'المساحة الإعلانية',
+  subtitle = '',
+}) {
+  return (
     <div
+      className="panel"
       style={{
-        border: '1.5px dashed var(--line)',
-        borderRadius: 16,
-        padding: 26,
-        textAlign: 'center',
-        background: 'var(--surface-2)',
-        color: 'var(--ink-soft)',
-        fontSize: 12.5,
+        margin: 0,
+        padding: compact ? '14px 18px' : 18,
       }}
     >
-      جاري تحميل الإعلان...
-    </div>
-  ) : (
-    <AdContent
-      ad={ad}
-      title="المساحة الإعلانية"
-      subtitle="خاصة بالمدير"
-    />
-  )}
-</div>
+      <div
+        className="panel-head"
+        style={{
+          marginBottom: compact ? 10 : 12,
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <h3>{title}</h3>
 
-);
+        {subtitle && (
+          <span className="muted">
+            {subtitle}
+          </span>
+        )}
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 300,
+          margin: '0 auto',
+        }}
+      >
+        <HilltopAd compact={compact} />
+      </div>
+    </div>
+  );
 }
 
 /*
+ * =========================================================
+ * إعلان المدير
+ * =========================================================
+ *
+ * يستخدم داخل:
+ * app/admin/page.js
+ *
+ * لا يحتاج إلى أي تعديل في صفحة المدير.
+ * =========================================================
+ */
 
-* =========================================================
-* إعلان الموزع
-* =========================================================
-* 
-* يستخدم:
-* placement = 'distributor'
-  */
-  export function AdSlotBar() {
-  const { ad, loading } =
-  useActiveAd('distributor');
+export function AdSlotAdmin() {
+  return (
+    <div
+      className="panel"
+      style={{
+        marginTop: 20,
+      }}
+    >
+      <div
+        className="panel-head"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}
+      >
+        <h3>المساحة الإعلانية</h3>
 
-return (
-<div
-className="panel"
-style={{
-padding: '14px 18px',
-marginBottom: 20,
-}}
->
-{loading ? (
-<div
-style={{
-minHeight: 60,
-display: 'flex',
-alignItems: 'center',
-justifyContent: 'center',
-color: 'var(--ink-soft)',
-fontSize: 12,
-}}
->
-جاري تحميل الإعلان...
-</div>
-) : ad ? (
-<AdContent
-ad={ad}
-compact
-title="المساحة الإعلانية"
-/>
-) : (
-<div
-style={{
-display: 'flex',
-alignItems: 'center',
-justifyContent: 'space-between',
-gap: 14,
-flexWrap: 'wrap',
-}}
->
-<div
-style={{
-display: 'flex',
-alignItems: 'center',
-gap: 10,
-}}
->
-<span
-style={{
-fontSize: 18,
-}}
->
-📺
-</span>
-
-        <span
-          style={{
-            fontSize: 12,
-            color: 'var(--ink-soft)',
-            fontWeight: 600,
-          }}
-        >
-          مساحة إعلانية
+        <span className="muted">
+          خاصة بالمدير
         </span>
       </div>
 
-      <span
+      <div
         style={{
-          fontSize: 11,
-          color: 'var(--ink-soft)',
+          width: '100%',
+          maxWidth: 300,
+          margin: '0 auto',
         }}
       >
-        لا يوجد إعلان نشط حاليًا
-      </span>
+        <HilltopAd />
+      </div>
     </div>
-  )}
-</div>
+  );
+}
 
-);
+/*
+ * =========================================================
+ * إعلان الموزع
+ * =========================================================
+ *
+ * يستخدم داخل:
+ * app/distributor/page.js
+ *
+ * لا يحتاج إلى أي تعديل في صفحة الموزع.
+ * =========================================================
+ */
+
+export function AdSlotBar() {
+  return (
+    <div
+      className="panel"
+      style={{
+        padding: '14px 18px',
+        marginBottom: 20,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+          flexWrap: 'wrap',
+          marginBottom: 10,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 18,
+            }}
+          >
+            📺
+          </span>
+
+          <span
+            style={{
+              fontSize: 12,
+              color: 'var(--ink-soft)',
+              fontWeight: 600,
+            }}
+          >
+            مساحة إعلانية
+          </span>
+        </div>
+
+        <span
+          style={{
+            fontSize: 11,
+            color: 'var(--ink-soft)',
+          }}
+        >
+          إعلان مدعوم
+        </span>
+      </div>
+
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 300,
+          margin: '0 auto',
+        }}
+      >
+        <HilltopAd compact />
+      </div>
+    </div>
+  );
 }
