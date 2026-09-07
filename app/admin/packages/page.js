@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Sidebar from '@/components/Sidebar';
-import { useProfile } from '@/lib/useProfile';
-import { supabase } from '@/lib/supabase';
+import Sidebar from '../../../components/Sidebar';
+import { useProfile } from '../../../lib/useProfile';
+import { supabase } from '../../../lib/supabase';
 
 export default function PackagesPage() {
   const { profile, loading: profileLoading } = useProfile('admin');
