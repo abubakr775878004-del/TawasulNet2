@@ -1,271 +1,135 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import Sidebar from '../../../components/Sidebar';
-import { useProfile } from '../../../lib/useProfile';
-import { supabase } from '../../../lib/supabase';
+import { useEffect, useMemo, useState } from 'react';
+import Sidebar from '@/components/Sidebar';
+import { useProfile } from '@/hooks/useProfile';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function PackagesPage() {
-  const { profile, loading: profileLoading } = useProfile('admin');
+  const { profile, loading: profileLoading } = useProfile();
 
   const [packages, setPackages] = useState([]);
   const [mikrotikProfiles, setMikrotikProfiles] = useState([]);
   const [mappings, setMappings] = useState({});
 
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+
+  const [error, setError] = useState('');
+  const [packageMessage, setPackageMessage] = useState('');
+
+  const [busyId, setBusyId] = useState(null);
+
   const [loadingPackages, setLoadingPackages] = useState(true);
-  const [loadingProfiles, setLoadingProfiles] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
+  const [loadingMikrotik, setLoadingMikrotik] = useState(false);
+
   const [savingMapping, setSavingMapping] = useState(null);
 
-  const [connectionStatus, setConnectionStatus] = useState(null);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [connectionStatus, setConnectionStatus] =
+    useState('idle');
 
-  const [newPackageName, setNewPackageName] = useState('');
-  const [newPackagePrice, setNewPackagePrice] = useState('');
-  const [addingPackage, setAddingPackage] = useState(false);
+  const [mikrotikMessage, setMikrotikMessage] =
+    useState('');
 
-  const [selectedPackage, setSelectedPackage] = useState(null);
+  const [selectedPackageId, setSelectedPackageId] =
+    useState('');
 
-  const [quantity, setQuantity] = useState('10');
-  const [prefix, setPrefix] = useState('');
-  const [codeLength, setCodeLength] = useState('12');
+  const [cardQuantity, setCardQuantity] = useState(10);
+  const [startCode, setStartCode] = useState('77');
+  const [codeLength, setCodeLength] = useState(8);
 
-  const [previewCards, setPreviewCards] = useState([]);
-  const [previewing, setPreviewing] = useState(false);
   const [creatingCards, setCreatingCards] = useState(false);
-
   const [creationResult, setCreationResult] = useState(null);
+  const [previewCodes, setPreviewCodes] = useState([]);
 
   const isAdmin =
     profile?.role === 'admin' &&
     profile?.status === 'active';
 
-  const getAccessToken = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-      throw new Error('انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.');
-    }
-
-    return session.access_token;
-  }, []);
-
-  const apiRequest = useCallback(
-    async (url, options = {}) => {
-      const token = await getAccessToken();
-
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          ...(options.headers || {}),
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        cache: 'no-store',
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(
-          data?.error || 'حدث خطأ في الاتصال بالخادم.'
-        );
-      }
-
-      return data;
-    },
-    [getAccessToken]
+  const selectedPackage = useMemo(
+    () =>
+      packages.find(
+        (pkg) => pkg.id === selectedPackageId
+      ) || null,
+    [packages, selectedPackageId]
   );
 
-  const clearMessages = useCallback(() => {
-    setError('');
-    setSuccess('');
-  }, []);
+  /*
+   * =========================================================
+   * Supabase
+   * =========================================================
+   */
 
-  const loadPackages = useCallback(async () => {
+  async function loadPackages() {
     setLoadingPackages(true);
     setError('');
 
-    try {
-      const { data, error: packagesError } = await supabase
-        .from('packages')
-        .select('*, cards(id)')
-        .order('created_at', { ascending: false });
+    const {
+      data,
+      error: fetchError
+    } = await supabase
+      .from('packages')
+      .select('*, cards(id)')
+      .order('created_at', {
+        ascending: false
+      });
 
-      if (packagesError) {
-        throw packagesError;
-      }
-
-      const formatted = (data || []).map((pkg) => ({
-        ...pkg,
-        cardsCount: Array.isArray(pkg.cards)
-          ? pkg.cards.length
-          : 0,
-      }));
-
-      setPackages(formatted);
-
-      if (
-        selectedPackage &&
-        !formatted.some((pkg) => pkg.id === selectedPackage.id)
-      ) {
-        setSelectedPackage(null);
-        setPreviewCards([]);
-      }
-    } catch (err) {
-      console.error('loadPackages:', err);
+    if (fetchError) {
       setError(
-        err?.message ||
-          'تعذر تحميل الباقات من قاعدة البيانات.'
+        `تعذر تحميل الباقات: ${fetchError.message}`
       );
-    } finally {
+      setPackages([]);
       setLoadingPackages(false);
+      return;
     }
-  }, [selectedPackage]);
 
-  const loadMikrotikProfiles = useCallback(async () => {
-    setLoadingProfiles(true);
-    setError('');
-
-    try {
-      const data = await apiRequest(
-        '/api/mikrotik/user-manager?action=profiles'
-      );
-
-      const profiles =
-        Array.isArray(data?.profiles)
-          ? data.profiles
-          : Array.isArray(data)
-            ? data
-            : [];
-
-      setMikrotikProfiles(profiles);
-
-      if (data?.mappings && typeof data.mappings === 'object') {
-        setMappings(data.mappings);
-      } else if (data?.mapping && typeof data.mapping === 'object') {
-        setMappings(data.mapping);
-      }
-
-      setConnectionStatus({
-        connected: true,
-        message: 'تم الاتصال بنجاح مع User Manager',
-      });
-    } catch (err) {
-      console.error('loadMikrotikProfiles:', err);
-
-      setConnectionStatus({
-        connected: false,
-        message: err?.message || 'تعذر الاتصال بـ MikroTik',
-      });
-
-      setError(
-        err?.message ||
-          'تعذر جلب Profiles من MikroTik User Manager.'
-      );
-    } finally {
-      setLoadingProfiles(false);
-    }
-  }, [apiRequest]);
-
-  useEffect(() => {
-    if (!profileLoading && isAdmin) {
-      loadPackages();
-      loadMikrotikProfiles();
-    }
-  }, [
-    profileLoading,
-    isAdmin,
-    loadPackages,
-    loadMikrotikProfiles,
-  ]);
-
-  const testConnection = async () => {
-    clearMessages();
-    setTestingConnection(true);
-
-    try {
-      const data = await apiRequest(
-        '/api/mikrotik/user-manager?action=test'
-      );
-
-      setConnectionStatus({
-        connected: true,
-        message:
-          data?.message ||
-          'تم الاتصال بنجاح مع MikroTik User Manager.',
-      });
-
-      setSuccess('تم اختبار الاتصال بنجاح.');
-    } catch (err) {
-      console.error('testConnection:', err);
-
-      setConnectionStatus({
-        connected: false,
-        message: err?.message || 'فشل الاتصال.',
-      });
-
-      setError(
-        err?.message ||
-          'فشل اختبار الاتصال بـ MikroTik User Manager.'
-      );
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const refreshProfiles = async () => {
-    clearMessages();
-    await loadMikrotikProfiles();
-  };
-
-  const handleMappingChange = async (packageId, profileName) => {
-    clearMessages();
-
-    setMappings((current) => ({
-      ...current,
-      [packageId]: profileName,
+    const formatted = (data || []).map((pkg) => ({
+      ...pkg,
+      cardsCount: pkg.cards
+        ? pkg.cards.length
+        : 0
     }));
 
-    setSavingMapping(packageId);
+    setPackages(formatted);
 
-    try {
-      await apiRequest('/api/mikrotik/user-manager', {
-        method: 'POST',
-        body: JSON.stringify({
-          action: 'save-mapping',
-          packageId,
-          profileName,
-        }),
-      });
-
-      setSuccess('تم حفظ ربط الباقة بنجاح.');
-    } catch (err) {
-      console.error('save-mapping:', err);
-
-      setError(
-        err?.message ||
-          'تعذر حفظ ربط الباقة.'
+    if (
+      !selectedPackageId &&
+      formatted.length > 0
+    ) {
+      setSelectedPackageId(
+        formatted[0].id
       );
-
-      await loadMikrotikProfiles();
-    } finally {
-      setSavingMapping(null);
     }
-  };
 
-  const handleAddPackage = async (event) => {
+    /*
+     * إذا كانت الباقة المحددة حُذفت أو لم تعد موجودة،
+     * ننتقل تلقائيًا إلى أول باقة.
+     */
+    if (
+      selectedPackageId &&
+      !formatted.some(
+        (pkg) => pkg.id === selectedPackageId
+      )
+    ) {
+      setSelectedPackageId(
+        formatted[0]?.id || ''
+      );
+    }
+
+    setLoadingPackages(false);
+  }
+
+  async function addPackage(event) {
     event.preventDefault();
-    clearMessages();
 
-    const name = newPackageName.trim();
-    const numericPrice = Number(newPackagePrice);
+    setError('');
+    setPackageMessage('');
 
-    if (!name) {
-      setError('يرجى إدخال اسم الباقة.');
+    const packageName = name.trim();
+    const numericPrice = Number(price);
+
+    if (!packageName) {
+      setError('أدخل اسم الباقة.');
       return;
     }
 
@@ -273,2371 +137,1680 @@ export default function PackagesPage() {
       !Number.isFinite(numericPrice) ||
       numericPrice <= 0
     ) {
-      setError('يرجى إدخال سعر صحيح أكبر من صفر.');
+      setError('أدخل سعرًا صحيحًا.');
       return;
     }
 
-    setAddingPackage(true);
+    const {
+      data,
+      error: insertError
+    } = await supabase
+      .from('packages')
+      .insert({
+        name: packageName,
+        price: numericPrice
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+
+    const newPackage = {
+      ...data,
+      cardsCount: 0
+    };
+
+    setPackages((current) => [
+      newPackage,
+      ...current
+    ]);
+
+    setSelectedPackageId(data.id);
+
+    setName('');
+    setPrice('');
+
+    setPackageMessage(
+      'تمت إضافة الباقة بنجاح.'
+    );
+  }
+
+  async function deletePackage(id, packageName) {
+    if (
+      !window.confirm(
+        `سيتم حذف باقة "${packageName}" نهائيًا. لا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا. متابعة؟`
+      )
+    ) {
+      return;
+    }
+
+    setError('');
+    setPackageMessage('');
+    setBusyId(id);
+
+    const {
+      error: deleteError
+    } = await supabase
+      .from('packages')
+      .delete()
+      .eq('id', id);
+
+    setBusyId(null);
+
+    if (deleteError) {
+      setError(
+        'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا'
+      );
+      return;
+    }
+
+    setPackages((current) =>
+      current.filter(
+        (pkg) => pkg.id !== id
+      )
+    );
+
+    setMappings((current) => {
+      const next = {
+        ...current
+      };
+
+      delete next[id];
+
+      return next;
+    });
+
+    if (selectedPackageId === id) {
+      setSelectedPackageId('');
+    }
+
+    setPackageMessage(
+      'تم حذف الباقة بنجاح.'
+    );
+  }
+
+  /*
+   * =========================================================
+   * MikroTik API
+   * =========================================================
+   */
+
+  async function getAccessToken() {
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
+
+    if (
+      sessionError ||
+      !session?.access_token
+    ) {
+      throw new Error(
+        'انتهت جلسة المدير. يرجى تسجيل الدخول مرة أخرى.'
+      );
+    }
+
+    return session.access_token;
+  }
+
+  async function apiRequest(
+    url,
+    options = {}
+  ) {
+    const token =
+      await getAccessToken();
+
+    const response = await fetch(
+      url,
+      {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization:
+            `Bearer ${token}`,
+          'Content-Type':
+            'application/json'
+        },
+        cache: 'no-store'
+      }
+    );
+
+    const data =
+      await response
+        .json()
+        .catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+          'حدث خطأ في الاتصال بالخادم.'
+      );
+    }
+
+    return data;
+  }
+
+  async function loadMikrotikProfiles() {
+    setLoadingMikrotik(true);
+    setMikrotikMessage('');
 
     try {
-      const { data, error: insertError } = await supabase
-        .from('packages')
-        .insert({
-          name,
-          price: numericPrice,
-        })
-        .select()
-        .single();
+      const data =
+        await apiRequest(
+          '/api/mikrotik/user-manager?action=profiles'
+        );
 
-      if (insertError) {
-        throw insertError;
+      setMikrotikProfiles(
+        data?.profiles || []
+      );
+
+      const mappingObject = {};
+
+      for (
+        const mapping of
+          data?.mappings || []
+      ) {
+        mappingObject[
+          mapping.package_id
+        ] =
+          mapping.mikrotik_profile_name;
       }
 
-      setPackages((current) => [
-        {
-          ...data,
-          cardsCount: 0,
-        },
-        ...current,
-      ]);
+      setMappings(mappingObject);
 
-      setNewPackageName('');
-      setNewPackagePrice('');
+      setConnectionStatus(
+        'connected'
+      );
+    } catch (apiError) {
+      setConnectionStatus(
+        'error'
+      );
 
-      setSuccess('تمت إضافة الباقة بنجاح.');
-    } catch (err) {
-      console.error('add package:', err);
-
-      setError(
-        err?.message ||
-          'تعذر إضافة الباقة.'
+      setMikrotikMessage(
+        apiError?.message ||
+          'تعذر الاتصال بـ MikroTik.'
       );
     } finally {
-      setAddingPackage(false);
+      setLoadingMikrotik(false);
     }
-  };
+  }
 
-  const handleDeletePackage = async (id) => {
-    const packageToDelete = packages.find(
-      (pkg) => pkg.id === id
+  async function handleTestConnection() {
+    setConnectionStatus(
+      'testing'
     );
 
-    if (!packageToDelete) return;
+    setMikrotikMessage('');
 
-    if (
-      packageToDelete.cardsCount > 0
-    ) {
-      setError(
-        'لا يمكن حذف هذه الباقة لأنها مرتبطة بكروت موجودة.'
+    try {
+      const data =
+        await apiRequest(
+          '/api/mikrotik/user-manager?action=test'
+        );
+
+      setConnectionStatus(
+        'connected'
       );
+
+      setMikrotikMessage(
+        `تم الاتصال بنجاح — RouterOS ${
+          data?.version ||
+          'غير معروف'
+        }`
+      );
+
+      await loadMikrotikProfiles();
+    } catch (apiError) {
+      setConnectionStatus(
+        'error'
+      );
+
+      setMikrotikMessage(
+        apiError?.message ||
+          'فشل الاتصال بـ MikroTik.'
+      );
+    }
+  }
+
+  async function handleMappingChange(
+    packageId,
+    profileName
+  ) {
+    if (!profileName) {
       return;
     }
 
-    const confirmed = window.confirm(
-      `هل أنت متأكد من حذف الباقة "${packageToDelete.name}"؟`
-    );
-
-    if (!confirmed) return;
-
-    clearMessages();
+    setSavingMapping(packageId);
+    setMikrotikMessage('');
 
     try {
-      const { error: deleteError } = await supabase
-        .from('packages')
-        .delete()
-        .eq('id', id);
-
-      if (deleteError) {
-        throw deleteError;
-      }
-
-      setPackages((current) =>
-        current.filter((pkg) => pkg.id !== id)
+      await apiRequest(
+        '/api/mikrotik/user-manager',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action:
+              'save-mapping',
+            packageId,
+            profileName
+          })
+        }
       );
 
-      setMappings((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
+      setMappings((current) => ({
+        ...current,
+        [packageId]:
+          profileName
+      }));
 
-      if (selectedPackage?.id === id) {
-        setSelectedPackage(null);
-        setPreviewCards([]);
-        setCreationResult(null);
+      setMikrotikMessage(
+        'تم حفظ ربط الباقة مع Profile بنجاح.'
+      );
+    } catch (apiError) {
+      setMikrotikMessage(
+        apiError?.message ||
+          'تعذر حفظ الربط.'
+      );
+    } finally {
+      setSavingMapping(null);
+    }
+  }
+
+  /*
+   * =========================================================
+   * إنشاء ومعاينة أكواد الكروت
+   * =========================================================
+   */
+
+  function generatePreviewCodes(
+    quantity,
+    prefix,
+    length
+  ) {
+    const result = new Set();
+
+    const remaining =
+      length - prefix.length;
+
+    if (remaining < 1) {
+      return [];
+    }
+
+    const maximum =
+      10 ** remaining;
+
+    if (quantity > maximum) {
+      return [];
+    }
+
+    while (
+      result.size < quantity
+    ) {
+      let suffix = '';
+
+      for (
+        let i = 0;
+        i < remaining;
+        i += 1
+      ) {
+        suffix += Math.floor(
+          Math.random() * 10
+        );
       }
 
-      setSuccess('تم حذف الباقة بنجاح.');
-    } catch (err) {
-      console.error('delete package:', err);
-
-      setError(
-        err?.message ||
-          'تعذر حذف الباقة.'
+      result.add(
+        `${prefix}${suffix}`
       );
     }
-  };
 
-  const validation = useMemo(() => {
-    const parsedQuantity = Number(quantity);
-    const parsedLength = Number(codeLength);
+    return [
+      ...result
+    ];
+  }
+
+  function validateCardInputs() {
+    const quantity =
+      Number(cardQuantity);
+
+    const length =
+      Number(codeLength);
+
+    const prefix =
+      String(startCode).trim();
 
     if (
-      !Number.isInteger(parsedQuantity) ||
-      parsedQuantity < 1 ||
-      parsedQuantity > 1000
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > 1000
     ) {
-      return {
-        valid: false,
-        message: 'الكمية يجب أن تكون بين 1 و1000.',
-      };
-    }
-
-    if (
-      !Number.isInteger(parsedLength) ||
-      parsedLength < 4 ||
-      parsedLength > 32
-    ) {
-      return {
-        valid: false,
-        message: 'طول الكود يجب أن يكون بين 4 و32.',
-      };
-    }
-
-    if (prefix && !/^\d+$/.test(prefix)) {
-      return {
-        valid: false,
-        message: 'البادئة يجب أن تحتوي على أرقام فقط.',
-      };
-    }
-
-    if (prefix.length >= parsedLength) {
       return {
         valid: false,
         message:
-          'طول البادئة يجب أن يكون أقل من طول الكود.',
+          'الكمية يجب أن تكون بين 1 و1000.'
       };
     }
 
     if (
-      selectedPackage &&
-      !mappings[selectedPackage.id]
+      !/^[0-9]+$/.test(prefix)
     ) {
       return {
         valid: false,
         message:
-          'يجب ربط الباقة أولًا مع Profile من MikroTik User Manager.',
+          'البداية يجب أن تحتوي على أرقام فقط.'
+      };
+    }
+
+    if (
+      !Number.isInteger(length) ||
+      length < 4 ||
+      length > 32
+    ) {
+      return {
+        valid: false,
+        message:
+          'طول الكرت يجب أن يكون بين 4 و32.'
+      };
+    }
+
+    if (
+      prefix.length >= length
+    ) {
+      return {
+        valid: false,
+        message:
+          'طول البداية يجب أن يكون أقل من طول الكرت.'
       };
     }
 
     return {
       valid: true,
-      quantity: parsedQuantity,
-      length: parsedLength,
+      quantity,
+      length,
+      prefix
     };
-  }, [
-    quantity,
-    codeLength,
-    prefix,
-    selectedPackage,
-    mappings,
-  ]);
+  }
 
-  const generateRandomDigits = (length) => {
-    let result = '';
-
-    while (result.length < length) {
-      result += Math.floor(
-        Math.random() * 1000000000
-      ).toString();
-    }
-
-    return result.slice(0, length);
-  };
-
-  const generatePreview = () => {
-    clearMessages();
+  function handlePreview() {
     setCreationResult(null);
 
-    if (!selectedPackage) {
-      setError('يرجى اختيار الباقة أولًا.');
-      return;
-    }
+    const validation =
+      validateCardInputs();
 
     if (!validation.valid) {
-      setError(validation.message);
-      return;
-    }
-
-    setPreviewing(true);
-
-    try {
-      const result = [];
-      const used = new Set();
-
-      const suffixLength =
-        validation.length - prefix.length;
-
-      while (
-        result.length < validation.quantity
-      ) {
-        const code =
-          prefix +
-          generateRandomDigits(suffixLength);
-
-        if (used.has(code)) continue;
-
-        used.add(code);
-        result.push(code);
-      }
-
-      setPreviewCards(result);
-      setSuccess(
-        `تم إنشاء معاينة لـ ${result.length} كرت.`
-      );
-    } finally {
-      setPreviewing(false);
-    }
-  };
-
-  const handleCreateCards = async () => {
-    clearMessages();
-    setCreationResult(null);
-
-    if (!selectedPackage) {
-      setError('يرجى اختيار الباقة أولًا.');
-      return;
-    }
-
-    if (!validation.valid) {
-      setError(validation.message);
-      return;
-    }
-
-    if (!mappings[selectedPackage.id]) {
-      setError(
-        'لا يمكن إنشاء الكروت قبل ربط الباقة مع Profile فعلي من MikroTik.'
+      setMikrotikMessage(
+        validation.message
       );
       return;
     }
 
-    const confirmed = window.confirm(
-      `سيتم إنشاء ${validation.quantity} كرت للباقة "${selectedPackage.name}" باستخدام Profile "${mappings[selectedPackage.id]}". هل تريد المتابعة؟`
+    if (!selectedPackage) {
+      setMikrotikMessage(
+        'اختر الباقة أولًا.'
+      );
+      return;
+    }
+
+    if (
+      !mappings[
+        selectedPackage.id
+      ]
+    ) {
+      setMikrotikMessage(
+        'يجب ربط الباقة بـ Profile من User Manager أولًا.'
+      );
+      return;
+    }
+
+    const codes =
+      generatePreviewCodes(
+        validation.quantity,
+        validation.prefix,
+        validation.length
+      );
+
+    if (!codes.length) {
+      setMikrotikMessage(
+        'تعذر إنشاء المعاينة.'
+      );
+      return;
+    }
+
+    setPreviewCodes(codes);
+
+    setMikrotikMessage(
+      `تم توليد معاينة ${codes.length} كرت.`
     );
+  }
 
-    if (!confirmed) return;
+  async function handleCreateCards() {
+    setCreationResult(null);
+
+    if (!selectedPackage) {
+      setMikrotikMessage(
+        'اختر الباقة أولًا.'
+      );
+      return;
+    }
+
+    const profileName =
+      mappings[
+        selectedPackage.id
+      ];
+
+    if (!profileName) {
+      setMikrotikMessage(
+        'يجب ربط الباقة بـ Profile من User Manager أولًا.'
+      );
+      return;
+    }
+
+    const validation =
+      validateCardInputs();
+
+    if (!validation.valid) {
+      setMikrotikMessage(
+        validation.message
+      );
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `سيتم إنشاء ${validation.quantity} كرت فعليًا في MikroTik User Manager وربطها بالـ Profile:\n\n${profileName}\n\nثم حفظ الكروت الناجحة في نظام تواصل.\n\nهل تريد المتابعة؟`
+      );
+
+    if (!confirmed) {
+      return;
+    }
 
     setCreatingCards(true);
+    setMikrotikMessage(
+      'جارٍ إنشاء الكروت فعليًا...'
+    );
+    setCreationResult(null);
 
     try {
-      const data = await apiRequest(
-        '/api/mikrotik/user-manager',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'create-cards',
-            packageId: selectedPackage.id,
-            quantity: validation.quantity,
-            prefix,
-            codeLength: validation.length,
-          }),
-        }
-      );
+      const data =
+        await apiRequest(
+          '/api/mikrotik/user-manager',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              action:
+                'create-cards',
+
+              packageId:
+                selectedPackage.id,
+
+              quantity:
+                validation.quantity,
+
+              prefix:
+                validation.prefix,
+
+              codeLength:
+                validation.length
+            })
+          }
+        );
 
       setCreationResult(data);
 
-      const createdCount =
-        Number(data?.createdCount) ||
-        Number(data?.successCount) ||
-        (Array.isArray(data?.cards)
-          ? data.cards.length
-          : 0);
+      setPreviewCodes([]);
 
-      const failedCount =
-        Number(data?.failedCount) ||
-        (Array.isArray(data?.failed)
-          ? data.failed.length
-          : 0);
-
-      if (createdCount > 0) {
-        setSuccess(
-          `تم إنشاء ${createdCount} كرت بنجاح${
-            failedCount > 0
-              ? `، وفشل إنشاء ${failedCount} كرت.`
-              : '.'
-          }`
-        );
-      } else {
-        setSuccess(
-          data?.message ||
-            'تم تنفيذ عملية إنشاء الكروت.'
-        );
-      }
-
-      setPreviewCards([]);
+      setMikrotikMessage(
+        `تم إنشاء ${data?.savedInSupabase || 0} كرت بنجاح من أصل ${data?.requested || validation.quantity}.`
+      );
 
       await loadPackages();
-    } catch (err) {
-      console.error('create-cards:', err);
-
-      setError(
-        err?.message ||
-          'تعذر إنشاء الكروت.'
+    } catch (apiError) {
+      setMikrotikMessage(
+        apiError?.message ||
+          'حدث خطأ أثناء إنشاء الكروت.'
       );
     } finally {
       setCreatingCards(false);
     }
-  };
+  }
 
-  const selectPackage = (pkg) => {
-    clearMessages();
-    setSelectedPackage(pkg);
-    setPreviewCards([]);
-    setCreationResult(null);
-  };
-
-  const formatPrice = (value) => {
-    const number = Number(value);
-
-    if (!Number.isFinite(number)) {
-      return '0';
+  useEffect(() => {
+    if (
+      !profileLoading &&
+      isAdmin
+    ) {
+      loadPackages();
+      loadMikrotikProfiles();
     }
+  }, [
+    profileLoading,
+    isAdmin
+  ]);
 
-    return new Intl.NumberFormat('ar-YE').format(
-      number
-    );
-  };
-
-  const profileName = profile?.full_name || 'المدير';
+  /*
+   * =========================================================
+   * Loading / Authorization
+   * =========================================================
+   */
 
   if (profileLoading) {
+    return null;
+  }
+
+  if (!isAdmin) {
     return (
       <div
         dir="rtl"
-        style={styles.loadingPage}
+        className="min-h-screen flex items-center justify-center"
       >
-        <div style={styles.loadingCard}>
-          <div style={styles.spinner} />
-          <p style={{ margin: 0 }}>
-            جاري التحقق من صلاحيات المدير...
+        <div className="text-center">
+          <h2 className="text-xl font-bold">
+            غير مصرح
+          </h2>
+
+          <p className="mt-2 text-gray-500">
+            هذه الصفحة متاحة للمدير فقط.
           </p>
         </div>
       </div>
     );
   }
 
-  if (!isAdmin) {
-    return null;
-  }
+  /*
+   * =========================================================
+   * UI
+   * =========================================================
+   */
 
   return (
     <div
+      className="app"
       dir="rtl"
-      style={styles.page}
     >
-      <Sidebar />
+      <Sidebar
+        role="admin"
+        active="/admin/packages"
+        name={profile?.full_name}
+      />
 
-      <main style={styles.main}>
-        <div style={styles.container}>
-          {/* Header */}
-          <header style={styles.header}>
-            <div>
-              <div style={styles.breadcrumb}>
-                لوحة التحكم
-                <span style={styles.breadcrumbArrow}>
-                  /
-                </span>
-                الباقات والكروت
-              </div>
+      <div className="main">
+        <h1>الباقات</h1>
 
-              <h1 style={styles.title}>
-                إدارة الباقات والكروت
-              </h1>
+        <p
+          className="greet"
+          style={{
+            marginBottom: 20
+          }}
+        >
+          إدارة باقات الكروت وأسعارها
+        </p>
 
-              <p style={styles.subtitle}>
-                إدارة باقات تواصل وربطها يدويًا مع
-                Profiles الموجودة فعليًا في MikroTik
-                User Manager.
-              </p>
-            </div>
+        {/* =====================================================
+            إضافة باقة
+        ====================================================== */}
 
-            <div style={styles.headerUser}>
-              <div style={styles.avatar}>
-                {profileName.charAt(0)}
-              </div>
+        <div className="panel">
+          <div className="panel-head">
+            <h3>
+              إضافة باقة جديدة
+            </h3>
+          </div>
 
-              <div>
-                <div style={styles.userLabel}>
-                  المدير
-                </div>
-
-                <div style={styles.userName}>
-                  {profileName}
-                </div>
-              </div>
-            </div>
-          </header>
-
-          {/* Alerts */}
           {error && (
-            <div style={styles.alertError}>
-              <div style={styles.alertIcon}>!</div>
-
-              <div style={{ flex: 1 }}>
-                <strong>حدث خطأ</strong>
-                <div style={styles.alertText}>
-                  {error}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setError('')}
-                style={styles.alertClose}
-              >
-                ×
-              </button>
+            <div className="error-note">
+              {error}
             </div>
           )}
 
-          {success && (
-            <div style={styles.alertSuccess}>
-              <div style={styles.successIcon}>
-                ✓
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <strong>تم بنجاح</strong>
-                <div style={styles.alertText}>
-                  {success}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSuccess('')}
-                style={styles.alertClose}
-              >
-                ×
-              </button>
+          {packageMessage && (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: '10px 12px',
+                borderRadius: 8,
+                background:
+                  '#eff6ff',
+                color:
+                  '#1d4ed8',
+                fontSize: 14
+              }}
+            >
+              {packageMessage}
             </div>
           )}
 
-          {/* Top statistics */}
-          <section style={styles.statsGrid}>
-            <div style={styles.statCard}>
-              <div
-                style={{
-                  ...styles.statIcon,
-                  background:
-                    'rgba(37, 99, 235, 0.10)',
-                  color: '#2563eb',
-                }}
-              >
-                ◈
-              </div>
+          <form
+            onSubmit={addPackage}
+            style={{
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'flex-end'
+            }}
+          >
+            <div
+              className="field"
+              style={{
+                marginBottom: 0,
+                flex: 1,
+                minWidth: 180
+              }}
+            >
+              <label>
+                اسم الباقة
+              </label>
 
-              <div>
-                <div style={styles.statLabel}>
-                  إجمالي الباقات
-                </div>
-
-                <div style={styles.statValue}>
-                  {packages.length}
-                </div>
-              </div>
+              <input
+                value={name}
+                onChange={(event) =>
+                  setName(
+                    event.target.value
+                  )
+                }
+                placeholder="مثال: باقة 20GB"
+              />
             </div>
 
-            <div style={styles.statCard}>
-              <div
-                style={{
-                  ...styles.statIcon,
-                  background:
-                    'rgba(16, 185, 129, 0.10)',
-                  color: '#059669',
-                }}
-              >
-                ▣
-              </div>
+            <div
+              className="field"
+              style={{
+                marginBottom: 0,
+                width: 140
+              }}
+            >
+              <label>
+                السعر (لكل كرت)
+              </label>
 
-              <div>
-                <div style={styles.statLabel}>
-                  إجمالي الكروت
-                </div>
-
-                <div style={styles.statValue}>
-                  {packages.reduce(
-                    (sum, pkg) =>
-                      sum +
-                      (Number(pkg.cardsCount) || 0),
-                    0
-                  )}
-                </div>
-              </div>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={price}
+                onChange={(event) =>
+                  setPrice(
+                    event.target.value
+                  )
+                }
+                placeholder="25"
+              />
             </div>
 
-            <div style={styles.statCard}>
-              <div
+            <button
+              className="btn-primary"
+              style={{
+                width: 140
+              }}
+              type="submit"
+            >
+              إضافة
+            </button>
+          </form>
+        </div>
+
+        {/* =====================================================
+            الباقات الحالية
+            نفس شكل البطاقات الأفقية الأصلي
+        ====================================================== */}
+
+        <div className="panel">
+          <div className="panel-head">
+            <h3>
+              الباقات الحالية
+            </h3>
+
+            <span className="muted">
+              {packages.length}
+            </span>
+          </div>
+
+          {loadingPackages ? (
+            <div
+              style={{
+                padding: '35px 0',
+                textAlign: 'center',
+                color: '#6b7280'
+              }}
+            >
+              جارٍ تحميل الباقات...
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(300px, 1fr))',
+                gap: 14,
+                marginTop: 10
+              }}
+            >
+              {packages.map((p) => {
+                const mapping =
+                  mappings[p.id];
+
+                const isSelected =
+                  selectedPackageId ===
+                  p.id;
+
+                return (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
+                      minHeight: 82,
+                      padding:
+                        '14px 18px',
+                      background:
+                        '#ffffff',
+                      border:
+                        isSelected
+                          ? '1px solid #2563eb'
+                          : '1px solid #e5e7eb',
+                      borderRadius: 10,
+                      boxSizing:
+                        'border-box',
+                      boxShadow:
+                        isSelected
+                          ? '0 0 0 2px rgba(37,99,235,.08)'
+                          : 'none'
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems:
+                          'center',
+                        justifyContent:
+                          'space-between',
+                        gap: 16
+                      }}
+                    >
+                      <div
+                        style={{
+                          minWidth: 0,
+                          flex: 1
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 800,
+                            color:
+                              '#111827',
+                            marginBottom: 6,
+                            whiteSpace:
+                              'nowrap',
+                            overflow:
+                              'hidden',
+                            textOverflow:
+                              'ellipsis'
+                          }}
+                        >
+                          {p.name}
+                        </div>
+
+                        <div
+                          style={{
+                            display:
+                              'flex',
+                            alignItems:
+                              'center',
+                            gap: 16,
+                            flexWrap:
+                              'wrap',
+                            fontSize: 14
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              color:
+                                '#374151'
+                            }}
+                          >
+                            {p.price} ريال
+                          </span>
+
+                          <span
+                            style={{
+                              fontWeight: 800,
+                              color:
+                                '#5B21B6'
+                            }}
+                          >
+                            {p.cardsCount}{' '}
+                            كرت
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn-sm"
+                        style={{
+                          backgroundColor:
+                            '#dc2626',
+                          color:
+                            '#ffffff',
+                          opacity:
+                            busyId ===
+                            p.id
+                              ? 0.6
+                              : 1,
+                          padding:
+                            '6px 14px',
+                          borderRadius:
+                            '6px',
+                          border:
+                            'none',
+                          flexShrink: 0,
+                          cursor:
+                            busyId ===
+                            p.id
+                              ? 'not-allowed'
+                              : 'pointer'
+                        }}
+                        disabled={
+                          busyId ===
+                          p.id
+                        }
+                        onClick={() =>
+                          deletePackage(
+                            p.id,
+                            p.name
+                          )
+                        }
+                      >
+                        {busyId ===
+                        p.id
+                          ? 'جارٍ...'
+                          : 'حذف'}
+                      </button>
+                    </div>
+
+                    {/* ربط الباقة بالـ MikroTik */}
+                    <div
+                      style={{
+                        borderTop:
+                          '1px solid #f1f5f9',
+                        paddingTop: 10
+                      }}
+                    >
+                      <div
+                        style={{
+                          display:
+                            'flex',
+                          alignItems:
+                            'center',
+                          justifyContent:
+                            'space-between',
+                          gap: 10,
+                          marginBottom: 7
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color:
+                              '#475569'
+                          }}
+                        >
+                          User Manager
+                        </span>
+
+                        {mapping ? (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 800,
+                              color:
+                                '#16a34a'
+                            }}
+                          >
+                            مربوط
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 800,
+                              color:
+                                '#dc2626'
+                            }}
+                          >
+                            غير مربوط
+                          </span>
+                        )}
+                      </div>
+
+                      <select
+                        value={
+                          mapping || ''
+                        }
+                        onChange={(
+                          event
+                        ) => {
+                          setSelectedPackageId(
+                            p.id
+                          );
+
+                          handleMappingChange(
+                            p.id,
+                            event.target
+                              .value
+                          );
+                        }}
+                        disabled={
+                          loadingMikrotik ||
+                          savingMapping ===
+                            p.id
+                        }
+                        style={{
+                          width: '100%',
+                          height: 40,
+                          border:
+                            '1px solid #d1d5db',
+                          borderRadius:
+                            7,
+                          padding:
+                            '0 10px',
+                          background:
+                            '#ffffff',
+                          color:
+                            '#111827',
+                          fontSize: 13
+                        }}
+                      >
+                        <option value="">
+                          اختر Profile من User Manager
+                        </option>
+
+                        {mikrotikProfiles.map(
+                          (
+                            mikrotikProfile
+                          ) => (
+                            <option
+                              key={
+                                mikrotikProfile.id ||
+                                mikrotikProfile.name
+                              }
+                              value={
+                                mikrotikProfile.name
+                              }
+                            >
+                              {
+                                mikrotikProfile.name
+                              }
+                            </option>
+                          )
+                        )}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {packages.length === 0 && (
+                <div
+                  style={{
+                    gridColumn:
+                      '1 / -1',
+                    padding:
+                      '35px 0',
+                    textAlign:
+                      'center',
+                    color:
+                      '#6b7280'
+                  }}
+                >
+                  لا توجد باقات حاليًا.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* =====================================================
+            MikroTik
+            يوضع تحت واجهة الباقات ولا يستبدلها
+        ====================================================== */}
+
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>
+                MikroTik User Manager
+              </h3>
+
+              <p
                 style={{
-                  ...styles.statIcon,
-                  background:
-                    'rgba(124, 58, 237, 0.10)',
-                  color: '#7c3aed',
+                  margin:
+                    '5px 0 0',
+                  color:
+                    '#6b7280',
+                  fontSize: 13
                 }}
               >
-                ⇄
-              </div>
-
-              <div>
-                <div style={styles.statLabel}>
-                  الباقات المرتبطة
-                </div>
-
-                <div style={styles.statValue}>
-                  {
-                    packages.filter(
-                      (pkg) => mappings[pkg.id]
-                    ).length
-                  }
-                </div>
-              </div>
+                إدارة Profiles وربطها بالباقات وإنشاء الكروت الفعلية.
+              </p>
             </div>
 
             <div
               style={{
-                ...styles.statCard,
+                display:
+                  'flex',
+                alignItems:
+                  'center',
+                gap: 10,
+                flexWrap:
+                  'wrap'
+              }}
+            >
+              <span
+                style={{
+                  padding:
+                    '5px 10px',
+                  borderRadius:
+                    999,
+                  fontSize: 12,
+                  fontWeight: 800,
+                  background:
+                    connectionStatus ===
+                    'connected'
+                      ? '#dcfce7'
+                      : connectionStatus ===
+                        'testing'
+                      ? '#fef3c7'
+                      : connectionStatus ===
+                        'error'
+                      ? '#fee2e2'
+                      : '#f3f4f6',
+                  color:
+                    connectionStatus ===
+                    'connected'
+                      ? '#15803d'
+                      : connectionStatus ===
+                        'testing'
+                      ? '#a16207'
+                      : connectionStatus ===
+                        'error'
+                      ? '#b91c1c'
+                      : '#6b7280'
+                }}
+              >
+                {connectionStatus ===
+                'connected'
+                  ? 'متصل'
+                  : connectionStatus ===
+                    'testing'
+                  ? 'جارٍ الاختبار'
+                  : connectionStatus ===
+                    'error'
+                  ? 'خطأ'
+                  : 'غير مختبر'}
+              </span>
+
+              <button
+                type="button"
+                onClick={
+                  handleTestConnection
+                }
+                disabled={
+                  connectionStatus ===
+                  'testing'
+                }
+                className="btn-primary"
+                style={{
+                  width: 'auto',
+                  minWidth: 130
+                }}
+              >
+                {connectionStatus ===
+                'testing'
+                  ? 'جارٍ الاختبار...'
+                  : 'اختبار الاتصال'}
+              </button>
+            </div>
+          </div>
+
+          {mikrotikMessage && (
+            <div
+              style={{
+                marginTop: 15,
+                padding: 12,
+                borderRadius: 8,
+                background:
+                  '#f8fafc',
                 border:
-                  connectionStatus?.connected
-                    ? '1px solid rgba(16,185,129,.25)'
-                    : '1px solid #e5e7eb',
+                  '1px solid #e2e8f0',
+                color:
+                  '#334155',
+                fontSize: 13
+              }}
+            >
+              {mikrotikMessage}
+            </div>
+          )}
+
+          <div
+            style={{
+              marginTop: 18
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                marginBottom: 10,
+                color:
+                  '#111827'
+              }}
+            >
+              Profiles الموجودة في User Manager
+            </div>
+
+            {loadingMikrotik ? (
+              <div
+                style={{
+                  padding:
+                    '25px 0',
+                  textAlign:
+                    'center',
+                  color:
+                    '#6b7280'
+                }}
+              >
+                جارٍ تحميل Profiles من User Manager...
+              </div>
+            ) : mikrotikProfiles.length ===
+              0 ? (
+              <div
+                style={{
+                  padding: 15,
+                  border:
+                    '1px solid #e5e7eb',
+                  borderRadius: 8,
+                  color:
+                    '#6b7280',
+                  fontSize: 13
+                }}
+              >
+                لا توجد Profiles أو لم يتم الاتصال بالراوتر.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display:
+                    'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: 10
+                }}
+              >
+                {mikrotikProfiles.map(
+                  (mikrotikProfile) => (
+                    <div
+                      key={
+                        mikrotikProfile.id ||
+                        mikrotikProfile.name
+                      }
+                      style={{
+                        border:
+                          '1px solid #e5e7eb',
+                        borderRadius: 8,
+                        padding: 12,
+                        background:
+                          '#ffffff'
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          color:
+                            '#111827',
+                          fontSize: 14
+                        }}
+                      >
+                        {
+                          mikrotikProfile.name
+                        }
+                      </div>
+
+                      {mikrotikProfile.price !==
+                        '0' && (
+                        <div
+                          style={{
+                            marginTop: 5,
+                            color:
+                              '#6b7280',
+                            fontSize: 12
+                          }}
+                        >
+                          السعر:{' '}
+                          {
+                            mikrotikProfile.price
+                          }
+                        </div>
+                      )}
+
+                      <div
+                        style={{
+                          marginTop: 3,
+                          color:
+                            '#6b7280',
+                          fontSize: 12
+                        }}
+                      >
+                        الصلاحية:{' '}
+                        {
+                          mikrotikProfile.validity
+                        }
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* =====================================================
+            إنشاء الكروت الفعلية
+        ====================================================== */}
+
+        <div className="panel">
+          <div className="panel-head">
+            <div>
+              <h3>
+                إنشاء كروت فعلية
+              </h3>
+
+              <p
+                style={{
+                  margin:
+                    '5px 0 0',
+                  color:
+                    '#6b7280',
+                  fontSize: 13
+                }}
+              >
+                سيتم إنشاء المستخدمين داخل MikroTik User Manager أولًا، ثم حفظ الكروت الناجحة في نظام تواصل.
+              </p>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display:
+                'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(180px, 1fr))',
+              gap: 12,
+              marginTop: 15
+            }}
+          >
+            <div className="field">
+              <label>
+                الباقة
+              </label>
+
+              <select
+                value={
+                  selectedPackageId
+                }
+                onChange={(
+                  event
+                ) => {
+                  setSelectedPackageId(
+                    event.target.value
+                  );
+
+                  setPreviewCodes(
+                    []
+                  );
+
+                  setCreationResult(
+                    null
+                  );
+                }}
+              >
+                <option value="">
+                  اختر الباقة
+                </option>
+
+                {packages.map(
+                  (pkg) => (
+                    <option
+                      key={
+                        pkg.id
+                      }
+                      value={
+                        pkg.id
+                      }
+                    >
+                      {pkg.name} — {pkg.price} ريال
+                    </option>
+                  )
+                )}
+              </select>
+            </div>
+
+            <div className="field">
+              <label>
+                عدد الكروت
+              </label>
+
+              <input
+                type="number"
+                min="1"
+                max="1000"
+                value={
+                  cardQuantity
+                }
+                onChange={(
+                  event
+                ) =>
+                  setCardQuantity(
+                    event.target.value
+                  )
+                }
+              />
+            </div>
+
+            <div className="field">
+              <label>
+                بداية الكود
+              </label>
+
+              <input
+                value={
+                  startCode
+                }
+                onChange={(
+                  event
+                ) =>
+                  setStartCode(
+                    event.target.value
+                  )
+                }
+                inputMode="numeric"
+                placeholder="77"
+              />
+            </div>
+
+            <div className="field">
+              <label>
+                طول الكرت
+              </label>
+
+              <input
+                type="number"
+                min="4"
+                max="32"
+                value={
+                  codeLength
+                }
+                onChange={(
+                  event
+                ) =>
+                  setCodeLength(
+                    event.target.value
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          <div
+            style={{
+              display:
+                'flex',
+              gap: 10,
+              flexWrap:
+                'wrap',
+              marginTop: 15
+            }}
+          >
+            <button
+              type="button"
+              onClick={
+                handlePreview
+              }
+              disabled={
+                creatingCards
+              }
+              className="btn-primary"
+              style={{
+                width: 'auto'
+              }}
+            >
+              معاينة الأكواد
+            </button>
+
+            <button
+              type="button"
+              onClick={
+                handleCreateCards
+              }
+              disabled={
+                creatingCards
+              }
+              style={{
+                width: 'auto',
+                minWidth: 170,
+                border: 'none',
+                borderRadius: 7,
+                padding:
+                  '9px 16px',
+                background:
+                  creatingCards
+                    ? '#9ca3af'
+                    : '#16a34a',
+                color:
+                  '#ffffff',
+                fontWeight: 800,
+                cursor:
+                  creatingCards
+                    ? 'not-allowed'
+                    : 'pointer'
+              }}
+            >
+              {creatingCards
+                ? 'جارٍ إنشاء الكروت...'
+                : 'إنشاء الكروت فعليًا'}
+            </button>
+          </div>
+
+          {previewCodes.length >
+            0 && (
+            <div
+              style={{
+                marginTop: 18
               }}
             >
               <div
                 style={{
-                  ...styles.statIcon,
-                  background:
-                    connectionStatus?.connected
-                      ? 'rgba(16,185,129,.10)'
-                      : 'rgba(107,114,128,.10)',
-                  color:
-                    connectionStatus?.connected
-                      ? '#059669'
-                      : '#6b7280',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  marginBottom: 8
                 }}
               >
-                ●
+                معاينة الأكواد
               </div>
 
-              <div style={{ flex: 1 }}>
-                <div style={styles.statLabel}>
-                  حالة MikroTik
+              <div
+                style={{
+                  display:
+                    'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fit, minmax(120px, 1fr))',
+                  gap: 7
+                }}
+              >
+                {previewCodes.map(
+                  (code) => (
+                    <div
+                      key={
+                        code
+                      }
+                      style={{
+                        padding:
+                          '8px 10px',
+                        border:
+                          '1px solid #e5e7eb',
+                        borderRadius:
+                          6,
+                        background:
+                          '#f8fafc',
+                        fontFamily:
+                          'monospace',
+                        textAlign:
+                          'center',
+                        fontSize: 13,
+                        fontWeight: 700
+                      }}
+                    >
+                      {code}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {creationResult && (
+            <div
+              style={{
+                marginTop: 18,
+                padding: 14,
+                borderRadius: 8,
+                background:
+                  '#f0fdf4',
+                border:
+                  '1px solid #bbf7d0'
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 800,
+                  color:
+                    '#166534',
+                  marginBottom: 8
+                }}
+              >
+                نتيجة إنشاء الكروت
+              </div>
+
+              <div
+                style={{
+                  display:
+                    'grid',
+                  gridTemplateColumns:
+                    'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: 8,
+                  fontSize: 13
+                }}
+              >
+                <div>
+                  المطلوب:{' '}
+                  <strong>
+                    {
+                      creationResult.requested
+                    }
+                  </strong>
                 </div>
 
+                <div>
+                  تم إنشاؤه في MikroTik:{' '}
+                  <strong>
+                    {
+                      creationResult.createdInMikrotik
+                    }
+                  </strong>
+                </div>
+
+                <div>
+                  حُفظ في Supabase:{' '}
+                  <strong>
+                    {
+                      creationResult.savedInSupabase
+                    }
+                  </strong>
+                </div>
+
+                <div>
+                  فشل:{' '}
+                  <strong>
+                    {
+                      creationResult.failed
+                    }
+                  </strong>
+                </div>
+              </div>
+
+              {creationResult
+                ?.results
+                ?.successful
+                ?.length > 0 && (
                 <div
                   style={{
-                    ...styles.statStatus,
-                    color:
-                      connectionStatus?.connected
-                        ? '#059669'
-                        : '#6b7280',
+                    marginTop: 12
                   }}
                 >
-                  {connectionStatus?.connected
-                    ? 'متصل'
-                    : 'غير متحقق'}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* MikroTik Connection */}
-          <section style={styles.connectionCard}>
-            <div style={styles.connectionInfo}>
-              <div style={styles.sectionIconBlue}>
-                ⚡
-              </div>
-
-              <div>
-                <h2 style={styles.sectionTitle}>
-                  MikroTik User Manager
-                </h2>
-
-                <p style={styles.sectionDescription}>
-                  يتم جلب Profiles الحقيقية من جهاز
-                  MikroTik، وبعدها تختار أنت يدويًا
-                  Profile المناسبة لكل باقة.
-                </p>
-
-                {connectionStatus?.message && (
                   <div
                     style={{
-                      ...styles.connectionMessage,
-                      color:
-                        connectionStatus.connected
-                          ? '#059669'
-                          : '#dc2626',
+                      fontSize: 13,
+                      fontWeight: 800,
+                      marginBottom: 6
                     }}
                   >
-                    <span>
-                      {connectionStatus.connected
-                        ? '●'
-                        : '●'}
-                    </span>
-                    {connectionStatus.message}
+                    الكروت الناجحة
                   </div>
-                )}
-              </div>
-            </div>
 
-            <div style={styles.connectionActions}>
-              <button
-                type="button"
-                onClick={testConnection}
-                disabled={testingConnection}
-                style={{
-                  ...styles.secondaryButton,
-                  opacity: testingConnection
-                    ? 0.65
-                    : 1,
-                }}
-              >
-                {testingConnection ? (
-                  <>
-                    <span style={styles.smallSpinner} />
-                    جاري الاختبار...
-                  </>
-                ) : (
-                  <>اختبار الاتصال</>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={refreshProfiles}
-                disabled={loadingProfiles}
-                style={{
-                  ...styles.primaryButton,
-                  opacity: loadingProfiles
-                    ? 0.65
-                    : 1,
-                }}
-              >
-                {loadingProfiles ? (
-                  <>
-                    <span style={styles.smallSpinnerLight} />
-                    جاري التحديث...
-                  </>
-                ) : (
-                  <>↻ تحديث Profiles</>
-                )}
-              </button>
-            </div>
-          </section>
-
-          {/* Packages + Mapping */}
-          <section style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <h2 style={styles.sectionTitle}>
-                  الباقات وربط MikroTik
-                </h2>
-
-                <p style={styles.sectionDescription}>
-                  الباقات هنا هي الباقات الرسمية الموجودة
-                  في نظام تواصل. اختر Profile MikroTik
-                  المناسبة لكل باقة يدويًا.
-                </p>
-              </div>
-
-              <div style={styles.profileCounter}>
-                <span style={styles.counterDot} />
-                {mikrotikProfiles.length} Profile متاحة
-              </div>
-            </div>
-
-            <div style={styles.tableWrap}>
-              <div style={styles.tableScroll}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>
-                        الباقة
-                      </th>
-
-                      <th style={styles.th}>
-                        السعر
-                      </th>
-
-                      <th style={styles.th}>
-                        الكروت
-                      </th>
-
-                      <th style={styles.th}>
-                        Profile MikroTik
-                      </th>
-
-                      <th style={styles.th}>
-                        الحالة
-                      </th>
-
-                      <th style={styles.th}>
-                        الإجراء
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {loadingPackages ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          style={styles.emptyCell}
-                        >
-                          <div style={styles.inlineLoading}>
-                            <span style={styles.spinner} />
-                            جاري تحميل الباقات...
-                          </div>
-                        </td>
-                      </tr>
-                    ) : packages.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          style={styles.emptyCell}
-                        >
-                          لا توجد باقات حتى الآن.
-                        </td>
-                      </tr>
-                    ) : (
-                      packages.map((pkg) => {
-                        const mappedProfile =
-                          mappings[pkg.id] || '';
-
-                        const isSelected =
-                          selectedPackage?.id ===
-                          pkg.id;
-
-                        return (
-                          <tr
-                            key={pkg.id}
-                            style={{
-                              ...styles.tr,
-                              background: isSelected
-                                ? '#f8faff'
-                                : 'transparent',
-                            }}
-                          >
-                            <td style={styles.td}>
-                              <div style={styles.packageCell}>
-                                <div style={styles.packageIcon}>
-                                  ◈
-                                </div>
-
-                                <div>
-                                  <div style={styles.packageName}>
-                                    {pkg.name}
-                                  </div>
-
-                                  <div style={styles.packageId}>
-                                    ID: {String(pkg.id).slice(0, 8)}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td style={styles.td}>
-                              <span style={styles.priceBadge}>
-                                {formatPrice(pkg.price)} ريال
-                              </span>
-                            </td>
-
-                            <td style={styles.td}>
-                              <span style={styles.cardsCount}>
-                                {pkg.cardsCount}
-                              </span>
-                            </td>
-
-                            <td
-                              style={{
-                                ...styles.td,
-                                minWidth: 280,
-                              }}
-                            >
-                              <select
-                                value={mappedProfile}
-                                onChange={(event) =>
-                                  handleMappingChange(
-                                    pkg.id,
-                                    event.target.value
-                                  )
-                                }
-                                disabled={
-                                  loadingProfiles ||
-                                  savingMapping === pkg.id
-                                }
-                                style={styles.select}
-                              >
-                                <option value="">
-                                  اختر Profile من MikroTik
-                                </option>
-
-                                {mikrotikProfiles.map(
-                                  (profileItem, index) => {
-                                    const name =
-                                      typeof profileItem ===
-                                      'string'
-                                        ? profileItem
-                                        : profileItem?.name ||
-                                          profileItem?.profile ||
-                                          profileItem?.profileName ||
-                                          '';
-
-                                    if (!name) {
-                                      return null;
-                                    }
-
-                                    return (
-                                      <option
-                                        key={`${name}-${index}`}
-                                        value={name}
-                                      >
-                                        {name}
-                                      </option>
-                                    );
-                                  }
-                                )}
-                              </select>
-                            </td>
-
-                            <td style={styles.td}>
-                              {mappedProfile ? (
-                                <span style={styles.badgeSuccess}>
-                                  ✓ مرتبط
-                                </span>
-                              ) : (
-                                <span style={styles.badgeWarning}>
-                                  غير مرتبط
-                                </span>
-                              )}
-                            </td>
-
-                            <td style={styles.td}>
-                              <div style={styles.rowActions}>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    selectPackage(pkg)
-                                  }
-                                  style={
-                                    isSelected
-                                      ? styles.actionButtonActive
-                                      : styles.actionButton
-                                  }
-                                >
-                                  {isSelected
-                                    ? 'محدد'
-                                    : 'إنشاء كروت'}
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleDeletePackage(
-                                      pkg.id
-                                    )
-                                  }
-                                  style={styles.deleteButton}
-                                  disabled={
-                                    pkg.cardsCount > 0
-                                  }
-                                  title={
-                                    pkg.cardsCount > 0
-                                      ? 'لا يمكن حذف باقة مرتبطة بكروت'
-                                      : 'حذف الباقة'
-                                  }
-                                >
-                                  حذف
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </section>
-
-          {/* Add Package */}
-          <section style={styles.card}>
-            <div style={styles.cardHeaderCompact}>
-              <div>
-                <h2 style={styles.sectionTitle}>
-                  إضافة باقة جديدة
-                </h2>
-
-                <p style={styles.sectionDescription}>
-                  أضف الباقة الرسمية في نظام تواصل، ثم
-                  اربطها لاحقًا مع Profile من MikroTik.
-                </p>
-              </div>
-            </div>
-
-            <form
-              onSubmit={handleAddPackage}
-              style={styles.addPackageGrid}
-            >
-              <div style={styles.field}>
-                <label style={styles.label}>
-                  اسم الباقة
-                </label>
-
-                <input
-                  type="text"
-                  value={newPackageName}
-                  onChange={(event) =>
-                    setNewPackageName(event.target.value)
-                  }
-                  placeholder="مثال: أبو 500"
-                  style={styles.input}
-                />
-              </div>
-
-              <div style={styles.field}>
-                <label style={styles.label}>
-                  السعر
-                </label>
-
-                <div style={styles.inputWithSuffix}>
-                  <input
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={newPackagePrice}
-                    onChange={(event) =>
-                      setNewPackagePrice(
-                        event.target.value
-                      )
-                    }
-                    placeholder="500"
+                  <div
                     style={{
-                      ...styles.input,
-                      paddingLeft: 70,
-                    }}
-                  />
-
-                  <span style={styles.inputSuffix}>
-                    ريال
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={addingPackage}
-                style={{
-                  ...styles.primaryButton,
-                  alignSelf: 'end',
-                  height: 48,
-                  opacity: addingPackage ? 0.65 : 1,
-                }}
-              >
-                {addingPackage ? (
-                  <>
-                    <span style={styles.smallSpinnerLight} />
-                    جاري الإضافة...
-                  </>
-                ) : (
-                  <>+ إضافة الباقة</>
-                )}
-              </button>
-            </form>
-          </section>
-
-          {/* Card Generator */}
-          <section style={styles.generatorCard}>
-            <div style={styles.generatorHeader}>
-              <div>
-                <div style={styles.generatorTitleRow}>
-                  <div style={styles.generatorIcon}>
-                    ▣
-                  </div>
-
-                  <div>
-                    <h2 style={styles.sectionTitle}>
-                      إنشاء كروت MikroTik
-                    </h2>
-
-                    <p style={styles.sectionDescription}>
-                      اختر الباقة ثم حدد إعدادات الأكواد.
-                      عملية الإنشاء الفعلية تتم من الخادم
-                      ويتم إنشاء المستخدمين داخل MikroTik.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedPackage && (
-                <div style={styles.selectedPackage}>
-                  <span style={styles.selectedLabel}>
-                    الباقة المحددة
-                  </span>
-
-                  <strong>
-                    {selectedPackage.name}
-                  </strong>
-
-                  <span>
-                    {formatPrice(selectedPackage.price)} ريال
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {!selectedPackage ? (
-              <div style={styles.selectPackageEmpty}>
-                <div style={styles.emptyIllustration}>
-                  ◈
-                </div>
-
-                <h3 style={styles.emptyTitle}>
-                  اختر باقة للبدء
-                </h3>
-
-                <p style={styles.emptyDescription}>
-                  اختر إحدى الباقات من الجدول أعلاه
-                  لعرض إعدادات إنشاء الكروت.
-                </p>
-              </div>
-            ) : (
-              <>
-                <div style={styles.mappingNotice}>
-                  <div style={styles.noticeIcon}>
-                    ⇄
-                  </div>
-
-                  <div>
-                    <strong>
-                      Profile MikroTik المرتبط
-                    </strong>
-
-                    <div style={styles.noticeValue}>
-                      {mappings[selectedPackage.id] ||
-                        'لم يتم الربط بعد'}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={styles.generatorGrid}>
-                  <div style={styles.field}>
-                    <label style={styles.label}>
-                      عدد الكروت
-                    </label>
-
-                    <input
-                      type="number"
-                      min="1"
-                      max="1000"
-                      value={quantity}
-                      onChange={(event) =>
-                        setQuantity(
-                          event.target.value
-                        )
-                      }
-                      style={styles.input}
-                    />
-
-                    <small style={styles.helpText}>
-                      من 1 إلى 1000 كرت.
-                    </small>
-                  </div>
-
-                  <div style={styles.field}>
-                    <label style={styles.label}>
-                      بادئة الكود
-                    </label>
-
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={prefix}
-                      onChange={(event) =>
-                        setPrefix(
-                          event.target.value.replace(
-                            /\D/g,
-                            ''
-                          )
-                        )
-                      }
-                      placeholder="مثال: 200"
-                      style={styles.input}
-                    />
-
-                    <small style={styles.helpText}>
-                      أرقام فقط، ويمكن تركها فارغة.
-                    </small>
-                  </div>
-
-                  <div style={styles.field}>
-                    <label style={styles.label}>
-                      طول الكود
-                    </label>
-
-                    <input
-                      type="number"
-                      min="4"
-                      max="32"
-                      value={codeLength}
-                      onChange={(event) =>
-                        setCodeLength(
-                          event.target.value
-                        )
-                      }
-                      style={styles.input}
-                    />
-
-                    <small style={styles.helpText}>
-                      من 4 إلى 32 خانة.
-                    </small>
-                  </div>
-                </div>
-
-                {!validation.valid && (
-                  <div style={styles.validationError}>
-                    {validation.message}
-                  </div>
-                )}
-
-                <div style={styles.generatorActions}>
-                  <button
-                    type="button"
-                    onClick={generatePreview}
-                    disabled={
-                      previewing ||
-                      !validation.valid
-                    }
-                    style={{
-                      ...styles.secondaryButtonLarge,
-                      opacity:
-                        previewing ||
-                        !validation.valid
-                          ? 0.55
-                          : 1,
+                      display:
+                        'flex',
+                      gap: 6,
+                      flexWrap:
+                        'wrap'
                     }}
                   >
-                    {previewing ? (
-                      <>
-                        <span style={styles.smallSpinner} />
-                        جاري إنشاء المعاينة...
-                      </>
-                    ) : (
-                      <>◉ معاينة الأكواد</>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleCreateCards}
-                    disabled={
-                      creatingCards ||
-                      !validation.valid ||
-                      !mappings[selectedPackage.id]
-                    }
-                    style={{
-                      ...styles.primaryButtonLarge,
-                      opacity:
-                        creatingCards ||
-                        !validation.valid ||
-                        !mappings[selectedPackage.id]
-                          ? 0.55
-                          : 1,
-                    }}
-                  >
-                    {creatingCards ? (
-                      <>
+                    {creationResult.results.successful.map(
+                      (code) => (
                         <span
-                          style={
-                            styles.smallSpinnerLight
+                          key={
+                            code
                           }
-                        />
-                        جاري إنشاء الكروت...
-                      </>
-                    ) : (
-                      <>✓ إنشاء الكروت فعليًا</>
+                          style={{
+                            padding:
+                              '5px 8px',
+                            borderRadius:
+                              5,
+                            background:
+                              '#dcfce7',
+                            color:
+                              '#166534',
+                            fontFamily:
+                              'monospace',
+                            fontSize: 12
+                          }}
+                        >
+                          {code}
+                        </span>
+                      )
                     )}
-                  </button>
-                </div>
-
-                <div style={styles.securityNote}>
-                  <span>ⓘ</span>
-                  <div>
-                    <strong>
-                      تنبيه مهم:
-                    </strong>{' '}
-                    لا يتم اعتماد Profile ثابت داخل
-                    الواجهة. سيتم استخدام الربط اليدوي
-                    المحفوظ للباقة، وإنشاء الكروت يتم عبر
-                    API الخادم.
                   </div>
-                </div>
-              </>
-            )}
-          </section>
-
-          {/* Preview */}
-          {previewCards.length > 0 && (
-            <section style={styles.card}>
-              <div style={styles.cardHeader}>
-                <div>
-                  <h2 style={styles.sectionTitle}>
-                    معاينة الكروت
-                  </h2>
-
-                  <p style={styles.sectionDescription}>
-                    هذه معاينة محلية للأكواد فقط. لم يتم
-                    إنشاء هذه الكروت في MikroTik بعد.
-                  </p>
-                </div>
-
-                <span style={styles.previewCount}>
-                  {previewCards.length} كرت
-                </span>
-              </div>
-
-              <div style={styles.previewGrid}>
-                {previewCards.map((code, index) => (
-                  <div
-                    key={`${code}-${index}`}
-                    style={styles.previewItem}
-                  >
-                    <span style={styles.previewIndex}>
-                      {index + 1}
-                    </span>
-
-                    <code style={styles.previewCode}>
-                      {code}
-                    </code>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Creation result */}
-          {creationResult && (
-            <section style={styles.resultCard}>
-              <div style={styles.resultHeader}>
-                <div style={styles.resultSuccessIcon}>
-                  ✓
-                </div>
-
-                <div>
-                  <h2 style={styles.resultTitle}>
-                    نتيجة إنشاء الكروت
-                  </h2>
-
-                  <p style={styles.resultDescription}>
-                    تم تنفيذ طلب إنشاء الكروت من خلال
-                    MikroTik User Manager.
-                  </p>
-                </div>
-              </div>
-
-              <div style={styles.resultStats}>
-                <div style={styles.resultStat}>
-                  <span>تم إنشاؤها</span>
-
-                  <strong>
-                    {Number(
-                      creationResult?.createdCount ??
-                        creationResult?.successCount ??
-                        (Array.isArray(
-                          creationResult?.cards
-                        )
-                          ? creationResult.cards.length
-                          : 0)
-                    )}
-                  </strong>
-                </div>
-
-                <div style={styles.resultStat}>
-                  <span>فشل</span>
-
-                  <strong>
-                    {Number(
-                      creationResult?.failedCount ??
-                        (Array.isArray(
-                          creationResult?.failed
-                        )
-                          ? creationResult.failed.length
-                          : 0)
-                    )}
-                  </strong>
-                </div>
-
-                <div style={styles.resultStat}>
-                  <span>الباقة</span>
-
-                  <strong>
-                    {selectedPackage?.name || '-'}
-                  </strong>
-                </div>
-              </div>
-
-              {Array.isArray(
-                creationResult?.failed
-              ) &&
-                creationResult.failed.length > 0 && (
-                  <div style={styles.failedBox}>
-                    <h3 style={styles.failedTitle}>
-                      الكروت التي لم يتم إنشاؤها
-                    </h3>
-
-                    <div style={styles.failedList}>
-                      {creationResult.failed.map(
-                        (item, index) => (
-                          <div
-                            key={index}
-                            style={styles.failedItem}
-                          >
-                            {typeof item === 'string'
-                              ? item
-                              : item?.code ||
-                                item?.username ||
-                                item?.error ||
-                                JSON.stringify(
-                                  item
-                                )}
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-
-              {creationResult?.message && (
-                <div style={styles.resultMessage}>
-                  {creationResult.message}
                 </div>
               )}
-            </section>
+            </div>
           )}
-
-          <footer style={styles.footer}>
-            <span>
-              نظام تواصل لإدارة الباقات والكروت
-            </span>
-
-            <span>
-              MikroTik User Manager
-            </span>
-          </footer>
         </div>
-      </main>
-
-      <style jsx>{`
-        @media (max-width: 1100px) {
-          .dummy {
-            display: none;
-          }
-        }
-      `}</style>
+      </div>
     </div>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    background:
-      'linear-gradient(180deg, #f7f9fc 0%, #f1f5f9 100%)',
-    color: '#172033',
-    fontFamily:
-      'Tahoma, Arial, sans-serif',
-  },
-
-  main: {
-    minHeight: '100vh',
-    padding: '28px 24px 50px',
-    boxSizing: 'border-box',
-  },
-
-  container: {
-    width: '100%',
-    maxWidth: 1480,
-    margin: '0 auto',
-  },
-
-  loadingPage: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#f5f7fb',
-    direction: 'rtl',
-    fontFamily:
-      'Tahoma, Arial, sans-serif',
-  },
-
-  loadingCard: {
-    background: '#fff',
-    border: '1px solid #e8edf5',
-    borderRadius: 20,
-    padding: '32px 45px',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 14,
-    boxShadow:
-      '0 15px 40px rgba(15, 23, 42, .07)',
-    color: '#475569',
-  },
-
-  spinner: {
-    width: 24,
-    height: 24,
-    border: '3px solid #dbe4f0',
-    borderTopColor: '#2563eb',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-
-  smallSpinner: {
-    width: 15,
-    height: 15,
-    border: '2px solid #cbd5e1',
-    borderTopColor: '#2563eb',
-    borderRadius: '50%',
-    display: 'inline-block',
-    animation: 'spin 0.8s linear infinite',
-  },
-
-  smallSpinnerLight: {
-    width: 15,
-    height: 15,
-    border: '2px solid rgba(255,255,255,.4)',
-    borderTopColor: '#fff',
-    borderRadius: '50%',
-    display: 'inline-block',
-    animation: 'spin 0.8s linear infinite',
-  },
-
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 24,
-    marginBottom: 24,
-    flexWrap: 'wrap',
-  },
-
-  breadcrumb: {
-    fontSize: 12,
-    color: '#94a3b8',
-    marginBottom: 9,
-  },
-
-  breadcrumbArrow: {
-    margin: '0 8px',
-    color: '#cbd5e1',
-  },
-
-  title: {
-    margin: 0,
-    fontSize: 27,
-    lineHeight: 1.3,
-    fontWeight: 800,
-    color: '#172033',
-  },
-
-  subtitle: {
-    margin: '8px 0 0',
-    color: '#64748b',
-    fontSize: 13,
-    lineHeight: 1.8,
-    maxWidth: 720,
-  },
-
-  headerUser: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 11,
-    background: '#fff',
-    border: '1px solid #e6ebf2',
-    borderRadius: 16,
-    padding: '10px 13px',
-    boxShadow:
-      '0 5px 20px rgba(15, 23, 42, .04)',
-  },
-
-  avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    background:
-      'linear-gradient(135deg, #1d4ed8, #6366f1)',
-    color: '#fff',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-    fontSize: 17,
-  },
-
-  userLabel: {
-    color: '#94a3b8',
-    fontSize: 11,
-    marginBottom: 3,
-  },
-
-  userName: {
-    color: '#1e293b',
-    fontSize: 13,
-    fontWeight: 700,
-  },
-
-  alertError: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    background: '#fff7f7',
-    border: '1px solid #fecaca',
-    borderRadius: 15,
-    padding: '13px 15px',
-    marginBottom: 18,
-    color: '#991b1b',
-  },
-
-  alertSuccess: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 12,
-    background: '#f0fdf4',
-    border: '1px solid #bbf7d0',
-    borderRadius: 15,
-    padding: '13px 15px',
-    marginBottom: 18,
-    color: '#166534',
-  },
-
-  alertIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    background: '#fee2e2',
-    color: '#dc2626',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-  },
-
-  successIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    background: '#dcfce7',
-    color: '#16a34a',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-  },
-
-  alertText: {
-    marginTop: 3,
-    fontSize: 12,
-    lineHeight: 1.7,
-  },
-
-  alertClose: {
-    border: 0,
-    background: 'transparent',
-    color: '#64748b',
-    fontSize: 20,
-    cursor: 'pointer',
-    padding: '0 4px',
-  },
-
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns:
-      'repeat(auto-fit, minmax(210px, 1fr))',
-    gap: 14,
-    marginBottom: 18,
-  },
-
-  statCard: {
-    background: '#fff',
-    border: '1px solid #e7ecf3',
-    borderRadius: 18,
-    padding: 17,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 13,
-    minHeight: 92,
-    boxSizing: 'border-box',
-    boxShadow:
-      '0 5px 18px rgba(15, 23, 42, .035)',
-  },
-
-  statIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 19,
-    fontWeight: 800,
-  },
-
-  statLabel: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginBottom: 4,
-  },
-
-  statValue: {
-    fontSize: 22,
-    fontWeight: 800,
-    color: '#172033',
-  },
-
-  statStatus: {
-    fontSize: 16,
-    fontWeight: 800,
-  },
-
-  connectionCard: {
-    background:
-      'linear-gradient(135deg, #ffffff 0%, #f8fbff 100%)',
-    border: '1px solid #dce8f8',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 18,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 20,
-    flexWrap: 'wrap',
-    boxShadow:
-      '0 8px 25px rgba(37, 99, 235, .045)',
-  },
-
-  connectionInfo: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: 14,
-    flex: 1,
-    minWidth: 280,
-  },
-
-  sectionIconBlue: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    background: '#eff6ff',
-    color: '#2563eb',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 20,
-    flexShrink: 0,
-  },
-
-  sectionTitle: {
-    margin: 0,
-    color: '#172033',
-    fontSize: 17,
-    fontWeight: 800,
-  },
-
-  sectionDescription: {
-    margin: '6px 0 0',
-    color: '#64748b',
-    fontSize: 12,
-    lineHeight: 1.8,
-  },
-
-  connectionMessage: {
-    marginTop: 7,
-    fontSize: 11,
-    fontWeight: 700,
-    display: 'flex',
-    gap: 6,
-    alignItems: 'center',
-  },
-
-  connectionActions: {
-    display: 'flex',
-    gap: 9,
-    flexWrap: 'wrap',
-  },
-
-  primaryButton: {
-    border: 0,
-    borderRadius: 12,
-    background:
-      'linear-gradient(135deg, #2563eb, #4f46e5)',
-    color: '#fff',
-    minHeight: 42,
-    padding: '0 16px',
-    fontSize: 12,
-    fontWeight: 800,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    boxShadow:
-      '0 6px 15px rgba(37, 99, 235, .16)',
-  },
-
-  secondaryButton: {
-    border: '1px solid #dbe3ef',
-    borderRadius: 12,
-    background: '#fff',
-    color: '#334155',
-    minHeight: 42,
-    padding: '0 16px',
-    fontSize: 12,
-    fontWeight: 800,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-
-  card: {
-    background: '#fff',
-    border: '1px solid #e6ebf2',
-    borderRadius: 20,
-    marginBottom: 18,
-    overflow: 'hidden',
-    boxShadow:
-      '0 7px 25px rgba(15, 23, 42, .035)',
-  },
-
-  cardHeader: {
-    padding: '20px 20px 16px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 15,
-    flexWrap: 'wrap',
-  },
-
-  cardHeaderCompact: {
-    padding: '20px 20px 4px',
-  },
-
-  profileCounter: {
-    borderRadius: 30,
-    background: '#f0fdf4',
-    color: '#15803d',
-    border: '1px solid #dcfce7',
-    padding: '7px 11px',
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  counterDot: {
-    display: 'inline-block',
-    width: 7,
-    height: 7,
-    borderRadius: '50%',
-    background: '#22c55e',
-    marginLeft: 6,
-  },
-
-  tableWrap: {
-    width: '100%',
-    borderTop: '1px solid #eef2f7',
-  },
-
-  tableScroll: {
-    overflowX: 'auto',
-    width: '100%',
-  },
-
-  table: {
-    width: '100%',
-    minWidth: 950,
-    borderCollapse: 'collapse',
-  },
-
-  th: {
-    textAlign: 'right',
-    background: '#f8fafc',
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: 800,
-    padding: '13px 16px',
-    borderBottom: '1px solid #e7edf4',
-    whiteSpace: 'nowrap',
-  },
-
-  tr: {
-    transition: 'background .15s ease',
-  },
-
-  td: {
-    padding: '13px 16px',
-    borderBottom: '1px solid #eef2f7',
-    color: '#334155',
-    fontSize: 12,
-    verticalAlign: 'middle',
-  },
-
-  packageCell: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  packageIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    background: '#eef2ff',
-    color: '#4f46e5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 800,
-  },
-
-  packageName: {
-    fontWeight: 800,
-    color: '#1e293b',
-    marginBottom: 3,
-  },
-
-  packageId: {
-    color: '#94a3b8',
-    fontSize: 9,
-    direction: 'ltr',
-    textAlign: 'right',
-  },
-
-  priceBadge: {
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    color: '#334155',
-    borderRadius: 9,
-    padding: '6px 9px',
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-
-  cardsCount: {
-    fontWeight: 800,
-    color: '#1d4ed8',
-  },
-
-  select: {
-    width: '100%',
-    minHeight: 40,
-    border: '1px solid #dbe3ef',
-    borderRadius: 10,
-    background: '#fff',
-    color: '#334155',
-    padding: '0 11px',
-    fontSize: 11,
-    outline: 'none',
-    cursor: 'pointer',
-  },
-
-  badgeSuccess: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    borderRadius: 20,
-    padding: '6px 9px',
-    background: '#ecfdf5',
-    color: '#047857',
-    border: '1px solid #d1fae5',
-    fontSize: 10,
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-
-  badgeWarning: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    borderRadius: 20,
-    padding: '6px 9px',
-    background: '#fffbeb',
-    color: '#b45309',
-    border: '1px solid #fde68a',
-    fontSize: 10,
-    fontWeight: 800,
-    whiteSpace: 'nowrap',
-  },
-
-  rowActions: {
-    display: 'flex',
-    gap: 6,
-    alignItems: 'center',
-  },
-
-  actionButton: {
-    border: '1px solid #dbe3ef',
-    background: '#fff',
-    color: '#334155',
-    borderRadius: 9,
-    padding: '7px 9px',
-    fontSize: 10,
-    fontWeight: 800,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  },
-
-  actionButtonActive: {
-    border: '1px solid #bfdbfe',
-    background: '#eff6ff',
-    color: '#1d4ed8',
-    borderRadius: 9,
-    padding: '7px 9px',
-    fontSize: 10,
-    fontWeight: 800,
-    cursor: 'pointer',
-  },
-
-  deleteButton: {
-    border: '1px solid #fee2e2',
-    background: '#fff7f7',
-    color: '#dc2626',
-    borderRadius: 9,
-    padding: '7px 9px',
-    fontSize: 10,
-    fontWeight: 800,
-    cursor: 'pointer',
-  },
-
-  emptyCell: {
-    padding: '45px 20px',
-    textAlign: 'center',
-    color: '#94a3b8',
-    fontSize: 12,
-  },
-
-  inlineLoading: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 10,
-  },
-
-  addPackageGrid: {
-    padding: '14px 20px 20px',
-    display: 'grid',
-    gridTemplateColumns:
-      'minmax(220px, 1.5fr) minmax(180px, 1fr) auto',
-    gap: 13,
-    alignItems: 'end',
-  },
-
-  field: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 7,
-  },
-
-  label: {
-    color: '#475569',
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  input: {
-    width: '100%',
-    height: 46,
-    boxSizing: 'border-box',
-    border: '1px solid #dbe3ef',
-    borderRadius: 11,
-    background: '#fff',
-    color: '#1e293b',
-    padding: '0 12px',
-    fontSize: 12,
-    outline: 'none',
-  },
-
-  inputWithSuffix: {
-    position: 'relative',
-  },
-
-  inputSuffix: {
-    position: 'absolute',
-    left: 12,
-    top: '50%',
-    transform: 'translateY(-50%)',
-    color: '#94a3b8',
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  generatorCard: {
-    background: '#fff',
-    border: '1px solid #e2e8f0',
-    borderRadius: 20,
-    marginBottom: 18,
-    overflow: 'hidden',
-    boxShadow:
-      '0 9px 28px rgba(15, 23, 42, .045)',
-  },
-
-  generatorHeader: {
-    padding: 21,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 15,
-    flexWrap: 'wrap',
-    borderBottom: '1px solid #eef2f7',
-    background:
-      'linear-gradient(180deg, #ffffff, #fbfdff)',
-  },
-
-  generatorTitleRow: {
-    display: 'flex',
-    gap: 13,
-    alignItems: 'flex-start',
-  },
-
-  generatorIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    background:
-      'linear-gradient(135deg, #eef2ff, #eff6ff)',
-    color: '#4f46e5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 900,
-    fontSize: 20,
-    flexShrink: 0,
-  },
-
-  selectedPackage: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    gap: 3,
-    minWidth: 190,
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    borderRadius: 13,
-    padding: '10px 13px',
-    color: '#1e293b',
-    fontSize: 12,
-    fontWeight: 800,
-  },
-
-  selectedLabel: {
-    color: '#94a3b8',
-    fontSize: 9,
-    fontWeight: 700,
-  },
-
-  selectPackageEmpty: {
-    padding: '55px 20px',
-    textAlign: 'center',
-  },
-
-  emptyIllustration: {
-    width: 58,
-    height: 58,
-    margin: '0 auto 12px',
-    borderRadius: 17,
-    background: '#eff6ff',
-    color: '#2563eb',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 25,
-  },
-
-  emptyTitle: {
-    margin: '0 0 5px',
-    fontSize: 16,
-    color: '#1e293b',
-  },
-
-  emptyDescription: {
-    margin: 0,
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-
-  mappingNotice: {
-    margin: '18px 20px 0',
-    borderRadius: 14,
-    border: '1px solid #dbeafe',
-    background: '#f8fbff',
-    padding: '12px 14px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 11,
-  },
-
-  noticeIcon: {
-    width: 37,
-    height: 37,
-    borderRadius: 11,
-    background: '#dbeafe',
-    color: '#2563eb',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontWeight: 900,
-  },
-
-  noticeValue: {
-    marginTop: 3,
-    color: '#1d4ed8',
-    fontSize: 11,
-    fontWeight: 800,
-  },
-
-  generatorGrid: {
-    padding: 20,
-    display: 'grid',
-    gridTemplateColumns:
-      'repeat(3, minmax(180px, 1fr))',
-    gap: 14,
-  },
-
-  helpText: {
-    color: '#94a3b8',
-    fontSize: 10,
-  },
-
-  validationError: {
-    margin: '0 20px 15px',
-    background: '#fff7ed',
-    border: '1px solid #fed7aa',
-    color: '#c2410c',
-    borderRadius: 11,
-    padding: '10px 12px',
-    fontSize: 11,
-    fontWeight: 700,
-  },
-
-  generatorActions: {
-    padding: '0 20px 18px',
-    display: 'flex',
-    gap: 10,
-    flexWrap: 'wrap',
-  },
-
-  secondaryButtonLarge: {
-    minHeight: 46,
-    border: '1px solid #dbe3ef',
-    background: '#fff',
-    color: '#334155',
-    borderRadius: 11,
-    padding: '0 18px',
-    fontSize: 12,
-    fontWeight: 800,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-
-  primaryButtonLarge: {
-    minHeight: 46,
-    border: 0,
-    background:
-      'linear-gradient(135deg, #2563eb, #4f46e5)',
-    color: '#fff',
-    borderRadius: 11,
-    padding: '0 20px',
-    fontSize: 12,
-    fontWeight: 800,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    boxShadow:
-      '0 7px 17px rgba(37, 99, 235, .17)',
-  },
-
-  securityNote: {
-    margin: '0 20px 20px',
-    borderRadius: 12,
-    background: '#f8fafc',
-    border: '1px solid #e2e8f0',
-    color: '#64748b',
-    padding: '10px 12px',
-    fontSize: 10,
-    lineHeight: 1.8,
-    display: 'flex',
-    gap: 8,
-  },
-
-  previewCount: {
-    borderRadius: 20,
-    padding: '7px 11px',
-    background: '#eef2ff',
-    color: '#4f46e5',
-    fontSize: 10,
-    fontWeight: 800,
-  },
-
-  previewGrid: {
-    padding: '0 20px 20px',
-    display: 'grid',
-    gridTemplateColumns:
-      'repeat(auto-fill, minmax(180px, 1fr))',
-    gap: 8,
-  },
-
-  previewItem: {
-    border: '1px solid #e5e7eb',
-    background: '#fafafa',
-    borderRadius: 10,
-    padding: '10px 11px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 9,
-  },
-
-  previewIndex: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
-    background: '#eef2ff',
-    color: '#4f46e5',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 9,
-    fontWeight: 800,
-    flexShrink: 0,
-  },
-
-  previewCode: {
-    direction: 'ltr',
-    color: '#1e293b',
-    fontSize: 12,
-    fontWeight: 800,
-    letterSpacing: 1,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-
-  resultCard: {
-    background: '#fff',
-    border: '1px solid #bbf7d0',
-    borderRadius: 20,
-    marginBottom: 18,
-    overflow: 'hidden',
-    boxShadow:
-      '0 7px 25px rgba(22, 163, 74, .04)',
-  },
-
-  resultHeader: {
-    padding: 20,
-    background: '#f0fdf4',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 13,
-  },
-
-  resultSuccessIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    background: '#dcfce7',
-    color: '#16a34a',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 22,
-    fontWeight: 900,
-  },
-
-  resultTitle: {
-    margin: 0,
-    color: '#166534',
-    fontSize: 17,
-    fontWeight: 800,
-  },
-
-  resultDescription: {
-    margin: '4px 0 0',
-    color: '#4d7c5b',
-    fontSize: 11,
-  },
-
-  resultStats: {
-    display: 'grid',
-    gridTemplateColumns:
-      'repeat(3, 1fr)',
-    gap: 10,
-    padding: 18,
-  },
-
-  resultStat: {
-    border: '1px solid #e2e8f0',
-    borderRadius: 12,
-    padding: 12,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 5,
-    background: '#fff',
-  },
-
-  failedBox: {
-    margin: '0 18px 18px',
-    borderRadius: 13,
-    background: '#fff7f7',
-    border: '1px solid #fecaca',
-    padding: 13,
-  },
-
-  failedTitle: {
-    margin: '0 0 9px',
-    color: '#991b1b',
-    fontSize: 12,
-  },
-
-  failedList: {
-    display: 'grid',
-    gap: 6,
-  },
-
-  failedItem: {
-    borderRadius: 8,
-    background: '#fff',
-    border: '1px solid #fee2e2',
-    color: '#7f1d1d',
-    padding: '7px 9px',
-    fontSize: 10,
-  },
-
-  resultMessage: {
-    margin: '0 18px 18px',
-    borderRadius: 11,
-    background: '#f8fafc',
-    padding: '10px 12px',
-    color: '#475569',
-    fontSize: 11,
-  },
-
-  footer: {
-    padding: '8px 4px 20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 15,
-    color: '#94a3b8',
-    fontSize: 10,
-  },
-};
