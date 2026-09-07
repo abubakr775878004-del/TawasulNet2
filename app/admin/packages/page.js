@@ -1,64 +1,37 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Sidebar from '@/components/Sidebar';
-import { useProfile } from '@/hooks/useProfile';
-import { supabase } from '@/lib/supabaseClient';
+import { useProfile } from '@/lib/useProfile';
+import { supabase } from '@/lib/supabase';
 
 export default function PackagesPage() {
-  const { profile, loading: profileLoading } =
-    useProfile();
+  const { profile, loading: profileLoading } = useProfile('admin');
 
   const [packages, setPackages] = useState([]);
-  const [mikrotikProfiles, setMikrotikProfiles] =
-    useState([]);
-
+  const [mikrotikProfiles, setMikrotikProfiles] = useState([]);
   const [mappings, setMappings] = useState({});
 
-  const [loadingPackages, setLoadingPackages] =
-    useState(true);
+  const [loadingPackages, setLoadingPackages] = useState(true);
+  const [loadingMikrotik, setLoadingMikrotik] = useState(false);
+  const [savingMapping, setSavingMapping] = useState(null);
 
-  const [loadingMikrotik, setLoadingMikrotik] =
-    useState(false);
+  const [connectionStatus, setConnectionStatus] = useState('idle');
+  const [mikrotikMessage, setMikrotikMessage] = useState('');
 
-  const [savingMapping, setSavingMapping] =
-    useState(null);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
 
-  const [connectionStatus, setConnectionStatus] =
-    useState('idle');
+  const [cardQuantity, setCardQuantity] = useState(10);
+  const [startCode, setStartCode] = useState('77');
+  const [codeLength, setCodeLength] = useState(8);
 
-  const [mikrotikMessage, setMikrotikMessage] =
-    useState('');
+  const [creatingCards, setCreatingCards] = useState(false);
+  const [creationResult, setCreationResult] = useState(null);
+  const [previewCodes, setPreviewCodes] = useState([]);
 
-  const [selectedPackageId, setSelectedPackageId] =
-    useState('');
-
-  const [cardQuantity, setCardQuantity] =
-    useState(10);
-
-  const [startCode, setStartCode] =
-    useState('77');
-
-  const [codeLength, setCodeLength] =
-    useState(8);
-
-  const [creatingCards, setCreatingCards] =
-    useState(false);
-
-  const [creationResult, setCreationResult] =
-    useState(null);
-
-  const [previewCodes, setPreviewCodes] =
-    useState([]);
-
-  const [newPackageName, setNewPackageName] =
-    useState('');
-
-  const [newPackagePrice, setNewPackagePrice] =
-    useState('');
-
-  const [packageMessage, setPackageMessage] =
-    useState('');
+  const [newPackageName, setNewPackageName] = useState('');
+  const [newPackagePrice, setNewPackagePrice] = useState('');
+  const [packageMessage, setPackageMessage] = useState('');
 
   const isAdmin =
     profile?.role === 'admin' &&
@@ -67,13 +40,15 @@ export default function PackagesPage() {
   const selectedPackage = useMemo(
     () =>
       packages.find(
-        (pkg) =>
-          pkg.id === selectedPackageId
+        (pkg) => pkg.id === selectedPackageId
       ) || null,
     [packages, selectedPackageId]
   );
 
-  async function getAccessToken() {
+  /*
+   * الحصول على جلسة المدير الحالية.
+   */
+  const getAccessToken = useCallback(async () => {
     const {
       data: { session },
       error,
@@ -86,43 +61,48 @@ export default function PackagesPage() {
     }
 
     return session.access_token;
-  }
+  }, []);
 
-  async function apiRequest(
-    url,
-    options = {}
-  ) {
-    const token =
-      await getAccessToken();
+  /*
+   * طلبات API الخاصة بـ MikroTik.
+   */
+  const apiRequest = useCallback(
+    async (url, options = {}) => {
+      const token = await getAccessToken();
 
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization:
-          `Bearer ${token}`,
-        'Content-Type':
-          'application/json',
-      },
-      cache: 'no-store',
-    });
+      const response = await fetch(url, {
+        ...options,
+        headers: {
+          ...(options.headers || {}),
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
 
-    const data =
-      await response.json().catch(
-        () => ({})
-      );
+      const data = await response
+        .json()
+        .catch(() => ({}));
 
-    if (!response.ok) {
-      throw new Error(
-        data?.error ||
-          'حدث خطأ في الاتصال بالخادم.'
-      );
-    }
+      if (!response.ok) {
+        throw new Error(
+          data?.error ||
+            'حدث خطأ في الاتصال بالخادم.'
+        );
+      }
 
-    return data;
-  }
+      return data;
+    },
+    [getAccessToken]
+  );
 
-  async function loadPackages() {
+  /*
+   * تحميل الباقات الرسمية من Supabase.
+   *
+   * cards(id) مهم هنا حتى نستمر في عرض عدد
+   * الكروت المرتبطة بكل باقة.
+   */
+  const loadPackages = useCallback(async () => {
     setLoadingPackages(true);
 
     const {
@@ -130,134 +110,149 @@ export default function PackagesPage() {
       error,
     } = await supabase
       .from('packages')
-      .select(
-        '*, cards(id)'
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false,
-        }
-      );
+      .select('*, cards(id)')
+      .order('created_at', {
+        ascending: false,
+      });
 
     if (error) {
       setPackageMessage(
         `تعذر تحميل الباقات: ${error.message}`
       );
       setPackages([]);
-    } else {
-      const formatted =
-        (data || []).map(
-          (pkg) => ({
-            ...pkg,
-            cardsCount:
-              pkg.cards
-                ? pkg.cards.length
-                : 0,
-          })
-        );
-
-      setPackages(formatted);
-
-      if (
-        !selectedPackageId &&
-        formatted.length
-      ) {
-        setSelectedPackageId(
-          formatted[0].id
-        );
-      }
+      setLoadingPackages(false);
+      return;
     }
 
-    setLoadingPackages(false);
-  }
+    const formatted = (data || []).map((pkg) => ({
+      ...pkg,
+      cardsCount: Array.isArray(pkg.cards)
+        ? pkg.cards.length
+        : 0,
+    }));
 
-  async function loadMikrotikProfiles() {
+    setPackages(formatted);
+
+    /*
+     * إذا كانت الباقة المختارة غير موجودة بعد التحميل
+     * نختار أول باقة تلقائيًا.
+     */
+    setSelectedPackageId((currentSelectedId) => {
+      const exists = formatted.some(
+        (pkg) => pkg.id === currentSelectedId
+      );
+
+      if (exists) {
+        return currentSelectedId;
+      }
+
+      return formatted.length
+        ? formatted[0].id
+        : '';
+    });
+
+    setLoadingPackages(false);
+  }, []);
+
+  /*
+   * تحميل Profiles الحقيقية الموجودة في MikroTik
+   * وتحميل الربط المحفوظ بين باقات تواصل والـ Profiles.
+   */
+  const loadMikrotikProfiles = useCallback(async () => {
     setLoadingMikrotik(true);
     setMikrotikMessage('');
 
     try {
-      const data =
-        await apiRequest(
-          '/api/mikrotik/user-manager?action=profiles'
-        );
+      const data = await apiRequest(
+        '/api/mikrotik/user-manager?action=profiles'
+      );
 
       setMikrotikProfiles(
-        data.profiles || []
+        Array.isArray(data?.profiles)
+          ? data.profiles
+          : []
       );
 
       const mappingObject = {};
 
-      for (const mapping of
-        data.mappings || []) {
-        mappingObject[
-          mapping.package_id
-        ] =
-          mapping.mikrotik_profile_name;
+      for (const mapping of data?.mappings || []) {
+        if (
+          mapping?.package_id &&
+          mapping?.mikrotik_profile_name
+        ) {
+          mappingObject[mapping.package_id] =
+            mapping.mikrotik_profile_name;
+        }
       }
 
       setMappings(mappingObject);
-
-      setConnectionStatus(
-        'connected'
-      );
+      setConnectionStatus('connected');
     } catch (error) {
-      setConnectionStatus(
-        'error'
-      );
-
+      setConnectionStatus('error');
       setMikrotikMessage(
-        error.message ||
+        error?.message ||
           'تعذر الاتصال بـ MikroTik.'
       );
     } finally {
       setLoadingMikrotik(false);
     }
-  }
+  }, [apiRequest]);
 
+  /*
+   * تحميل البيانات بعد التأكد من أن المستخدم مدير.
+   */
   useEffect(() => {
-    if (!profileLoading && isAdmin) {
-      loadPackages();
-      loadMikrotikProfiles();
+    if (profileLoading || !isAdmin) {
+      return;
     }
+
+    loadPackages();
+    loadMikrotikProfiles();
   }, [
     profileLoading,
     isAdmin,
+    loadPackages,
+    loadMikrotikProfiles,
   ]);
 
+  /*
+   * اختبار اتصال MikroTik.
+   */
   async function handleTestConnection() {
     setConnectionStatus('testing');
     setMikrotikMessage('');
 
     try {
-      const data =
-        await apiRequest(
-          '/api/mikrotik/user-manager?action=test'
-        );
-
-      setConnectionStatus(
-        'connected'
+      const data = await apiRequest(
+        '/api/mikrotik/user-manager?action=test'
       );
+
+      setConnectionStatus('connected');
 
       setMikrotikMessage(
         `تم الاتصال بنجاح — RouterOS ${
-          data.version || 'غير معروف'
+          data?.version || 'غير معروف'
         }`
       );
 
       await loadMikrotikProfiles();
     } catch (error) {
-      setConnectionStatus(
-        'error'
-      );
+      setConnectionStatus('error');
 
       setMikrotikMessage(
-        error.message ||
+        error?.message ||
           'فشل الاتصال بـ MikroTik.'
       );
     }
   }
 
+  /*
+   * حفظ الربط اليدوي:
+   *
+   * باقة تواصل
+   *       ↓
+   * Profile حقيقي من User Manager
+   */
   async function handleMappingChange(
     packageId,
     profileName
@@ -271,30 +266,24 @@ export default function PackagesPage() {
         {
           method: 'POST',
           body: JSON.stringify({
-            action:
-              'save-mapping',
-
+            action: 'save-mapping',
             packageId,
-
             profileName,
           }),
         }
       );
 
-      setMappings(
-        (current) => ({
-          ...current,
-          [packageId]:
-            profileName,
-        })
-      );
+      setMappings((current) => ({
+        ...current,
+        [packageId]: profileName,
+      }));
 
       setMikrotikMessage(
         'تم حفظ الربط بنجاح.'
       );
     } catch (error) {
       setMikrotikMessage(
-        error.message ||
+        error?.message ||
           'تعذر حفظ الربط.'
       );
     } finally {
@@ -302,6 +291,12 @@ export default function PackagesPage() {
     }
   }
 
+  /*
+   * توليد أكواد للمعاينة فقط.
+   *
+   * الإنشاء الفعلي يتم من السيرفر حتى لا نعتمد
+   * على Math.random() لإنشاء الكروت الحقيقية.
+   */
   function generatePreviewCodes(
     quantity,
     prefix,
@@ -316,64 +311,53 @@ export default function PackagesPage() {
       return [];
     }
 
-    const maximum =
-      10 ** remaining;
+    const maximum = 10 ** remaining;
 
     if (quantity > maximum) {
       return [];
     }
 
-    while (
-      result.size < quantity
-    ) {
+    while (result.size < quantity) {
       let suffix = '';
 
-      for (
-        let i = 0;
-        i < remaining;
-        i += 1
-      ) {
+      for (let i = 0; i < remaining; i += 1) {
         suffix += Math.floor(
           Math.random() * 10
         );
       }
 
-      result.add(
-        `${prefix}${suffix}`
-      );
+      result.add(`${prefix}${suffix}`);
     }
 
     return [...result];
   }
 
-  function handlePreview() {
-    setCreationResult(null);
-
-    const quantity =
-      Number(cardQuantity);
-
-    const length =
-      Number(codeLength);
-
-    const prefix =
-      String(startCode).trim();
+  /*
+   * التحقق من بيانات إنشاء الكروت.
+   */
+  function validateCardInputs() {
+    const quantity = Number(cardQuantity);
+    const length = Number(codeLength);
+    const prefix = String(startCode).trim();
 
     if (
       !Number.isInteger(quantity) ||
       quantity < 1 ||
       quantity > 1000
     ) {
-      setMikrotikMessage(
-        'الكمية يجب أن تكون بين 1 و1000.'
-      );
-      return;
+      return {
+        valid: false,
+        message:
+          'الكمية يجب أن تكون بين 1 و1000.',
+      };
     }
 
     if (!/^[0-9]+$/.test(prefix)) {
-      setMikrotikMessage(
-        'البداية يجب أن تحتوي على أرقام فقط.'
-      );
-      return;
+      return {
+        valid: false,
+        message:
+          'البداية يجب أن تحتوي على أرقام فقط.',
+      };
     }
 
     if (
@@ -381,47 +365,61 @@ export default function PackagesPage() {
       length < 4 ||
       length > 32
     ) {
-      setMikrotikMessage(
-        'طول الكرت يجب أن يكون بين 4 و32.'
-      );
+      return {
+        valid: false,
+        message:
+          'طول الكرت يجب أن يكون بين 4 و32.',
+      };
+    }
+
+    if (prefix.length >= length) {
+      return {
+        valid: false,
+        message:
+          'طول البداية يجب أن يكون أقل من طول الكرت.',
+      };
+    }
+
+    return {
+      valid: true,
+      quantity,
+      length,
+      prefix,
+    };
+  }
+
+  /*
+   * معاينة الأكواد قبل الإنشاء.
+   */
+  function handlePreview() {
+    setCreationResult(null);
+
+    const validation = validateCardInputs();
+
+    if (!validation.valid) {
+      setMikrotikMessage(validation.message);
       return;
     }
 
-    if (
-      prefix.length >= length
-    ) {
-      setMikrotikMessage(
-        'طول البداية يجب أن يكون أقل من طول الكرت.'
-      );
-      return;
-    }
-
-    if (
-      !selectedPackage
-    ) {
+    if (!selectedPackage) {
       setMikrotikMessage(
         'اختر الباقة أولًا.'
       );
       return;
     }
 
-    if (
-      !mappings[
-        selectedPackage.id
-      ]
-    ) {
+    if (!mappings[selectedPackage.id]) {
       setMikrotikMessage(
         'يجب ربط الباقة بـ Profile من User Manager أولًا.'
       );
       return;
     }
 
-    const codes =
-      generatePreviewCodes(
-        quantity,
-        prefix,
-        length
-      );
+    const codes = generatePreviewCodes(
+      validation.quantity,
+      validation.prefix,
+      validation.length
+    );
 
     if (!codes.length) {
       setMikrotikMessage(
@@ -437,6 +435,14 @@ export default function PackagesPage() {
     );
   }
 
+  /*
+   * إنشاء الكروت فعليًا:
+   *
+   * 1. إرسال الطلب إلى API.
+   * 2. API يتعامل مع MikroTik.
+   * 3. API يستخدم الـ Mapping المحفوظ.
+   * 4. الكروت الناجحة تحفظ في Supabase.
+   */
   async function handleCreateCards() {
     setCreationResult(null);
 
@@ -448,9 +454,7 @@ export default function PackagesPage() {
     }
 
     const profileName =
-      mappings[
-        selectedPackage.id
-      ];
+      mappings[selectedPackage.id];
 
     if (!profileName) {
       setMikrotikMessage(
@@ -459,57 +463,22 @@ export default function PackagesPage() {
       return;
     }
 
-    const quantity =
-      Number(cardQuantity);
+    const validation = validateCardInputs();
 
-    const length =
-      Number(codeLength);
-
-    const prefix =
-      String(startCode).trim();
-
-    if (
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      quantity > 1000
-    ) {
-      setMikrotikMessage(
-        'الكمية يجب أن تكون بين 1 و1000.'
-      );
+    if (!validation.valid) {
+      setMikrotikMessage(validation.message);
       return;
     }
 
-    if (!/^[0-9]+$/.test(prefix)) {
-      setMikrotikMessage(
-        'البداية يجب أن تحتوي على أرقام فقط.'
-      );
-      return;
-    }
+    const confirmed = window.confirm(
+      `سيتم إنشاء ${validation.quantity} كرت فعليًا في MikroTik User Manager وربطها بالـ Profile:
 
-    if (
-      !Number.isInteger(length) ||
-      length < 4 ||
-      length > 32
-    ) {
-      setMikrotikMessage(
-        'طول الكرت غير صحيح.'
-      );
-      return;
-    }
+${profileName}
 
-    if (
-      prefix.length >= length
-    ) {
-      setMikrotikMessage(
-        'طول البداية يجب أن يكون أقل من طول الكرت.'
-      );
-      return;
-    }
+ثم حفظ الكروت الناجحة في نظام تواصل.
 
-    const confirmed =
-      window.confirm(
-        `سيتم إنشاء ${quantity} كرت فعليًا في MikroTik User Manager وربطها بالـ Profile:\n\n${profileName}\n\nثم حفظ الكروت الناجحة في النظام.\n\nهل تريد المتابعة؟`
-      );
+هل تريد المتابعة؟`
+    );
 
     if (!confirmed) {
       return;
@@ -522,42 +491,41 @@ export default function PackagesPage() {
     setCreationResult(null);
 
     try {
-      const data =
-        await apiRequest(
-          '/api/mikrotik/user-manager',
-          {
-            method: 'POST',
-
-            body: JSON.stringify({
-              action:
-                'create-cards',
-
-              packageId:
-                selectedPackage.id,
-
-              quantity,
-
-              prefix,
-
-              codeLength: length,
-            }),
-          }
-        );
-
-      setCreationResult(
-        data
+      const data = await apiRequest(
+        '/api/mikrotik/user-manager',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'create-cards',
+            packageId: selectedPackage.id,
+            quantity: validation.quantity,
+            prefix: validation.prefix,
+            codeLength: validation.length,
+          }),
+        }
       );
 
+      setCreationResult(data);
       setPreviewCodes([]);
 
+      const savedCount =
+        Number(data?.savedInSupabase) || 0;
+
+      const requestedCount =
+        Number(data?.requested) ||
+        validation.quantity;
+
       setMikrotikMessage(
-        `تم إنشاء ${data.savedInSupabase} كرت بنجاح من أصل ${data.requested}.`
+        `تم إنشاء ${savedCount} كرت بنجاح من أصل ${requestedCount}.`
       );
 
+      /*
+       * تحديث عدد الكروت في الصفحة بعد الإنشاء.
+       */
       await loadPackages();
     } catch (error) {
       setMikrotikMessage(
-        error.message ||
+        error?.message ||
           'حدث خطأ أثناء إنشاء الكروت.'
       );
     } finally {
@@ -565,14 +533,15 @@ export default function PackagesPage() {
     }
   }
 
-  async function handleAddPackage(
-    event
-  ) {
+  /*
+   * إضافة باقة جديدة.
+   */
+  async function handleAddPackage(event) {
     event.preventDefault();
 
-    const name =
-      newPackageName.trim();
+    setPackageMessage('');
 
+    const name = newPackageName.trim();
     const numericPrice =
       Number(newPackagePrice);
 
@@ -584,9 +553,7 @@ export default function PackagesPage() {
     }
 
     if (
-      !Number.isFinite(
-        numericPrice
-      ) ||
+      !Number.isFinite(numericPrice) ||
       numericPrice <= 0
     ) {
       setPackageMessage(
@@ -602,8 +569,7 @@ export default function PackagesPage() {
       .from('packages')
       .insert({
         name,
-        price:
-          numericPrice,
+        price: numericPrice,
       })
       .select()
       .single();
@@ -615,19 +581,17 @@ export default function PackagesPage() {
       return;
     }
 
-    setPackages(
-      (current) => [
-        {
-          ...data,
-          cardsCount: 0,
-        },
-        ...current,
-      ]
-    );
+    const newPackage = {
+      ...data,
+      cardsCount: 0,
+    };
 
-    setSelectedPackageId(
-      data.id
-    );
+    setPackages((current) => [
+      newPackage,
+      ...current,
+    ]);
+
+    setSelectedPackageId(data.id);
 
     setNewPackageName('');
     setNewPackagePrice('');
@@ -637,21 +601,25 @@ export default function PackagesPage() {
     );
   }
 
-  async function handleDeletePackage(
-    id
-  ) {
-    const confirmed =
-      window.confirm(
-        'هل أنت متأكد من حذف هذه الباقة؟'
-      );
+  /*
+   * حذف الباقة.
+   *
+   * لا يتم حذف أي كروت يدويًا من هنا.
+   * قاعدة البيانات هي التي تحدد سلوك العلاقة
+   * حسب الـ Foreign Key الموجود لديها.
+   */
+  async function handleDeletePackage(id) {
+    const confirmed = window.confirm(
+      'هل أنت متأكد من حذف هذه الباقة؟'
+    );
 
     if (!confirmed) {
       return;
     }
 
-    const {
-      error,
-    } = await supabase
+    setPackageMessage('');
+
+    const { error } = await supabase
       .from('packages')
       .delete()
       .eq('id', id);
@@ -663,30 +631,26 @@ export default function PackagesPage() {
       return;
     }
 
-    setPackages(
-      (current) =>
-        current.filter(
-          (pkg) =>
-            pkg.id !== id
-        )
+    setPackages((current) =>
+      current.filter(
+        (pkg) => pkg.id !== id
+      )
     );
 
-    setMappings(
-      (current) => {
-        const next = {
-          ...current,
-        };
+    setMappings((current) => {
+      const next = {
+        ...current,
+      };
 
-        delete next[id];
+      delete next[id];
 
-        return next;
-      }
-    );
+      return next;
+    });
 
-    if (
-      selectedPackageId === id
-    ) {
+    if (selectedPackageId === id) {
       setSelectedPackageId('');
+      setPreviewCodes([]);
+      setCreationResult(null);
     }
 
     setPackageMessage(
@@ -694,6 +658,9 @@ export default function PackagesPage() {
     );
   }
 
+  /*
+   * حالات الدخول والصلاحيات.
+   */
   if (profileLoading) {
     return (
       <div
@@ -733,6 +700,8 @@ export default function PackagesPage() {
 
       <main className="mr-0 md:mr-64 p-4 md:p-6">
         <div className="max-w-7xl mx-auto space-y-6">
+
+          {/* العنوان */}
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
               إدارة الباقات والكروت
@@ -743,6 +712,7 @@ export default function PackagesPage() {
             </p>
           </div>
 
+          {/* رسائل النظام */}
           {packageMessage && (
             <div className="rounded-xl border bg-white p-4 text-sm">
               {packageMessage}
@@ -755,9 +725,12 @@ export default function PackagesPage() {
             </div>
           )}
 
-          {/* MikroTik connection */}
+          {/* ================================
+              MikroTik User Manager
+          ================================= */}
           <section className="rounded-2xl bg-white border shadow-sm p-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
               <div>
                 <h2 className="font-bold text-lg">
                   MikroTik User Manager
@@ -771,38 +744,29 @@ export default function PackagesPage() {
               <div className="flex items-center gap-3">
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-bold ${
-                    connectionStatus ===
-                    'connected'
+                    connectionStatus === 'connected'
                       ? 'bg-green-100 text-green-700'
-                      : connectionStatus ===
-                        'testing'
-                      ? 'bg-yellow-100 text-yellow-700'
-                      : connectionStatus ===
-                        'error'
-                      ? 'bg-red-100 text-red-700'
-                      : 'bg-gray-100 text-gray-600'
+                      : connectionStatus === 'testing'
+                        ? 'bg-yellow-100 text-yellow-700'
+                        : connectionStatus === 'error'
+                          ? 'bg-red-100 text-red-700'
+                          : 'bg-gray-100 text-gray-600'
                   }`}
                 >
-                  {connectionStatus ===
-                  'connected'
+                  {connectionStatus === 'connected'
                     ? 'متصل'
-                    : connectionStatus ===
-                      'testing'
-                    ? 'جارٍ الاختبار'
-                    : connectionStatus ===
-                      'error'
-                    ? 'خطأ'
-                    : 'غير مختبر'}
+                    : connectionStatus === 'testing'
+                      ? 'جارٍ الاختبار'
+                      : connectionStatus === 'error'
+                        ? 'خطأ'
+                        : 'غير مختبر'}
                 </span>
 
                 <button
                   type="button"
-                  onClick={
-                    handleTestConnection
-                  }
+                  onClick={handleTestConnection}
                   disabled={
-                    connectionStatus ===
-                    'testing'
+                    connectionStatus === 'testing'
                   }
                   className="rounded-xl bg-blue-600 px-4 py-2 text-white text-sm font-bold disabled:opacity-50"
                 >
@@ -816,51 +780,52 @@ export default function PackagesPage() {
                 <div className="py-8 text-center text-gray-500">
                   جارٍ تحميل Profiles من User Manager...
                 </div>
-              ) : mikrotikProfiles.length ===
-                0 ? (
+              ) : mikrotikProfiles.length === 0 ? (
                 <div className="py-8 text-center text-gray-500">
                   لا توجد Profiles أو لم يتم الاتصال بالراوتر.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {mikrotikProfiles.map(
-                    (profile) => (
-                      <div
-                        key={
-                          profile.id ||
-                          profile.name
-                        }
-                        className="border rounded-xl p-4"
-                      >
-                        <div className="font-bold text-sm">
-                          {profile.name}
-                        </div>
+                  {mikrotikProfiles.map((profileItem) => (
+                    <div
+                      key={
+                        profileItem.id ||
+                        profileItem.name
+                      }
+                      className="border rounded-xl p-4"
+                    >
+                      <div className="font-bold text-sm">
+                        {profileItem.name}
+                      </div>
 
-                        {profile.price !==
-                          '0' && (
+                      {String(
+                        profileItem.price ?? ''
+                      ) !== '0' &&
+                        profileItem.price !==
+                          undefined &&
+                        profileItem.price !==
+                          null && (
                           <div className="text-xs text-gray-500 mt-1">
                             السعر في MikroTik:{' '}
-                            {
-                              profile.price
-                            }
+                            {profileItem.price}
                           </div>
                         )}
 
-                        <div className="text-xs text-gray-500">
-                          الصلاحية:{' '}
-                          {
-                            profile.validity
-                          }
-                        </div>
+                      <div className="text-xs text-gray-500">
+                        الصلاحية:{' '}
+                        {profileItem.validity ||
+                          'غير محددة'}
                       </div>
-                    )
-                  )}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </section>
 
-          {/* Packages */}
+          {/* ================================
+              باقات تواصل
+          ================================= */}
           <section className="rounded-2xl bg-white border shadow-sm p-5">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold">
@@ -871,6 +836,10 @@ export default function PackagesPage() {
             {loadingPackages ? (
               <div className="py-8 text-center text-gray-500">
                 جارٍ تحميل الباقات...
+              </div>
+            ) : packages.length === 0 ? (
+              <div className="py-8 text-center text-gray-500">
+                لا توجد باقات حاليًا.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -904,138 +873,115 @@ export default function PackagesPage() {
                   </thead>
 
                   <tbody>
-                    {packages.map(
-                      (pkg) => {
-                        const mapping =
-                          mappings[
-                            pkg.id
-                          ];
+                    {packages.map((pkg) => {
+                      const mapping =
+                        mappings[pkg.id];
 
-                        return (
-                          <tr
-                            key={
-                              pkg.id
-                            }
-                            className="border-b last:border-0"
-                          >
-                            <td className="p-3 font-bold">
-                              {
-                                pkg.name
+                      return (
+                        <tr
+                          key={pkg.id}
+                          className="border-b last:border-0"
+                        >
+                          <td className="p-3 font-bold">
+                            {pkg.name}
+                          </td>
+
+                          <td className="p-3">
+                            {pkg.price}
+                          </td>
+
+                          <td className="p-3">
+                            {pkg.cardsCount}
+                          </td>
+
+                          <td className="p-3">
+                            <select
+                              value={mapping || ''}
+                              onChange={(event) =>
+                                handleMappingChange(
+                                  pkg.id,
+                                  event.target.value
+                                )
                               }
-                            </td>
-
-                            <td className="p-3">
-                              {
-                                pkg.price
+                              disabled={
+                                savingMapping ===
+                                  pkg.id ||
+                                loadingMikrotik
                               }
-                            </td>
+                              className="w-full rounded-xl border px-3 py-2 bg-white"
+                            >
+                              <option value="">
+                                اختر Profile من User Manager
+                              </option>
 
-                            <td className="p-3">
-                              {
-                                pkg.cardsCount
-                              }
-                            </td>
-
-                            <td className="p-3">
-                              <select
-                                value={
-                                  mapping ||
-                                  ''
-                                }
-                                onChange={(
-                                  event
-                                ) =>
-                                  handleMappingChange(
-                                    pkg.id,
-                                    event
-                                      .target
-                                      .value
-                                  )
-                                }
-                                disabled={
-                                  savingMapping ===
-                                    pkg.id ||
-                                  loadingMikrotik
-                                }
-                                className="w-full rounded-xl border px-3 py-2 bg-white"
-                              >
-                                <option value="">
-                                  اختر Profile من User Manager
-                                </option>
-
-                                {mikrotikProfiles.map(
-                                  (
-                                    profile
-                                  ) => (
-                                    <option
-                                      key={
-                                        profile.id ||
-                                        profile.name
-                                      }
-                                      value={
-                                        profile.name
-                                      }
-                                    >
-                                      {
-                                        profile.name
-                                      }
-                                    </option>
-                                  )
-                                )}
-                              </select>
-                            </td>
-
-                            <td className="p-3">
-                              {mapping ? (
-                                <span className="text-green-600 font-bold">
-                                  مربوط
-                                </span>
-                              ) : (
-                                <span className="text-red-600 font-bold">
-                                  غير مربوط
-                                </span>
+                              {mikrotikProfiles.map(
+                                (profileItem) => (
+                                  <option
+                                    key={
+                                      profileItem.id ||
+                                      profileItem.name
+                                    }
+                                    value={
+                                      profileItem.name
+                                    }
+                                  >
+                                    {
+                                      profileItem.name
+                                    }
+                                  </option>
+                                )
                               )}
-                            </td>
+                            </select>
+                          </td>
 
-                            <td className="p-3">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleDeletePackage(
-                                    pkg.id
-                                  )
-                                }
-                                className="text-red-600 font-bold"
-                              >
-                                حذف
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      }
-                    )}
+                          <td className="p-3">
+                            {mapping ? (
+                              <span className="text-green-600 font-bold">
+                                مربوط
+                              </span>
+                            ) : (
+                              <span className="text-red-600 font-bold">
+                                غير مربوط
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleDeletePackage(
+                                  pkg.id
+                                )
+                              }
+                              className="text-red-600 font-bold"
+                            >
+                              حذف
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
           </section>
 
-          {/* Add package */}
+          {/* ================================
+              إضافة باقة
+          ================================= */}
           <section className="rounded-2xl bg-white border shadow-sm p-5">
             <h2 className="text-lg font-bold mb-4">
               إضافة باقة
             </h2>
 
             <form
-              onSubmit={
-                handleAddPackage
-              }
+              onSubmit={handleAddPackage}
               className="grid grid-cols-1 md:grid-cols-3 gap-3"
             >
               <input
-                value={
-                  newPackageName
-                }
+                value={newPackageName}
                 onChange={(event) =>
                   setNewPackageName(
                     event.target.value
@@ -1048,9 +994,7 @@ export default function PackagesPage() {
               <input
                 type="number"
                 min="1"
-                value={
-                  newPackagePrice
-                }
+                value={newPackagePrice}
                 onChange={(event) =>
                   setNewPackagePrice(
                     event.target.value
@@ -1069,7 +1013,9 @@ export default function PackagesPage() {
             </form>
           </section>
 
-          {/* Card generator */}
+          {/* ================================
+              إنشاء الكروت
+          ================================= */}
           <section className="rounded-2xl bg-white border shadow-sm p-5">
             <h2 className="text-lg font-bold">
               إنشاء كروت فعلية
@@ -1080,27 +1026,23 @@ export default function PackagesPage() {
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
+
+              {/* الباقة */}
               <div>
                 <label className="block text-sm font-bold mb-2">
                   الباقة
                 </label>
 
                 <select
-                  value={
-                    selectedPackageId
-                  }
-                  onChange={(
-                    event
-                  ) => {
+                  value={selectedPackageId}
+                  onChange={(event) => {
                     setSelectedPackageId(
                       event.target.value
                     );
-                    setPreviewCodes(
-                      []
-                    );
-                    setCreationResult(
-                      null
-                    );
+
+                    setPreviewCodes([]);
+                    setCreationResult(null);
+                    setMikrotikMessage('');
                   }}
                   className="w-full rounded-xl border px-4 py-3 bg-white"
                 >
@@ -1108,26 +1050,18 @@ export default function PackagesPage() {
                     اختر الباقة
                   </option>
 
-                  {packages.map(
-                    (pkg) => (
-                      <option
-                        key={
-                          pkg.id
-                        }
-                        value={
-                          pkg.id
-                        }
-                      >
-                        {pkg.name} —{' '}
-                        {
-                          pkg.price
-                        }
-                      </option>
-                    )
-                  )}
+                  {packages.map((pkg) => (
+                    <option
+                      key={pkg.id}
+                      value={pkg.id}
+                    >
+                      {pkg.name} — {pkg.price}
+                    </option>
+                  ))}
                 </select>
               </div>
 
+              {/* العدد */}
               <div>
                 <label className="block text-sm font-bold mb-2">
                   العدد
@@ -1137,12 +1071,8 @@ export default function PackagesPage() {
                   type="number"
                   min="1"
                   max="1000"
-                  value={
-                    cardQuantity
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  value={cardQuantity}
+                  onChange={(event) =>
                     setCardQuantity(
                       event.target.value
                     )
@@ -1151,6 +1081,7 @@ export default function PackagesPage() {
                 />
               </div>
 
+              {/* بداية الكرت */}
               <div>
                 <label className="block text-sm font-bold mb-2">
                   بداية الكرت
@@ -1158,12 +1089,8 @@ export default function PackagesPage() {
 
                 <input
                   inputMode="numeric"
-                  value={
-                    startCode
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  value={startCode}
+                  onChange={(event) =>
                     setStartCode(
                       event.target.value.replace(
                         /\D/g,
@@ -1176,6 +1103,7 @@ export default function PackagesPage() {
                 />
               </div>
 
+              {/* طول الكرت */}
               <div>
                 <label className="block text-sm font-bold mb-2">
                   طول الكرت
@@ -1185,12 +1113,8 @@ export default function PackagesPage() {
                   type="number"
                   min="4"
                   max="32"
-                  value={
-                    codeLength
-                  }
-                  onChange={(
-                    event
-                  ) =>
+                  value={codeLength}
+                  onChange={(event) =>
                     setCodeLength(
                       event.target.value
                     )
@@ -1200,6 +1124,7 @@ export default function PackagesPage() {
               </div>
             </div>
 
+            {/* معلومات الباقة المختارة */}
             {selectedPackage && (
               <div className="mt-5 rounded-xl bg-gray-50 border p-4">
                 <div className="font-bold">
@@ -1208,9 +1133,7 @@ export default function PackagesPage() {
 
                 <div className="text-sm text-gray-600 mt-1">
                   سعر النظام:{' '}
-                  {
-                    selectedPackage.price
-                  }
+                  {selectedPackage.price}
                 </div>
 
                 <div className="text-sm mt-1">
@@ -1218,22 +1141,26 @@ export default function PackagesPage() {
                   <span className="font-bold">
                     {mappings[
                       selectedPackage.id
-                    ] ||
-                      'غير مربوط'}
+                    ] || 'غير مربوط'}
+                  </span>
+                </div>
+
+                <div className="text-sm mt-1 text-gray-600">
+                  عدد الكروت الموجودة:{' '}
+                  <span className="font-bold">
+                    {selectedPackage.cardsCount || 0}
                   </span>
                 </div>
               </div>
             )}
 
+            {/* أزرار الإنشاء */}
             <div className="flex flex-wrap gap-3 mt-5">
+
               <button
                 type="button"
-                onClick={
-                  handlePreview
-                }
-                disabled={
-                  creatingCards
-                }
+                onClick={handlePreview}
+                disabled={creatingCards}
                 className="rounded-xl border px-5 py-3 font-bold disabled:opacity-50"
               >
                 معاينة الأكواد
@@ -1241,9 +1168,7 @@ export default function PackagesPage() {
 
               <button
                 type="button"
-                onClick={
-                  handleCreateCards
-                }
+                onClick={handleCreateCards}
                 disabled={
                   creatingCards ||
                   !selectedPackage ||
@@ -1259,28 +1184,27 @@ export default function PackagesPage() {
               </button>
             </div>
 
-            {previewCodes.length >
-              0 && (
+            {/* معاينة الأكواد */}
+            {previewCodes.length > 0 && (
               <div className="mt-5">
                 <h3 className="font-bold mb-3">
                   معاينة الأكواد
                 </h3>
 
                 <div className="grid grid-cols-2 md:grid-cols-5 lg:grid-cols-8 gap-2">
-                  {previewCodes.map(
-                    (code) => (
-                      <div
-                        key={code}
-                        className="rounded-lg border bg-gray-50 px-3 py-2 text-center font-mono"
-                      >
-                        {code}
-                      </div>
-                    )
-                  )}
+                  {previewCodes.map((code) => (
+                    <div
+                      key={code}
+                      className="rounded-lg border bg-gray-50 px-3 py-2 text-center font-mono"
+                    >
+                      {code}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
+            {/* نتيجة إنشاء الكروت */}
             {creationResult && (
               <div className="mt-5 rounded-xl border p-4">
                 <h3 className="font-bold text-lg">
@@ -1288,15 +1212,16 @@ export default function PackagesPage() {
                 </h3>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+
                   <div className="rounded-xl bg-gray-50 p-3">
                     <div className="text-xs text-gray-500">
                       المطلوب
                     </div>
 
                     <div className="text-xl font-bold">
-                      {
+                      {Number(
                         creationResult.requested
-                      }
+                      ) || 0}
                     </div>
                   </div>
 
@@ -1306,9 +1231,9 @@ export default function PackagesPage() {
                     </div>
 
                     <div className="text-xl font-bold text-green-700">
-                      {
+                      {Number(
                         creationResult.createdInMikrotik
-                      }
+                      ) || 0}
                     </div>
                   </div>
 
@@ -1318,9 +1243,9 @@ export default function PackagesPage() {
                     </div>
 
                     <div className="text-xl font-bold text-blue-700">
-                      {
+                      {Number(
                         creationResult.savedInSupabase
-                      }
+                      ) || 0}
                     </div>
                   </div>
 
@@ -1330,18 +1255,15 @@ export default function PackagesPage() {
                     </div>
 
                     <div className="text-xl font-bold text-red-700">
-                      {
+                      {Number(
                         creationResult.failed
-                      }
+                      ) || 0}
                     </div>
                   </div>
                 </div>
 
-                {creationResult
-                  .results
-                  ?.failed
-                  ?.length >
-                  0 && (
+                {/* الكروت الفاشلة */}
+                {creationResult?.results?.failed?.length > 0 && (
                   <div className="mt-4">
                     <h4 className="font-bold text-red-600 mb-2">
                       الكروت التي فشلت
@@ -1349,24 +1271,19 @@ export default function PackagesPage() {
 
                     <div className="space-y-1">
                       {creationResult.results.failed.map(
-                        (
-                          item,
-                          index
-                        ) => (
+                        (item, index) => (
                           <div
-                            key={`${item.code}-${index}`}
+                            key={`${item?.code || 'unknown'}-${index}`}
                             className="text-sm border rounded-lg p-2"
                           >
                             <span className="font-mono font-bold">
-                              {
-                                item.code
-                              }
+                              {item?.code ||
+                                'غير معروف'}
                             </span>
 
                             <span className="text-gray-500 mr-2">
-                              {
-                                item.error
-                              }
+                              {item?.error ||
+                                'سبب الفشل غير معروف'}
                             </span>
                           </div>
                         )
