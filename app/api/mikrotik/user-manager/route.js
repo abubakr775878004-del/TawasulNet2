@@ -10,9 +10,15 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// Environment Variables fallback
 const MIKROTIK_URL = process.env.MIKROTIK_URL;
 const MIKROTIK_USERNAME = process.env.MIKROTIK_USERNAME;
 const MIKROTIK_PASSWORD = process.env.MIKROTIK_PASSWORD;
+
+// مفتاح تشفير كلمة مرور MikroTik المخزنة في قاعدة البيانات.
+// يجب أن يكون 32 bytes = 64 حرف Hex.
+const MIKROTIK_SETTINGS_ENCRYPTION_KEY =
+  process.env.MIKROTIK_SETTINGS_ENCRYPTION_KEY;
 
 const MAX_BATCH = 1000;
 const BATCH_CONCURRENCY = 8;
@@ -129,69 +135,513 @@ async function authenticateAdmin(request) {
   };
 }
 
-function getMikrotikConfig() {
+/* =========================================================
+   MikroTik Settings Encryption
+   ========================================================= */
+
+function getEncryptionKey() {
+  if (!MIKROTIK_SETTINGS_ENCRYPTION_KEY) {
+    throw new Error(
+      'MIKROTIK_SETTINGS_ENCRYPTION_KEY غير موجود في Environment Variables.'
+    );
+  }
+
+  const value =
+    MIKROTIK_SETTINGS_ENCRYPTION_KEY.trim();
+
+  // 64 hex characters = 32 bytes
+  if (/^[0-9a-fA-F]{64}$/.test(value)) {
+    return Buffer.from(value, 'hex');
+  }
+
+  // دعم Base64 أيضًا إذا كانت القيمة 32 bytes.
+  try {
+    const decoded = Buffer.from(value, 'base64');
+
+    if (decoded.length === 32) {
+      return decoded;
+    }
+  } catch {
+    // سيتم إظهار الخطأ أدناه.
+  }
+
+  throw new Error(
+    'MIKROTIK_SETTINGS_ENCRYPTION_KEY يجب أن يكون 64 حرف Hex أو Base64 بطول 32 bytes.'
+  );
+}
+
+function encryptPassword(password) {
+  const key = getEncryptionKey();
+
+  const iv = crypto.randomBytes(12);
+
+  const cipher = crypto.createCipheriv(
+    'aes-256-gcm',
+    key,
+    iv
+  );
+
+  const encrypted = Buffer.concat([
+    cipher.update(password, 'utf8'),
+    cipher.final(),
+  ]);
+
+  const authTag = cipher.getAuthTag();
+
+  return [
+    'v1',
+    iv.toString('hex'),
+    authTag.toString('hex'),
+    encrypted.toString('hex'),
+  ].join(':');
+}
+
+function decryptPassword(encryptedValue) {
+  if (
+    typeof encryptedValue !== 'string' ||
+    !encryptedValue
+  ) {
+    throw new Error(
+      'كلمة مرور MikroTik المخزنة غير صالحة.'
+    );
+  }
+
+  const parts = encryptedValue.split(':');
+
+  if (
+    parts.length !== 4 ||
+    parts[0] !== 'v1'
+  ) {
+    throw new Error(
+      'صيغة كلمة مرور MikroTik المخزنة غير صالحة.'
+    );
+  }
+
+  const [, ivHex, authTagHex, encryptedHex] =
+    parts;
+
+  const key = getEncryptionKey();
+
+  const iv = Buffer.from(ivHex, 'hex');
+  const authTag = Buffer.from(
+    authTagHex,
+    'hex'
+  );
+  const encrypted = Buffer.from(
+    encryptedHex,
+    'hex'
+  );
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    key,
+    iv
+  );
+
+  decipher.setAuthTag(authTag);
+
+  const decrypted = Buffer.concat([
+    decipher.update(encrypted),
+    decipher.final(),
+  ]);
+
+  return decrypted.toString('utf8');
+}
+
+/* =========================================================
+   MikroTik Settings
+   ========================================================= */
+
+function normalizeMikrotikUrl(value) {
+  const url =
+    String(value || '').trim();
+
+  if (!url) {
+    throw new Error(
+      'يجب إدخال عنوان MikroTik.'
+    );
+  }
+
+  if (!url.startsWith('https://')) {
+    throw new Error(
+      'عنوان MikroTik يجب أن يبدأ بـ https:// لاستخدام الاتصال الآمن.'
+    );
+  }
+
+  let parsed;
+
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(
+      'عنوان MikroTik غير صالح.'
+    );
+  }
+
+  if (
+    parsed.protocol !== 'https:' ||
+    !parsed.hostname
+  ) {
+    throw new Error(
+      'عنوان MikroTik يجب أن يكون HTTPS صالحًا.'
+    );
+  }
+
+  if (
+    parsed.username ||
+    parsed.password
+  ) {
+    throw new Error(
+      'لا تضع اسم المستخدم أو كلمة المرور داخل رابط MikroTik.'
+    );
+  }
+
+  return url.replace(/\/+$/, '');
+}
+
+function validateMikrotikUsername(value) {
+  const username =
+    String(value || '').trim();
+
+  if (!username) {
+    throw new Error(
+      'يجب إدخال اسم مستخدم MikroTik.'
+    );
+  }
+
+  if (username.length > 255) {
+    throw new Error(
+      'اسم مستخدم MikroTik طويل جدًا.'
+    );
+  }
+
+  return username;
+}
+
+async function getStoredMikrotikSettings() {
+  const supabase = getSupabaseAdmin();
+
+  const {
+    data,
+    error,
+  } = await supabase
+    .from('mikrotik_settings')
+    .select(
+      'id, router_url, username, password_encrypted, created_at, updated_at'
+    )
+    .eq('id', true)
+    .maybeSingle();
+
+  if (error) {
+    // إذا كان الجدول غير موجود أو حدث خطأ في الوصول،
+    // نرجع الخطأ بوضوح ولا نخلط الإعدادات.
+    throw new Error(
+      `تعذر قراءة إعدادات MikroTik: ${error.message}`
+    );
+  }
+
+  return data || null;
+}
+
+async function resolveMikrotikConfig() {
+  const stored =
+    await getStoredMikrotikSettings();
+
+  /*
+   * الأولوية للإعدادات المخزنة في قاعدة البيانات.
+   */
+  if (stored) {
+    if (
+      !stored.router_url ||
+      !stored.username ||
+      !stored.password_encrypted
+    ) {
+      throw new Error(
+        'إعدادات MikroTik المخزنة في قاعدة البيانات غير مكتملة.'
+      );
+    }
+
+    const baseUrl =
+      normalizeMikrotikUrl(
+        stored.router_url
+      );
+
+    const username =
+      validateMikrotikUsername(
+        stored.username
+      );
+
+    const password =
+      decryptPassword(
+        stored.password_encrypted
+      );
+
+    if (!password) {
+      throw new Error(
+        'كلمة مرور MikroTik المخزنة فارغة.'
+      );
+    }
+
+    return {
+      baseUrl,
+      username,
+      password,
+      source: 'database',
+      auth:
+        'Basic ' +
+        Buffer.from(
+          `${username}:${password}`
+        ).toString('base64'),
+    };
+  }
+
+  /*
+   * إذا لم توجد إعدادات في DB،
+   * نحافظ على دعم Environment Variables القديم.
+   */
   if (
     !MIKROTIK_URL ||
     !MIKROTIK_USERNAME ||
     !MIKROTIK_PASSWORD
   ) {
     throw new Error(
-      'بيانات اتصال MikroTik غير مكتملة في Environment Variables.'
+      'بيانات اتصال MikroTik غير مكتملة. أدخل إعدادات MikroTik من صفحة الباقات أو قم بضبط Environment Variables.'
     );
   }
 
-  const baseUrl = MIKROTIK_URL.replace(/\/+$/, '');
-
-  if (!baseUrl.startsWith('https://')) {
-    throw new Error(
-      'MIKROTIK_URL يجب أن يبدأ بـ https:// لاستخدام الاتصال الآمن.'
+  const baseUrl =
+    normalizeMikrotikUrl(
+      MIKROTIK_URL
     );
-  }
+
+  const username =
+    validateMikrotikUsername(
+      MIKROTIK_USERNAME
+    );
 
   return {
     baseUrl,
+    username,
+    password: MIKROTIK_PASSWORD,
+    source: 'environment',
     auth:
       'Basic ' +
       Buffer.from(
-        `${MIKROTIK_USERNAME}:${MIKROTIK_PASSWORD}`
+        `${username}:${MIKROTIK_PASSWORD}`
       ).toString('base64'),
   };
 }
 
-async function mikrotikRequest(
-  path,
-  options = {}
-) {
-  const config = getMikrotikConfig();
+async function getMikrotikSettingsForClient() {
+  const stored =
+    await getStoredMikrotikSettings();
 
-  const controller = new AbortController();
+  if (stored) {
+    return {
+      configured: Boolean(
+        stored.router_url &&
+        stored.username &&
+        stored.password_encrypted
+      ),
+      routerUrl:
+        stored.router_url || '',
+      username:
+        stored.username || '',
+      hasPassword:
+        Boolean(
+          stored.password_encrypted
+        ),
+      source: 'database',
+      updatedAt:
+        stored.updated_at || null,
+    };
+  }
 
-  const timeout = setTimeout(() => {
-    controller.abort();
-  }, 15000);
-
-  try {
-    const response = await fetch(
-      `${config.baseUrl}/rest/${path.replace(/^\/+/, '')}`,
-      {
-        ...options,
-        headers: {
-          Authorization: config.auth,
-          'Content-Type': 'application/json',
-          ...(options.headers || {}),
-        },
-        cache: 'no-store',
-        signal: controller.signal,
-      }
+  const environmentConfigured =
+    Boolean(
+      MIKROTIK_URL &&
+      MIKROTIK_USERNAME &&
+      MIKROTIK_PASSWORD
     );
 
-    const text = await response.text();
+  return {
+    configured:
+      environmentConfigured,
+    routerUrl:
+      MIKROTIK_URL || '',
+    username:
+      MIKROTIK_USERNAME || '',
+    hasPassword:
+      Boolean(MIKROTIK_PASSWORD),
+    source:
+      environmentConfigured
+        ? 'environment'
+        : null,
+    updatedAt: null,
+  };
+}
+
+async function saveMikrotikSettings(body) {
+  const routerUrl =
+    normalizeMikrotikUrl(
+      body?.routerUrl
+    );
+
+  const username =
+    validateMikrotikUsername(
+      body?.username
+    );
+
+  const password =
+    typeof body?.password === 'string'
+      ? body.password
+      : '';
+
+  const supabase =
+    getSupabaseAdmin();
+
+  const {
+    data: existing,
+    error: existingError,
+  } =
+    await supabase
+      .from('mikrotik_settings')
+      .select(
+        'id, password_encrypted'
+      )
+      .eq('id', true)
+      .maybeSingle();
+
+  if (existingError) {
+    throw new Error(
+      `تعذر قراءة إعدادات MikroTik الحالية: ${existingError.message}`
+    );
+  }
+
+  let passwordEncrypted =
+    existing?.password_encrypted ||
+    null;
+
+  /*
+   * إذا أرسل المستخدم كلمة مرور جديدة:
+   * نقوم بتشفيرها.
+   *
+   * إذا كانت فارغة أثناء التعديل:
+   * نحافظ على كلمة المرور القديمة.
+   */
+  if (password.trim()) {
+    passwordEncrypted =
+      encryptPassword(password);
+  }
+
+  if (!passwordEncrypted) {
+    throw new Error(
+      'يجب إدخال كلمة مرور MikroTik.'
+    );
+  }
+
+  const now =
+    new Date().toISOString();
+
+  const {
+    data,
+    error,
+  } = await supabase
+    .from('mikrotik_settings')
+    .upsert(
+      {
+        id: true,
+        router_url: routerUrl,
+        username,
+        password_encrypted:
+          passwordEncrypted,
+        updated_at: now,
+        ...(existing
+          ? {}
+          : {
+              created_at: now,
+            }),
+      },
+      {
+        onConflict: 'id',
+      }
+    )
+    .select(
+      'id, router_url, username, created_at, updated_at'
+    )
+    .single();
+
+  if (error) {
+    throw new Error(
+      `تعذر حفظ إعدادات MikroTik: ${error.message}`
+    );
+  }
+
+  return {
+    configured: true,
+    routerUrl:
+      data.router_url,
+    username:
+      data.username,
+    hasPassword: true,
+    source: 'database',
+    updatedAt:
+      data.updated_at || null,
+  };
+}
+
+/* =========================================================
+   MikroTik Requests
+   ========================================================= */
+
+async function mikrotikRequest(
+  path,
+  options = {},
+  providedConfig = null
+) {
+  const config =
+    providedConfig ||
+    (await resolveMikrotikConfig());
+
+  const controller =
+    new AbortController();
+
+  const timeout =
+    setTimeout(() => {
+      controller.abort();
+    }, 15000);
+
+  try {
+    const response =
+      await fetch(
+        `${config.baseUrl}/rest/${path.replace(
+          /^\/+/,
+          ''
+        )}`,
+        {
+          ...options,
+          headers: {
+            Authorization:
+              config.auth,
+            'Content-Type':
+              'application/json',
+            ...(options.headers || {}),
+          },
+          cache: 'no-store',
+          signal:
+            controller.signal,
+        }
+      );
+
+    const text =
+      await response.text();
 
     let data = null;
 
     if (text) {
       try {
-        data = JSON.parse(text);
+        data =
+          JSON.parse(text);
       } catch {
         data = text;
       }
@@ -199,12 +649,17 @@ async function mikrotikRequest(
 
     if (!response.ok) {
       const message =
-        typeof data === 'object' && data?.message
+        typeof data === 'object' &&
+        data?.message
           ? data.message
           : `MikroTik HTTP ${response.status}`;
 
-      const error = new Error(message);
-      error.status = response.status;
+      const error =
+        new Error(message);
+
+      error.status =
+        response.status;
+
       error.data = data;
 
       throw error;
@@ -216,49 +671,89 @@ async function mikrotikRequest(
   }
 }
 
-async function testMikrotik() {
-  const data = await mikrotikRequest(
-    'system/resource'
-  );
+async function testMikrotik(
+  config = null
+) {
+  const data =
+    await mikrotikRequest(
+      'system/resource',
+      {},
+      config
+    );
 
-  const resource = Array.isArray(data)
-    ? data[0]
-    : data;
+  const resource =
+    Array.isArray(data)
+      ? data[0]
+      : data;
 
   return {
-    version: resource?.version || null,
+    version:
+      resource?.version ||
+      null,
     board:
       resource?.['board-name'] ||
       resource?.board ||
       null,
-    platform: resource?.platform || null,
+    platform:
+      resource?.platform ||
+      null,
   };
 }
 
-async function getProfiles() {
-  const data = await mikrotikRequest(
-    'user-manager/profile'
-  );
+async function getProfiles(
+  config = null
+) {
+  const data =
+    await mikrotikRequest(
+      'user-manager/profile',
+      {},
+      config
+    );
 
-  const profiles = Array.isArray(data)
-    ? data
-    : [];
+  const profiles =
+    Array.isArray(data)
+      ? data
+      : [];
 
   return profiles
     .map((profile) => ({
-      id: profile['.id'] || null,
-      name: profile.name || '',
+      id:
+        profile['.id'] ||
+        null,
+
+      name:
+        profile.name ||
+        '',
+
       nameForUsers:
-        profile['name-for-users'] || '',
-      price: profile.price || '0',
+        profile['name-for-users'] ||
+        '',
+
+      price:
+        profile.price ||
+        '0',
+
       validity:
-        profile.validity || 'unlimited',
+        profile.validity ||
+        'unlimited',
+
       startsWhen:
-        profile['starts-when'] || 'assigned',
-      comment: profile.comment || '',
+        profile['starts-when'] ||
+        'assigned',
+
+      comment:
+        profile.comment ||
+        '',
     }))
-    .filter((profile) => profile.name);
+    .filter(
+      (profile) =>
+        profile.name
+    );
 }
+
+/* =========================================================
+   Card Code Generation
+   ========================================================= */
 
 function validateCodeFormat(code) {
   return (
@@ -267,14 +762,24 @@ function validateCodeFormat(code) {
   );
 }
 
-function generateCode(prefix, totalLength) {
+function generateCode(
+  prefix,
+  totalLength
+) {
   const remaining =
-    totalLength - prefix.length;
+    totalLength -
+    prefix.length;
 
   let suffix = '';
 
-  for (let i = 0; i < remaining; i += 1) {
-    suffix += crypto.randomInt(0, 10).toString();
+  for (
+    let i = 0;
+    i < remaining;
+    i += 1
+  ) {
+    suffix += crypto
+      .randomInt(0, 10)
+      .toString();
   }
 
   return `${prefix}${suffix}`;
@@ -286,49 +791,71 @@ async function generateUniqueCodes(
   quantity,
   supabase
 ) {
-  const codes = new Set();
+  const codes =
+    new Set();
 
   const maximumPossible =
-    10 ** (totalLength - prefix.length);
+    10 **
+    (totalLength -
+      prefix.length);
 
-  if (quantity > maximumPossible) {
+  if (
+    quantity >
+    maximumPossible
+  ) {
     throw new Error(
       'عدد الكروت المطلوب أكبر من عدد الأكواد الممكنة لهذا الطول والبداية.'
     );
   }
 
   const maxAttempts =
-    Math.max(quantity * 50, 5000);
+    Math.max(
+      quantity * 50,
+      5000
+    );
 
   let attempts = 0;
 
   while (
-    codes.size < quantity &&
-    attempts < maxAttempts
+    codes.size <
+      quantity &&
+    attempts <
+      maxAttempts
   ) {
     attempts += 1;
 
-    const code = generateCode(
-      prefix,
-      totalLength
-    );
+    const code =
+      generateCode(
+        prefix,
+        totalLength
+      );
 
     codes.add(code);
   }
 
-  if (codes.size !== quantity) {
+  if (
+    codes.size !==
+    quantity
+  ) {
     throw new Error(
       'تعذر توليد أكواد فريدة بالعدد المطلوب.'
     );
   }
 
-  const generated = [...codes];
+  const generated =
+    [...codes];
 
-  const { data: existingCards, error } =
+  const {
+    data: existingCards,
+    error,
+  } =
     await supabase
       .from('cards')
       .select('code')
-      .in('code', generated);
+      .in(
+        'code',
+        generated
+      );
 
   if (error) {
     throw new Error(
@@ -336,13 +863,18 @@ async function generateUniqueCodes(
     );
   }
 
-  const existing = new Set(
-    (existingCards || []).map(
-      (card) => card.code
-    )
-  );
+  const existing =
+    new Set(
+      (existingCards || [])
+        .map(
+          (card) =>
+            card.code
+        )
+    );
 
-  if (existing.size > 0) {
+  if (
+    existing.size > 0
+  ) {
     return generateUniqueCodes(
       prefix,
       totalLength,
@@ -354,24 +886,32 @@ async function generateUniqueCodes(
   return generated;
 }
 
+/* =========================================================
+   MikroTik User Creation
+   ========================================================= */
+
 async function createMikrotikUser(
   code,
-  profileName
+  profileName,
+  config = null
 ) {
   let createdUser = null;
 
   try {
-    createdUser = await mikrotikRequest(
-      'user-manager/user',
-      {
-        method: 'PUT',
-        body: JSON.stringify({
-          name: code,
-          password: code,
-          'shared-users': '1',
-        }),
-      }
-    );
+    createdUser =
+      await mikrotikRequest(
+        'user-manager/user',
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            name: code,
+            password: code,
+            'shared-users':
+              '1',
+          }),
+        },
+        config
+      );
 
     await mikrotikRequest(
       'user-manager/user-profile',
@@ -379,9 +919,11 @@ async function createMikrotikUser(
         method: 'PUT',
         body: JSON.stringify({
           user: code,
-          profile: profileName,
+          profile:
+            profileName,
         }),
-      }
+      },
+      config
     );
 
     return {
@@ -392,17 +934,21 @@ async function createMikrotikUser(
   } catch (error) {
     /*
      * إذا تم إنشاء المستخدم ولكن فشل ربط الـ Profile،
-     * نحاول تنظيف المستخدم حتى لا يبقى كرت ناقص داخل MikroTik.
+     * نحاول تنظيف المستخدم.
      */
-    if (createdUser?.['.id']) {
+    if (
+      createdUser?.['.id']
+    ) {
       try {
         await mikrotikRequest(
           `user-manager/user/${encodeURIComponent(
             createdUser['.id']
           )}`,
           {
-            method: 'DELETE',
-          }
+            method:
+              'DELETE',
+          },
+          config
         );
       } catch {
         // لا نخفي الخطأ الأصلي.
@@ -424,15 +970,22 @@ async function runWithConcurrency(
   concurrency,
   worker
 ) {
-  const results = new Array(items.length);
+  const results =
+    new Array(
+      items.length
+    );
 
   let nextIndex = 0;
 
   async function runner() {
     while (true) {
-      const index = nextIndex;
+      const index =
+        nextIndex;
 
-      if (index >= items.length) {
+      if (
+        index >=
+        items.length
+      ) {
         return;
       }
 
@@ -440,11 +993,15 @@ async function runWithConcurrency(
 
       try {
         results[index] =
-          await worker(items[index], index);
+          await worker(
+            items[index],
+            index
+          );
       } catch (error) {
         results[index] = {
           success: false,
-          code: items[index],
+          code:
+            items[index],
           error:
             error?.message ||
             'خطأ غير معروف.',
@@ -453,84 +1010,108 @@ async function runWithConcurrency(
     }
   }
 
-  const workers = Array.from(
-    {
-      length: Math.min(
-        concurrency,
-        items.length
-      ),
-    },
-    () => runner()
-  );
+  const workers =
+    Array.from(
+      {
+        length:
+          Math.min(
+            concurrency,
+            items.length
+          ),
+      },
+      () => runner()
+    );
 
-  await Promise.all(workers);
+  await Promise.all(
+    workers
+  );
 
   return results;
 }
+
+/* =========================================================
+   Supabase Cards
+   ========================================================= */
 
 async function saveSuccessfulCards(
   supabase,
   packageId,
   successfulCodes
 ) {
-  if (!successfulCodes.length) {
+  if (
+    !successfulCodes.length
+  ) {
     return {
       inserted: [],
       failed: [],
     };
   }
 
-  const rows = successfulCodes.map(
-    (code) => ({
-      code,
-      package_id: packageId,
-      status: 'available',
-    })
-  );
+  const rows =
+    successfulCodes.map(
+      (code) => ({
+        code,
+        package_id:
+          packageId,
+        status:
+          'available',
+      })
+    );
 
   const {
     data,
     error,
-  } = await supabase
-    .from('cards')
-    .insert(rows)
-    .select(
-      'id, code, package_id, status, created_at'
-    );
+  } =
+    await supabase
+      .from('cards')
+      .insert(rows)
+      .select(
+        'id, code, package_id, status, created_at'
+      );
 
   if (!error) {
     return {
-      inserted: data || [],
+      inserted:
+        data || [],
       failed: [],
     };
   }
 
   /*
-   * في حالة وجود تعارض، نحاول إدخال كل كرت بشكل منفصل
-   * حتى لا نخسر الدفعة كاملة.
+   * في حالة وجود تعارض،
+   * نحاول إدخال كل كرت بشكل منفصل.
    */
   const inserted = [];
   const failed = [];
 
-  for (const row of rows) {
+  for (
+    const row of rows
+  ) {
     const {
       data: insertedRow,
       error: insertError,
-    } = await supabase
-      .from('cards')
-      .insert(row)
-      .select(
-        'id, code, package_id, status, created_at'
-      )
-      .maybeSingle();
+    } =
+      await supabase
+        .from('cards')
+        .insert(row)
+        .select(
+          'id, code, package_id, status, created_at'
+        )
+        .maybeSingle();
 
     if (insertError) {
       failed.push({
-        code: row.code,
-        error: insertError.message,
+        code:
+          row.code,
+        error:
+          insertError.message,
       });
-    } else if (insertedRow) {
-      inserted.push(insertedRow);
+    } else if (
+      insertedRow
+    ) {
+      inserted.push(
+        insertedRow
+      );
     }
   }
 
@@ -540,31 +1121,42 @@ async function saveSuccessfulCards(
   };
 }
 
+/* =========================================================
+   Cleanup MikroTik User
+   ========================================================= */
+
 async function deleteMikrotikUser(
-  code
+  code,
+  config = null
 ) {
   try {
-    const users = await mikrotikRequest(
-      'user-manager/user',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          '.proplist': [
-            '.id',
-            'name',
-          ],
-          '.query': [
-            `name=${code}`,
-          ],
-        }),
-      }
-    );
+    const users =
+      await mikrotikRequest(
+        'user-manager/user',
+        {
+          method:
+            'POST',
+          body: JSON.stringify({
+            '.proplist': [
+              '.id',
+              'name',
+            ],
+            '.query': [
+              `name=${code}`,
+            ],
+          }),
+        },
+        config
+      );
 
-    const user = Array.isArray(users)
-      ? users[0]
-      : null;
+    const user =
+      Array.isArray(users)
+        ? users[0]
+        : null;
 
-    if (!user?.['.id']) {
+    if (
+      !user?.['.id']
+    ) {
       return;
     }
 
@@ -573,44 +1165,100 @@ async function deleteMikrotikUser(
         user['.id']
       )}`,
       {
-        method: 'DELETE',
-      }
+        method:
+          'DELETE',
+      },
+      config
     );
   } catch {
-    // سيتم الإبلاغ عن الكرت كحالة تحتاج reconciliation.
+    /*
+     * سيتم الإبلاغ عن الكرت كحالة
+     * تحتاج reconciliation.
+     */
   }
 }
 
+/* =========================================================
+   GET
+   ========================================================= */
+
 export async function GET(request) {
-  const auth = await authenticateAdmin(
-    request
-  );
+  const auth =
+    await authenticateAdmin(
+      request
+    );
 
   if (!auth.ok) {
     return auth.response;
   }
 
-  const { searchParams } =
-    new URL(request.url);
+  const {
+    searchParams,
+  } = new URL(
+    request.url
+  );
 
   const action =
-    searchParams.get('action') || 'profiles';
+    searchParams.get(
+      'action'
+    ) || 'profiles';
 
   try {
-    if (action === 'test') {
+    /*
+     * قراءة إعدادات الاتصال
+     * بدون إرجاع كلمة المرور.
+     */
+    if (
+      action ===
+      'settings'
+    ) {
+      const settings =
+        await getMikrotikSettingsForClient();
+
+      return NextResponse.json({
+        success: true,
+        ...settings,
+      });
+    }
+
+    /*
+     * اختبار الاتصال.
+     */
+    if (
+      action ===
+      'test'
+    ) {
+      const config =
+        await resolveMikrotikConfig();
+
       const result =
-        await testMikrotik();
+        await testMikrotik(
+          config
+        );
 
       return NextResponse.json({
         success: true,
         connected: true,
+        source:
+          config.source,
         ...result,
       });
     }
 
-    if (action === 'profiles') {
+    /*
+     * تحميل Profiles.
+     */
+    if (
+      action ===
+      'profiles'
+    ) {
+      const config =
+        await resolveMikrotikConfig();
+
       const profiles =
-        await getProfiles();
+        await getProfiles(
+          config
+        );
 
       const supabase =
         getSupabaseAdmin();
@@ -618,15 +1266,18 @@ export async function GET(request) {
       const {
         data: mappings,
         error: mappingError,
-      } = await supabase
-        .from(
-          'mikrotik_package_mappings'
-        )
-        .select(
-          'package_id, mikrotik_profile_name'
-        );
+      } =
+        await supabase
+          .from(
+            'mikrotik_package_mappings'
+          )
+          .select(
+            'package_id, mikrotik_profile_name'
+          );
 
-      if (mappingError) {
+      if (
+        mappingError
+      ) {
         return jsonError(
           `تعذر تحميل الربط: ${mappingError.message}`,
           500
@@ -636,7 +1287,8 @@ export async function GET(request) {
       return NextResponse.json({
         success: true,
         profiles,
-        mappings: mappings || [],
+        mappings:
+          mappings || [],
       });
     }
 
@@ -653,10 +1305,15 @@ export async function GET(request) {
   }
 }
 
+/* =========================================================
+   POST
+   ========================================================= */
+
 export async function POST(request) {
-  const auth = await authenticateAdmin(
-    request
-  );
+  const auth =
+    await authenticateAdmin(
+      request
+    );
 
   if (!auth.ok) {
     return auth.response;
@@ -665,7 +1322,8 @@ export async function POST(request) {
   let body;
 
   try {
-    body = await request.json();
+    body =
+      await request.json();
   } catch {
     return jsonError(
       'بيانات الطلب غير صالحة.',
@@ -673,26 +1331,57 @@ export async function POST(request) {
     );
   }
 
-  const action = body?.action;
+  const action =
+    body?.action;
 
   try {
     const supabase =
       getSupabaseAdmin();
 
-    /*
-     * حفظ الربط اليدوي:
-     * package -> MikroTik profile
-     */
-    if (action === 'save-mapping') {
+    /* =====================================================
+       حفظ إعدادات MikroTik
+       ===================================================== */
+
+    if (
+      action ===
+      'save-settings'
+    ) {
+      const settings =
+        await saveMikrotikSettings(
+          body
+        );
+
+      return NextResponse.json({
+        success: true,
+        ...settings,
+      });
+    }
+
+    /* =====================================================
+       حفظ الربط اليدوي:
+       package -> MikroTik profile
+       ===================================================== */
+
+    if (
+      action ===
+      'save-mapping'
+    ) {
       const packageId =
-        String(body.packageId || '').trim();
+        String(
+          body.packageId ||
+            ''
+        ).trim();
 
       const profileName =
         String(
-          body.profileName || ''
+          body.profileName ||
+            ''
         ).trim();
 
-      if (!packageId || !profileName) {
+      if (
+        !packageId ||
+        !profileName
+      ) {
         return jsonError(
           'يجب اختيار الباقة والـ Profile.',
           400
@@ -702,11 +1391,17 @@ export async function POST(request) {
       const {
         data: packageRow,
         error: packageError,
-      } = await supabase
-        .from('packages')
-        .select('id')
-        .eq('id', packageId)
-        .maybeSingle();
+      } =
+        await supabase
+          .from(
+            'packages'
+          )
+          .select('id')
+          .eq(
+            'id',
+            packageId
+          )
+          .maybeSingle();
 
       if (
         packageError ||
@@ -720,18 +1415,26 @@ export async function POST(request) {
 
       /*
        * نتأكد أن الـ Profile موجود فعليًا
-       * داخل User Manager قبل حفظ الربط.
+       * داخل User Manager.
        */
+      const config =
+        await resolveMikrotikConfig();
+
       const profiles =
-        await getProfiles();
+        await getProfiles(
+          config
+        );
 
       const profileExists =
         profiles.some(
           (profile) =>
-            profile.name === profileName
+            profile.name ===
+            profileName
         );
 
-      if (!profileExists) {
+      if (
+        !profileExists
+      ) {
         return jsonError(
           'الـ Profile المحدد غير موجود حاليًا في User Manager.',
           400
@@ -741,23 +1444,27 @@ export async function POST(request) {
       const {
         data,
         error,
-      } = await supabase
-        .from(
-          'mikrotik_package_mappings'
-        )
-        .upsert(
-          {
-            package_id: packageId,
-            mikrotik_profile_name:
-              profileName,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'package_id',
-          }
-        )
-        .select()
-        .single();
+      } =
+        await supabase
+          .from(
+            'mikrotik_package_mappings'
+          )
+          .upsert(
+            {
+              package_id:
+                packageId,
+              mikrotik_profile_name:
+                profileName,
+              updated_at:
+                new Date().toISOString(),
+            },
+            {
+              onConflict:
+                'package_id',
+            }
+          )
+          .select()
+          .single();
 
       if (error) {
         return jsonError(
@@ -772,21 +1479,35 @@ export async function POST(request) {
       });
     }
 
-    /*
-     * إنشاء كروت حقيقية.
-     */
-    if (action === 'create-cards') {
+    /* =====================================================
+       إنشاء كروت حقيقية
+       ===================================================== */
+
+    if (
+      action ===
+      'create-cards'
+    ) {
       const packageId =
-        String(body.packageId || '').trim();
+        String(
+          body.packageId ||
+            ''
+        ).trim();
 
       const quantity =
-        Number(body.quantity);
+        Number(
+          body.quantity
+        );
 
       const prefix =
-        String(body.prefix || '').trim();
+        String(
+          body.prefix ||
+            ''
+        ).trim();
 
       const codeLength =
-        Number(body.codeLength);
+        Number(
+          body.codeLength
+        );
 
       if (!packageId) {
         return jsonError(
@@ -796,9 +1517,12 @@ export async function POST(request) {
       }
 
       if (
-        !Number.isInteger(quantity) ||
+        !Number.isInteger(
+          quantity
+        ) ||
         quantity < 1 ||
-        quantity > MAX_BATCH
+        quantity >
+          MAX_BATCH
       ) {
         return jsonError(
           `الكمية يجب أن تكون بين 1 و${MAX_BATCH}.`,
@@ -808,7 +1532,9 @@ export async function POST(request) {
 
       if (
         !prefix ||
-        !validateCodeFormat(prefix)
+        !validateCodeFormat(
+          prefix
+        )
       ) {
         return jsonError(
           'البداية يجب أن تحتوي على أرقام فقط.',
@@ -817,7 +1543,9 @@ export async function POST(request) {
       }
 
       if (
-        !Number.isInteger(codeLength) ||
+        !Number.isInteger(
+          codeLength
+        ) ||
         codeLength < 4 ||
         codeLength > 32
       ) {
@@ -827,7 +1555,10 @@ export async function POST(request) {
         );
       }
 
-      if (prefix.length >= codeLength) {
+      if (
+        prefix.length >=
+        codeLength
+      ) {
         return jsonError(
           'طول البداية يجب أن يكون أقل من طول الكرت.',
           400
@@ -837,13 +1568,19 @@ export async function POST(request) {
       const {
         data: packageRow,
         error: packageError,
-      } = await supabase
-        .from('packages')
-        .select(
-          'id, name, price'
-        )
-        .eq('id', packageId)
-        .maybeSingle();
+      } =
+        await supabase
+          .from(
+            'packages'
+          )
+          .select(
+            'id, name, price'
+          )
+          .eq(
+            'id',
+            packageId
+          )
+          .maybeSingle();
 
       if (
         packageError ||
@@ -858,15 +1595,19 @@ export async function POST(request) {
       const {
         data: mapping,
         error: mappingError,
-      } = await supabase
-        .from(
-          'mikrotik_package_mappings'
-        )
-        .select(
-          'package_id, mikrotik_profile_name'
-        )
-        .eq('package_id', packageId)
-        .maybeSingle();
+      } =
+        await supabase
+          .from(
+            'mikrotik_package_mappings'
+          )
+          .select(
+            'package_id, mikrotik_profile_name'
+          )
+          .eq(
+            'package_id',
+            packageId
+          )
+          .maybeSingle();
 
       if (
         mappingError ||
@@ -879,10 +1620,20 @@ export async function POST(request) {
       }
 
       /*
-       * نتأكد مرة أخرى أن الـ Profile ما زال موجودًا.
+       * نحمل إعدادات MikroTik مرة واحدة فقط
+       * للدفعة كاملة، بدل إعادة قراءتها لكل كرت.
+       */
+      const config =
+        await resolveMikrotikConfig();
+
+      /*
+       * نتأكد مرة أخرى أن الـ Profile
+       * ما زال موجودًا.
        */
       const profiles =
-        await getProfiles();
+        await getProfiles(
+          config
+        );
 
       const profileExists =
         profiles.some(
@@ -891,7 +1642,9 @@ export async function POST(request) {
             mapping.mikrotik_profile_name
         );
 
-      if (!profileExists) {
+      if (
+        !profileExists
+      ) {
         return jsonError(
           'الـ Profile المرتبط بهذه الباقة لم يعد موجودًا في User Manager.',
           400
@@ -899,7 +1652,7 @@ export async function POST(request) {
       }
 
       /*
-       * توليد الأكواد من السيرفر وليس من المتصفح.
+       * توليد الأكواد من السيرفر.
        */
       const codes =
         await generateUniqueCodes(
@@ -920,22 +1673,26 @@ export async function POST(request) {
           (code) =>
             createMikrotikUser(
               code,
-              mapping.mikrotik_profile_name
+              mapping.mikrotik_profile_name,
+              config
             )
         );
 
       const successfulCodes =
         mikrotikResults
           .filter(
-            (result) => result.success
+            (result) =>
+              result.success
           )
           .map(
-            (result) => result.code
+            (result) =>
+              result.code
           );
 
       const failedMikrotik =
         mikrotikResults.filter(
-          (result) => !result.success
+          (result) =>
+            !result.success
         );
 
       /*
@@ -950,13 +1707,19 @@ export async function POST(request) {
 
       /*
        * إذا فشل إدخال كرت في Supabase
-       * بعد نجاحه في MikroTik، نحاول إزالة
-       * المستخدم من MikroTik لمنع عدم التطابق.
+       * بعد نجاحه في MikroTik،
+       * نحاول إزالته من MikroTik.
        */
-      if (saved.failed.length) {
-        for (const failed of saved.failed) {
+      if (
+        saved.failed.length
+      ) {
+        for (
+          const failed of
+            saved.failed
+        ) {
           await deleteMikrotikUser(
-            failed.code
+            failed.code,
+            config
           );
         }
       }
@@ -965,15 +1728,19 @@ export async function POST(request) {
         success: true,
 
         package: {
-          id: packageRow.id,
-          name: packageRow.name,
-          price: packageRow.price,
+          id:
+            packageRow.id,
+          name:
+            packageRow.name,
+          price:
+            packageRow.price,
         },
 
         mikrotikProfile:
           mapping.mikrotik_profile_name,
 
-        requested: quantity,
+        requested:
+          quantity,
 
         createdInMikrotik:
           successfulCodes.length,
@@ -986,9 +1753,11 @@ export async function POST(request) {
           saved.failed.length,
 
         results: {
-          successful: saved.inserted.map(
-            (card) => card.code
-          ),
+          successful:
+            saved.inserted.map(
+              (card) =>
+                card.code
+            ),
 
           failed: [
             ...failedMikrotik,
