@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
@@ -24,6 +25,7 @@ export default function PackagesPage() {
         ...pkg,
         cardsCount: pkg.cards ? pkg.cards.length : 0
       }));
+
       setPackages(formatted);
     } else {
       setPackages([]);
@@ -37,6 +39,7 @@ export default function PackagesPage() {
   async function addPackage(e) {
     e.preventDefault();
     setError('');
+
     if (!name || !price) return;
 
     const { error: insertError } = await supabase
@@ -102,6 +105,7 @@ export default function PackagesPage() {
           إدارة باقات الكروت وأسعارها
         </p>
 
+        {/* إضافة باقة */}
         <div className="panel">
           <div className="panel-head">
             <h3>إضافة باقة جديدة</h3>
@@ -127,6 +131,7 @@ export default function PackagesPage() {
               }}
             >
               <label>اسم الباقة</label>
+
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -142,6 +147,7 @@ export default function PackagesPage() {
               }}
             >
               <label>السعر (لكل كرت)</label>
+
               <input
                 type="number"
                 step="0.01"
@@ -161,84 +167,143 @@ export default function PackagesPage() {
           </form>
         </div>
 
+        {/* الباقات الحالية */}
         <div className="panel">
           <div className="panel-head">
             <h3>الباقات الحالية</h3>
-            <span className="muted">{packages.length}</span>
+
+            <span className="muted">
+              {packages.length}
+            </span>
           </div>
 
-          {/* الباقات بشكل مستطيلات أفقية */}
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 14,
-              marginTop: 10
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+              marginTop: 14
             }}
           >
             {packages.map((p) => (
               <div
                 key={p.id}
                 style={{
+                  width: '100%',
+                  minHeight: 76,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 16,
-                  minHeight: 82,
-                  padding: '14px 18px',
+                  gap: 20,
+                  padding: '12px 18px',
+                  boxSizing: 'border-box',
                   background: '#ffffff',
                   border: '1px solid #e5e7eb',
                   borderRadius: 10,
-                  boxSizing: 'border-box'
+                  boxShadow: '0 2px 7px rgba(0, 0, 0, 0.04)'
                 }}
               >
-                {/* اسم الباقة */}
+                {/* معلومات الباقة */}
                 <div
                   style={{
+                    flex: 1,
                     minWidth: 0,
-                    flex: 1
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0
                   }}
                 >
+                  {/* الاسم */}
                   <div
                     style={{
-                      fontSize: 16,
-                      fontWeight: 800,
-                      color: '#111827',
-                      marginBottom: 6,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
+                      flex: 1,
+                      minWidth: 0,
+                      paddingLeft: 18,
+                      paddingRight: 18,
+                      borderLeft: '1px solid #f0f0f0'
                     }}
                   >
-                    {p.name}
+                    <div
+                      style={{
+                        fontSize: 16,
+                        fontWeight: 800,
+                        color: '#111827',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {p.name}
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: '#9ca3af'
+                      }}
+                    >
+                      اسم الباقة
+                    </div>
                   </div>
 
+                  {/* السعر */}
                   <div
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      flexWrap: 'wrap',
-                      fontSize: 14
+                      minWidth: 150,
+                      paddingLeft: 18,
+                      paddingRight: 18,
+                      borderLeft: '1px solid #f0f0f0'
                     }}
                   >
-                    <span
+                    <div
                       style={{
-                        fontWeight: 700,
+                        fontSize: 15,
+                        fontWeight: 800,
                         color: '#374151'
                       }}
                     >
                       {p.price} ريال
-                    </span>
+                    </div>
 
-                    <span
+                    <div
                       style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: '#9ca3af'
+                      }}
+                    >
+                      سعر الكرت
+                    </div>
+                  </div>
+
+                  {/* عدد الكروت */}
+                  <div
+                    style={{
+                      minWidth: 150,
+                      paddingLeft: 18,
+                      paddingRight: 18
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 15,
                         fontWeight: 800,
                         color: '#5B21B6'
                       }}
                     >
                       {p.cardsCount} كرت
-                    </span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 12,
+                        color: '#9ca3af'
+                      }}
+                    >
+                      الكروت المرتبطة
+                    </div>
                   </div>
                 </div>
 
@@ -249,18 +314,44 @@ export default function PackagesPage() {
                     backgroundColor: '#dc2626',
                     color: '#ffffff',
                     opacity: 1,
-                    padding: '6px 14px',
-                    borderRadius: '6px',
+                    padding: '7px 15px',
+                    borderRadius: 7,
                     border: 'none',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    cursor: busyId === p.id ? 'not-allowed' : 'pointer'
                   }}
                   disabled={busyId === p.id}
                   onClick={() => deletePackage(p.id, p.name)}
                 >
-                  حذف
+                  {busyId === p.id ? 'جاري الحذف...' : 'حذف'}
                 </button>
               </div>
             ))}
+
+            {packages.length === 0 && (
+              <div
+                style={{
+                  padding: '35px 20px',
+                  textAlign: 'center',
+                  color: '#9ca3af',
+                  fontSize: 14
+                }}
+              >
+                لا توجد باقات حاليًا
+              </div>
+            )}
+          </div>
+
+          {/* مساحة مستقبلية لنظام MikroTik */}
+          <div
+            style={{
+              marginTop: 45,
+              minHeight: 180,
+              borderTop: '1px solid #f1f5f9',
+              paddingTop: 30
+            }}
+          >
+            {/* سيتم وضع نظام MikroTik هنا لاحقًا */}
           </div>
         </div>
       </div>
