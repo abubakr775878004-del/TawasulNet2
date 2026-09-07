@@ -8,6 +8,10 @@ import { supabase } from '../../../lib/supabase';
 export default function PackagesPage() {
   const { profile, loading } = useProfile('admin');
 
+  /* =========================================================
+     Packages
+     ========================================================= */
+
   const [packages, setPackages] = useState([]);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -15,33 +19,79 @@ export default function PackagesPage() {
   const [busyId, setBusyId] = useState(null);
 
   /* =========================================================
-     MikroTik
+     MikroTik Settings
+     ========================================================= */
+
+  const [mikrotikUrl, setMikrotikUrl] = useState('');
+  const [mikrotikUsername, setMikrotikUsername] = useState('');
+  const [mikrotikPassword, setMikrotikPassword] = useState('');
+
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const [settingsConfigured, setSettingsConfigured] = useState(false);
+  const [settingsSource, setSettingsSource] = useState('');
+  const [passwordSaved, setPasswordSaved] = useState(false);
+
+  /* =========================================================
+     MikroTik Connection
      ========================================================= */
 
   const [mikrotikProfiles, setMikrotikProfiles] = useState([]);
   const [mappings, setMappings] = useState([]);
+
   const [mikrotikLoading, setMikrotikLoading] = useState(false);
   const [mikrotikTesting, setMikrotikTesting] = useState(false);
   const [mappingSaving, setMappingSaving] = useState(false);
+
   const [mikrotikConnected, setMikrotikConnected] = useState(false);
   const [mikrotikMessage, setMikrotikMessage] = useState('');
+
+  /* =========================================================
+     Selected Package
+     ========================================================= */
 
   const [selectedPackageId, setSelectedPackageId] = useState('');
   const [selectedProfileName, setSelectedProfileName] = useState('');
 
   /* =========================================================
-     إنشاء الكروت
+     Card Creation
      ========================================================= */
 
   const [cardQuantity, setCardQuantity] = useState(10);
   const [codePrefix, setCodePrefix] = useState('77');
   const [codeLength, setCodeLength] = useState(8);
+
   const [creatingCards, setCreatingCards] = useState(false);
   const [creationResult, setCreationResult] = useState(null);
   const [previewCodes, setPreviewCodes] = useState([]);
 
   /* =========================================================
-     تحميل الباقات
+     Common Styles
+     ========================================================= */
+
+  const cardStyle = {
+    background: '#fff',
+    border: '1px solid #e8e7ef',
+    borderRadius: 18,
+    boxShadow: '0 8px 30px rgba(31, 25, 60, 0.06)'
+  };
+
+  const sectionTitleStyle = {
+    margin: 0,
+    fontSize: 20,
+    fontWeight: 900,
+    color: '#17141f'
+  };
+
+  const mutedStyle = {
+    color: '#6b7280',
+    fontSize: 13
+  };
+
+  /* =========================================================
+     Load Packages
      ========================================================= */
 
   async function loadPackages() {
@@ -74,7 +124,8 @@ export default function PackagesPage() {
 
     if (sessionError) {
       throw new Error(
-        sessionError.message || 'تعذر الحصول على جلسة الدخول.'
+        sessionError.message ||
+          'تعذر الحصول على جلسة الدخول.'
       );
     }
 
@@ -88,7 +139,7 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     MikroTik Request
+     MikroTik API Request
      ========================================================= */
 
   async function mikrotikRequest(url, options = {}) {
@@ -124,50 +175,150 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     تحميل MikroTik Profiles
+     Load MikroTik Settings
      ========================================================= */
 
-  async function loadMikrotikProfiles() {
-    setMikrotikLoading(true);
-    setMikrotikMessage('');
+  async function loadMikrotikSettings() {
+    setSettingsLoading(true);
 
     try {
       const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager?action=profiles'
+        '/api/mikrotik/user-manager?action=settings'
       );
 
       if (!data?.success) {
         throw new Error(
           data?.error ||
-            'تعذر تحميل Profiles من MikroTik.'
+            'تعذر تحميل إعدادات MikroTik.'
         );
       }
 
-      setMikrotikProfiles(
-        Array.isArray(data.profiles)
-          ? data.profiles
-          : []
+      setMikrotikUrl(data.routerUrl || '');
+      setMikrotikUsername(data.username || '');
+
+      setSettingsConfigured(
+        Boolean(data.configured)
       );
 
-      setMappings(
-        Array.isArray(data.mappings)
-          ? data.mappings
-          : []
+      setPasswordSaved(
+        Boolean(data.hasPassword)
+      );
+
+      setSettingsSource(
+        data.source || ''
       );
     } catch (err) {
-      setMikrotikProfiles([]);
-      setMappings([]);
-      setMikrotikMessage(
-        err?.message ||
-          'تعذر الاتصال بـ MikroTik.'
+      setSettingsConfigured(false);
+      setPasswordSaved(false);
+
+      /*
+       * لا نظهر خطأ قوي هنا عند أول تحميل،
+       * لأن route.js سيتم تعديله في الخطوة التالية.
+       */
+      console.warn(
+        'MikroTik settings:',
+        err?.message
       );
     } finally {
-      setMikrotikLoading(false);
+      setSettingsLoading(false);
     }
   }
 
   /* =========================================================
-     اختبار الاتصال
+     Save MikroTik Settings
+     ========================================================= */
+
+  async function saveMikrotikSettings() {
+    setMikrotikMessage('');
+
+    const routerUrl = mikrotikUrl.trim();
+    const username = mikrotikUsername.trim();
+
+    if (!routerUrl) {
+      setMikrotikMessage(
+        'يرجى إدخال عنوان MikroTik.'
+      );
+      return;
+    }
+
+    if (!/^https:\/\//i.test(routerUrl)) {
+      setMikrotikMessage(
+        'عنوان MikroTik يجب أن يبدأ بـ https://'
+      );
+      return;
+    }
+
+    if (!username) {
+      setMikrotikMessage(
+        'يرجى إدخال اسم مستخدم User Manager.'
+      );
+      return;
+    }
+
+    /*
+     * عند وجود كلمة مرور محفوظة يمكن ترك الحقل فارغًا.
+     */
+    if (!mikrotikPassword.trim() && !passwordSaved) {
+      setMikrotikMessage(
+        'يرجى إدخال كلمة مرور MikroTik.'
+      );
+      return;
+    }
+
+    setSettingsSaving(true);
+    setMikrotikConnected(false);
+
+    try {
+      const data = await mikrotikRequest(
+        '/api/mikrotik/user-manager',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'save-settings',
+            routerUrl,
+            username,
+            password: mikrotikPassword
+          })
+        }
+      );
+
+      if (!data?.success) {
+        throw new Error(
+          data?.error ||
+            'تعذر حفظ إعدادات MikroTik.'
+        );
+      }
+
+      setSettingsConfigured(true);
+      setPasswordSaved(true);
+      setSettingsSource(
+        data.source || 'database'
+      );
+
+      /*
+       * لا نحتفظ بكلمة المرور في حالة الواجهة.
+       */
+      setMikrotikPassword('');
+
+      setMikrotikMessage(
+        'تم حفظ إعدادات MikroTik. جارٍ اختبار الاتصال...'
+      );
+
+      await testMikrotikConnection();
+    } catch (err) {
+      setMikrotikConnected(false);
+
+      setMikrotikMessage(
+        err?.message ||
+          'تعذر حفظ إعدادات MikroTik.'
+      );
+    } finally {
+      setSettingsSaving(false);
+    }
+  }
+
+  /* =========================================================
+     Test MikroTik Connection
      ========================================================= */
 
   async function testMikrotikConnection() {
@@ -201,9 +352,7 @@ export default function PackagesPage() {
 
       setMikrotikMessage(
         details.length
-          ? `تم الاتصال بـ MikroTik بنجاح — ${details.join(
-              ' — '
-            )}`
+          ? `تم الاتصال بنجاح — ${details.join(' — ')}`
           : 'تم الاتصال بـ MikroTik بنجاح.'
       );
 
@@ -221,7 +370,52 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     حفظ ربط الباقة بالـ Profile
+     Load MikroTik Profiles
+     ========================================================= */
+
+  async function loadMikrotikProfiles() {
+    setMikrotikLoading(true);
+
+    try {
+      const data = await mikrotikRequest(
+        '/api/mikrotik/user-manager?action=profiles'
+      );
+
+      if (!data?.success) {
+        throw new Error(
+          data?.error ||
+            'تعذر تحميل Profiles من MikroTik.'
+        );
+      }
+
+      setMikrotikProfiles(
+        Array.isArray(data.profiles)
+          ? data.profiles
+          : []
+      );
+
+      setMappings(
+        Array.isArray(data.mappings)
+          ? data.mappings
+          : []
+      );
+    } catch (err) {
+      setMikrotikProfiles([]);
+      setMappings([]);
+
+      if (!mikrotikConnected) {
+        setMikrotikMessage(
+          err?.message ||
+            'تعذر الاتصال بـ MikroTik.'
+        );
+      }
+    } finally {
+      setMikrotikLoading(false);
+    }
+  }
+
+  /* =========================================================
+     Save Package / Profile Mapping
      ========================================================= */
 
   async function saveMikrotikMapping() {
@@ -236,7 +430,7 @@ export default function PackagesPage() {
 
     if (!selectedProfileName) {
       setMikrotikMessage(
-        'يرجى اختيار MikroTik Profile أولًا.'
+        'يرجى اختيار Profile.'
       );
       return;
     }
@@ -264,7 +458,7 @@ export default function PackagesPage() {
       }
 
       setMikrotikMessage(
-        'تم ربط الباقة بـ MikroTik Profile بنجاح.'
+        'تم ربط الباقة بـ Profile بنجاح.'
       );
 
       await loadMikrotikProfiles();
@@ -279,7 +473,7 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     Profile المرتبط بالباقة
+     Get Mapped Profile
      ========================================================= */
 
   function getMappedProfile(packageId) {
@@ -294,7 +488,7 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     اختيار الباقة
+     Select Package
      ========================================================= */
 
   function handlePackageSelection(packageId) {
@@ -308,7 +502,7 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     معاينة الأكواد
+     Preview Codes
      ========================================================= */
 
   function generatePreviewCodes() {
@@ -339,9 +533,7 @@ export default function PackagesPage() {
     const used = new Set();
 
     let attempts = 0;
-
-    const maxAttempts =
-      quantity * 100;
+    const maxAttempts = quantity * 100;
 
     while (
       generated.length <
@@ -374,12 +566,21 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     إنشاء الكروت
+     Create Cards
      ========================================================= */
 
   async function createCards() {
     setCreationResult(null);
     setPreviewCodes([]);
+
+    if (!mikrotikConnected) {
+      setCreationResult({
+        success: false,
+        message:
+          'يرجى التأكد من اتصال MikroTik أولًا.'
+      });
+      return;
+    }
 
     if (!selectedPackageId) {
       setCreationResult({
@@ -394,7 +595,7 @@ export default function PackagesPage() {
       setCreationResult({
         success: false,
         message:
-          'هذه الباقة غير مربوطة بـ MikroTik Profile. قم بربطها أولًا.'
+          'هذه الباقة غير مربوطة بـ MikroTik Profile.'
       });
       return;
     }
@@ -480,7 +681,6 @@ export default function PackagesPage() {
       });
 
       await loadPackages();
-
       setPreviewCodes([]);
     } catch (err) {
       setCreationResult({
@@ -499,14 +699,14 @@ export default function PackagesPage() {
      ========================================================= */
 
   useEffect(() => {
-    if (profile) {
-      loadPackages();
-      loadMikrotikProfiles();
-    }
+    if (!profile) return;
+
+    loadPackages();
+    loadMikrotikSettings();
   }, [profile]);
 
   /* =========================================================
-     إضافة باقة
+     Add Package
      ========================================================= */
 
   async function addPackage(e) {
@@ -514,7 +714,19 @@ export default function PackagesPage() {
 
     setError('');
 
-    if (!name || !price) {
+    const packageName = name.trim();
+    const packagePrice = Number(price);
+
+    if (!packageName) {
+      setError('يرجى إدخال اسم الباقة.');
+      return;
+    }
+
+    if (
+      !Number.isFinite(packagePrice) ||
+      packagePrice <= 0
+    ) {
+      setError('يرجى إدخال سعر صحيح.');
       return;
     }
 
@@ -522,8 +734,8 @@ export default function PackagesPage() {
       await supabase
         .from('packages')
         .insert({
-          name,
-          price: parseFloat(price)
+          name: packageName,
+          price: packagePrice
         });
 
     if (insertError) {
@@ -538,7 +750,7 @@ export default function PackagesPage() {
   }
 
   /* =========================================================
-     حذف باقة
+     Delete Package
      ========================================================= */
 
   async function deletePackage(
@@ -567,9 +779,16 @@ export default function PackagesPage() {
 
     if (deleteError) {
       setError(
-        'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا'
+        'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا.'
       );
       return;
+    }
+
+    if (selectedPackageId === id) {
+      setSelectedPackageId('');
+      setSelectedProfileName('');
+      setCreationResult(null);
+      setPreviewCodes([]);
     }
 
     await loadPackages();
@@ -580,18 +799,9 @@ export default function PackagesPage() {
     return null;
   }
 
-  const totalCards =
-    packages.reduce(
-      (sum, item) =>
-        sum + (item.cardsCount || 0),
-      0
-    );
-
-  const mappedPackages =
-    packages.filter(
-      (item) =>
-        getMappedProfile(item.id)
-    ).length;
+  /* =========================================================
+     Derived Data
+     ========================================================= */
 
   const selectedPackage =
     packages.find(
@@ -605,32 +815,18 @@ export default function PackagesPage() {
         item.name === selectedProfileName
     );
 
-  const cardStyle = {
-    background: '#fff',
-    border: '1px solid #e8e7ef',
-    borderRadius: 18,
-    boxShadow:
-      '0 8px 30px rgba(31, 25, 60, 0.06)'
-  };
+  const totalCards =
+    packages.reduce(
+      (sum, item) =>
+        sum + (item.cardsCount || 0),
+      0
+    );
 
-  const statStyle = {
-    ...cardStyle,
-    padding: 18,
-    minHeight: 112,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 14
-  };
-
-  const iconStyle = {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    display: 'grid',
-    placeItems: 'center',
-    fontSize: 22,
-    flexShrink: 0
-  };
+  const mappedPackages =
+    packages.filter(
+      (item) =>
+        getMappedProfile(item.id)
+    ).length;
 
   return (
     <div
@@ -646,13 +842,13 @@ export default function PackagesPage() {
       <div className="main">
 
         {/* =====================================================
-            رأس الصفحة
+            Header
             ===================================================== */}
 
         <div
           style={{
             ...cardStyle,
-            padding: '24px 26px',
+            padding: '25px 27px',
             marginBottom: 18,
             background:
               'linear-gradient(135deg, #4c1d95 0%, #6d28d9 48%, #0f766e 140%)',
@@ -691,12 +887,11 @@ export default function PackagesPage() {
               style={{
                 margin: '8px 0 0',
                 opacity: 0.9,
-                maxWidth: 720
+                maxWidth: 700
               }}
             >
-              إدارة الباقات، ربطها بملفات MikroTik
-              User Manager، وإنشاء كروت حقيقية
-              وحفظها في النظام من مكان واحد.
+              كل ما تحتاجه للباقات وUser Manager
+              وإنشاء الكروت موجود هنا في صفحة واحدة.
             </p>
           </div>
 
@@ -728,366 +923,515 @@ export default function PackagesPage() {
         </div>
 
         {/* =====================================================
-            الإحصائيات
+            MikroTik Connection — FIRST
             ===================================================== */}
 
         <div
           style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(210px, 1fr))',
-            gap: 14,
-            marginBottom: 20
-          }}
-        >
-          <div style={statStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                background: '#f3e8ff',
-                color: '#7e22ce'
-              }}
-            >
-              ▣
-            </div>
-
-            <div>
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13
-                }}
-              >
-                إجمالي الباقات
-              </div>
-
-              <strong
-                style={{ fontSize: 26 }}
-              >
-                {packages.length}
-              </strong>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#16a34a'
-                }}
-              >
-                باقة في النظام
-              </div>
-            </div>
-          </div>
-
-          <div style={statStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                background: '#e0f2fe',
-                color: '#0369a1'
-              }}
-            >
-              ▤
-            </div>
-
-            <div>
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13
-                }}
-              >
-                إجمالي الكروت
-              </div>
-
-              <strong
-                style={{ fontSize: 26 }}
-              >
-                {totalCards}
-              </strong>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#64748b'
-                }}
-              >
-                مرتبطة بالباقات
-              </div>
-            </div>
-          </div>
-
-          <div style={statStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                background: '#dcfce7',
-                color: '#15803d'
-              }}
-            >
-              ✓
-            </div>
-
-            <div>
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13
-                }}
-              >
-                الباقات المربوطة
-              </div>
-
-              <strong
-                style={{ fontSize: 26 }}
-              >
-                {mappedPackages}
-              </strong>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color: '#16a34a'
-                }}
-              >
-                مع MikroTik Profile
-              </div>
-            </div>
-          </div>
-
-          <div style={statStyle}>
-            <div
-              style={{
-                ...iconStyle,
-                background:
-                  mikrotikConnected
-                    ? '#dcfce7'
-                    : '#fef3c7',
-                color:
-                  mikrotikConnected
-                    ? '#15803d'
-                    : '#b45309'
-              }}
-            >
-              ⌁
-            </div>
-
-            <div>
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13
-                }}
-              >
-                حالة MikroTik
-              </div>
-
-              <strong
-                style={{ fontSize: 18 }}
-              >
-                {mikrotikConnected
-                  ? 'متصل'
-                  : 'غير مؤكد'}
-              </strong>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  color:
-                    mikrotikConnected
-                      ? '#16a34a'
-                      : '#b45309'
-                }}
-              >
-                {mikrotikProfiles.length}{' '}
-                Profile محمّل
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* =====================================================
-            إضافة باقة + اتصال MikroTik
-            ===================================================== */}
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'minmax(0, 1.5fr) minmax(280px, 0.8fr)',
-            gap: 18,
-            marginBottom: 20
+            ...cardStyle,
+            padding: 22,
+            marginBottom: 20,
+            border:
+              mikrotikConnected
+                ? '1px solid #bbf7d0'
+                : '1px solid #e8e7ef'
           }}
         >
           <div
             style={{
-              ...cardStyle,
-              padding: 22
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: 15,
+              flexWrap: 'wrap',
+              marginBottom: 18
             }}
           >
-            <h3
-              style={{
-                marginTop: 0,
-                fontSize: 19
-              }}
-            >
-              إضافة باقة جديدة
-            </h3>
-
-            <form
-              onSubmit={addPackage}
-              style={{
-                display: 'grid',
-                gridTemplateColumns:
-                  '1fr 1fr auto',
-                gap: 10,
-                alignItems: 'end'
-              }}
-            >
-              <div className="field">
-                <label>اسم الباقة</label>
-
-                <input
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value)
-                  }
-                  placeholder="باقة 200"
-                />
-              </div>
-
-              <div className="field">
-                <label>السعر</label>
-
-                <input
-                  type="number"
-                  min="1"
-                  value={price}
-                  onChange={(e) =>
-                    setPrice(e.target.value)
-                  }
-                  placeholder="200"
-                />
-              </div>
-
-              <button
-                className="btn-primary"
-                type="submit"
-                style={{ minHeight: 42 }}
-              >
-                إضافة الباقة
-              </button>
-            </form>
-
-            {error && (
+            <div>
               <div
                 style={{
-                  marginTop: 12,
-                  padding: 11,
-                  borderRadius: 10,
-                  background: '#fef2f2',
-                  border:
-                    '1px solid #fecaca',
-                  color: '#b91c1c',
-                  fontSize: 13,
-                  fontWeight: 700
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  marginBottom: 6
                 }}
               >
-                {error}
-              </div>
-            )}
-          </div>
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 11,
+                    display: 'grid',
+                    placeItems: 'center',
+                    background:
+                      mikrotikConnected
+                        ? '#dcfce7'
+                        : '#f3e8ff',
+                    color:
+                      mikrotikConnected
+                        ? '#15803d'
+                        : '#6d28d9',
+                    fontSize: 19,
+                    fontWeight: 900
+                  }}
+                >
+                  ⌁
+                </span>
 
-          <div
-            style={{
-              ...cardStyle,
-              padding: 22
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                color: '#6b7280',
-                marginBottom: 10
-              }}
-            >
-              اتصال User Manager
+                <h2
+                  style={{
+                    ...sectionTitleStyle,
+                    fontSize: 21
+                  }}
+                >
+                  اتصال MikroTik / User Manager
+                </h2>
+              </div>
+
+              <div style={mutedStyle}>
+                أدخل بيانات جهاز MikroTik مرة واحدة،
+                ثم اختبر الاتصال. لا توجد صفحة إعدادات
+                منفصلة.
+              </div>
             </div>
 
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                marginBottom: 12
+                gap: 9,
+                padding: '9px 13px',
+                borderRadius: 11,
+                background:
+                  mikrotikConnected
+                    ? '#f0fdf4'
+                    : '#fff7ed',
+                border:
+                  mikrotikConnected
+                    ? '1px solid #bbf7d0'
+                    : '1px solid #fed7aa',
+                color:
+                  mikrotikConnected
+                    ? '#166534'
+                    : '#9a3412',
+                fontSize: 13,
+                fontWeight: 900
               }}
             >
               <span
                 style={{
-                  width: 11,
-                  height: 11,
+                  width: 9,
+                  height: 9,
                   borderRadius: '50%',
                   background:
                     mikrotikConnected
                       ? '#22c55e'
-                      : '#f59e0b',
-                  boxShadow:
-                    mikrotikConnected
-                      ? '0 0 0 5px #dcfce7'
-                      : '0 0 0 5px #fef3c7'
+                      : '#f59e0b'
                 }}
               />
 
-              <strong>
-                {mikrotikConnected
-                  ? 'MikroTik متصل وجاهز'
-                  : 'اختبر الاتصال قبل الإنشاء'}
-              </strong>
+              {mikrotikConnected
+                ? 'متصل وجاهز'
+                : settingsConfigured
+                ? 'الإعدادات محفوظة'
+                : 'غير متصل'}
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'minmax(220px, 1.5fr) minmax(180px, .8fr) minmax(180px, .8fr)',
+              gap: 12
+            }}
+          >
+            <div
+              className="field"
+              style={{ marginBottom: 0 }}
+            >
+              <label>عنوان MikroTik</label>
+
+              <input
+                type="url"
+                value={mikrotikUrl}
+                onChange={(e) => {
+                  setMikrotikUrl(e.target.value);
+                  setMikrotikConnected(false);
+                }}
+                disabled={settingsLoading}
+                placeholder="https://192.168.88.1"
+                dir="ltr"
+              />
             </div>
 
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={
-                testMikrotikConnection
-              }
-              disabled={mikrotikTesting}
-              style={{ width: '100%' }}
+            <div
+              className="field"
+              style={{ marginBottom: 0 }}
             >
-              {mikrotikTesting
-                ? 'جارٍ اختبار الاتصال...'
-                : 'اختبار اتصال MikroTik'}
-            </button>
+              <label>اسم المستخدم</label>
 
-            {mikrotikMessage && (
+              <input
+                type="text"
+                value={mikrotikUsername}
+                onChange={(e) => {
+                  setMikrotikUsername(e.target.value);
+                  setMikrotikConnected(false);
+                }}
+                disabled={settingsLoading}
+                placeholder="admin"
+                dir="ltr"
+                autoComplete="off"
+              />
+            </div>
+
+            <div
+              className="field"
+              style={{ marginBottom: 0 }}
+            >
+              <label>كلمة المرور</label>
+
               <div
                 style={{
-                  marginTop: 12,
-                  padding: 11,
-                  borderRadius: 10,
-                  background:
-                    mikrotikConnected
-                      ? '#f0fdf4'
-                      : '#fff7ed',
-                  border:
-                    mikrotikConnected
-                      ? '1px solid #bbf7d0'
-                      : '1px solid #fed7aa',
-                  color:
-                    mikrotikConnected
-                      ? '#166534'
-                      : '#9a3412',
-                  fontSize: 12,
-                  lineHeight: 1.7
+                  display: 'flex',
+                  gap: 7
                 }}
               >
-                {mikrotikMessage}
+                <input
+                  type={
+                    showPassword
+                      ? 'text'
+                      : 'password'
+                  }
+                  value={mikrotikPassword}
+                  onChange={(e) => {
+                    setMikrotikPassword(
+                      e.target.value
+                    );
+                    setMikrotikConnected(false);
+                  }}
+                  disabled={settingsLoading}
+                  placeholder={
+                    passwordSaved
+                      ? 'محفوظة — اتركها فارغة'
+                      : 'أدخل كلمة المرور'
+                  }
+                  dir="ltr"
+                  autoComplete="new-password"
+                  style={{
+                    flex: 1,
+                    minWidth: 0
+                  }}
+                />
+
+                <button
+                  type="button"
+                  className="btn-sm"
+                  onClick={() =>
+                    setShowPassword(
+                      (value) => !value
+                    )
+                  }
+                  style={{
+                    minWidth: 46,
+                    padding: '8px 10px',
+                    border:
+                      '1px solid #d1d5db',
+                    background: '#fff',
+                    borderRadius: 9
+                  }}
+                >
+                  {showPassword
+                    ? 'إخفاء'
+                    : 'إظهار'}
+                </button>
               </div>
-            )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              marginTop: 14,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap'
+            }}
+          >
+            <div
+              style={{
+                color: '#64748b',
+                fontSize: 12
+              }}
+            >
+              {settingsSource === 'database'
+                ? 'الإعدادات محفوظة بأمان في النظام.'
+                : settingsSource === 'environment'
+                ? 'يتم استخدام إعدادات الخادم الحالية.'
+                : passwordSaved
+                ? 'كلمة المرور محفوظة. لا تحتاج لإدخالها مرة أخرى.'
+                : 'أدخل بيانات الاتصال ثم احفظها.'}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: 9,
+                flexWrap: 'wrap'
+              }}
+            >
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={
+                  testMikrotikConnection
+                }
+                disabled={
+                  mikrotikTesting ||
+                  settingsSaving ||
+                  !settingsConfigured
+                }
+                style={{
+                  padding: '10px 15px',
+                  borderRadius: 9,
+                  border:
+                    '1px solid #d1d5db',
+                  background: '#fff',
+                  fontWeight: 800
+                }}
+              >
+                {mikrotikTesting
+                  ? 'جارٍ الاختبار...'
+                  : 'اختبار الاتصال'}
+              </button>
+
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={
+                  saveMikrotikSettings
+                }
+                disabled={
+                  settingsSaving ||
+                  settingsLoading
+                }
+                style={{
+                  minWidth: 150
+                }}
+              >
+                {settingsSaving
+                  ? 'جارٍ الحفظ...'
+                  : 'حفظ واختبار الاتصال'}
+              </button>
+            </div>
+          </div>
+
+          {mikrotikMessage && (
+            <div
+              style={{
+                marginTop: 14,
+                padding: 12,
+                borderRadius: 11,
+                background:
+                  mikrotikConnected
+                    ? '#f0fdf4'
+                    : '#fff7ed',
+                border:
+                  mikrotikConnected
+                    ? '1px solid #bbf7d0'
+                    : '1px solid #fed7aa',
+                color:
+                  mikrotikConnected
+                    ? '#166534'
+                    : '#9a3412',
+                fontSize: 13,
+                fontWeight: 700,
+                lineHeight: 1.7
+              }}
+            >
+              {mikrotikMessage}
+            </div>
+          )}
+        </div>
+
+        {/* =====================================================
+            Small Stats
+            ===================================================== */}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(190px, 1fr))',
+            gap: 12,
+            marginBottom: 20
+          }}
+        >
+          <div
+            style={{
+              ...cardStyle,
+              padding: 17
+            }}
+          >
+            <div style={mutedStyle}>
+              إجمالي الباقات
+            </div>
+
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 900,
+                marginTop: 4
+              }}
+            >
+              {packages.length}
+            </div>
+          </div>
+
+          <div
+            style={{
+              ...cardStyle,
+              padding: 17
+            }}
+          >
+            <div style={mutedStyle}>
+              إجمالي الكروت
+            </div>
+
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 900,
+                marginTop: 4
+              }}
+            >
+              {totalCards}
+            </div>
+          </div>
+
+          <div
+            style={{
+              ...cardStyle,
+              padding: 17
+            }}
+          >
+            <div style={mutedStyle}>
+              الباقات المربوطة
+            </div>
+
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 900,
+                marginTop: 4
+              }}
+            >
+              {mappedPackages}
+            </div>
           </div>
         </div>
 
         {/* =====================================================
-            الباقات الحالية
+            Add Package
+            ===================================================== */}
+
+        <div
+          style={{
+            ...cardStyle,
+            padding: 22,
+            marginBottom: 20
+          }}
+        >
+          <div style={{ marginBottom: 16 }}>
+            <h2 style={sectionTitleStyle}>
+              إضافة باقة جديدة
+            </h2>
+
+            <div
+              style={{
+                ...mutedStyle,
+                marginTop: 5
+              }}
+            >
+              أضف اسم الباقة وسعرها فقط.
+            </div>
+          </div>
+
+          <form
+            onSubmit={addPackage}
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'minmax(200px, 1fr) minmax(150px, .6fr) auto',
+              gap: 10,
+              alignItems: 'end'
+            }}
+          >
+            <div
+              className="field"
+              style={{ marginBottom: 0 }}
+            >
+              <label>اسم الباقة</label>
+
+              <input
+                value={name}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
+                placeholder="باقة 200"
+              />
+            </div>
+
+            <div
+              className="field"
+              style={{ marginBottom: 0 }}
+            >
+              <label>السعر</label>
+
+              <input
+                type="number"
+                min="1"
+                value={price}
+                onChange={(e) =>
+                  setPrice(e.target.value)
+                }
+                placeholder="200"
+              />
+            </div>
+
+            <button
+              className="btn-primary"
+              type="submit"
+              style={{
+                minHeight: 42
+              }}
+            >
+              إضافة الباقة
+            </button>
+          </form>
+
+          {error && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 11,
+                borderRadius: 10,
+                background: '#fef2f2',
+                border:
+                  '1px solid #fecaca',
+                color: '#b91c1c',
+                fontSize: 13,
+                fontWeight: 700
+              }}
+            >
+              {error}
+            </div>
+          )}
+        </div>
+
+        {/* =====================================================
+            Packages
             ===================================================== */}
 
         <div
@@ -1100,45 +1444,41 @@ export default function PackagesPage() {
           <div
             style={{
               display: 'flex',
-              justifyContent:
-                'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: 16
+              gap: 12,
+              flexWrap: 'wrap',
+              marginBottom: 17
             }}
           >
             <div>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 19
-                }}
-              >
-                إدارة الباقات
-              </h3>
+              <h2 style={sectionTitleStyle}>
+                الباقات
+              </h2>
 
-              <span
+              <div
                 style={{
-                  color: '#6b7280',
-                  fontSize: 13
+                  ...mutedStyle,
+                  marginTop: 5
                 }}
               >
-                اختر الباقة التي تريد ربطها
-                أو إنشاء كروت لها.
-              </span>
+                اختر باقة واحدة للعمل عليها.
+              </div>
             </div>
 
-            <span
+            <div
               style={{
+                padding: '7px 12px',
+                borderRadius: 10,
                 background: '#f8fafc',
                 border:
                   '1px solid #e2e8f0',
-                padding: '7px 12px',
-                borderRadius: 10,
-                fontWeight: 800
+                fontWeight: 800,
+                fontSize: 13
               }}
             >
               {packages.length} باقة
-            </span>
+            </div>
           </div>
 
           {packages.length === 0 ? (
@@ -1152,7 +1492,6 @@ export default function PackagesPage() {
               }}
             >
               لا توجد باقات حاليًا.
-              أضف أول باقة من القسم أعلاه.
             </div>
           ) : (
             <div
@@ -1160,7 +1499,7 @@ export default function PackagesPage() {
                 display: 'grid',
                 gridTemplateColumns:
                   'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: 14
+                gap: 13
               }}
             >
               {packages.map((p) => {
@@ -1177,8 +1516,8 @@ export default function PackagesPage() {
                       border: selected
                         ? '2px solid #7c3aed'
                         : '1px solid #e5e7eb',
-                      borderRadius: 16,
-                      padding: 17,
+                      borderRadius: 15,
+                      padding: 16,
                       background: selected
                         ? '#faf5ff'
                         : '#fff'
@@ -1189,9 +1528,7 @@ export default function PackagesPage() {
                         display: 'flex',
                         justifyContent:
                           'space-between',
-                        gap: 10,
-                        alignItems:
-                          'flex-start'
+                        gap: 10
                       }}
                     >
                       <div>
@@ -1221,19 +1558,19 @@ export default function PackagesPage() {
                             '#f1f5f9',
                           padding:
                             '7px 10px',
-                          borderRadius: 10,
+                          borderRadius: 9,
                           fontSize: 12,
-                          fontWeight: 800
+                          fontWeight: 800,
+                          height: 'fit-content'
                         }}
                       >
-                        {p.cardsCount || 0}{' '}
-                        كرت
+                        {p.cardsCount || 0} كرت
                       </div>
                     </div>
 
                     <div
                       style={{
-                        marginTop: 14,
+                        marginTop: 13,
                         padding: 10,
                         borderRadius: 10,
                         background:
@@ -1249,38 +1586,37 @@ export default function PackagesPage() {
                       }}
                     >
                       {mapped
-                        ? `MikroTik: ${mapped}`
-                        : 'غير مربوطة بـ MikroTik'}
+                        ? `Profile: ${mapped}`
+                        : 'لم يتم ربط Profile'}
                     </div>
 
                     <div
                       style={{
                         display: 'flex',
                         gap: 8,
-                        marginTop: 14
+                        marginTop: 13
                       }}
                     >
                       <button
                         type="button"
                         className="btn-primary"
-                        style={{
-                          flex: 1,
-                          minHeight: 40
-                        }}
                         onClick={() =>
                           handlePackageSelection(
                             p.id
                           )
                         }
+                        style={{
+                          flex: 1,
+                          minHeight: 40
+                        }}
                       >
                         {selected
-                          ? 'الباقة محددة'
+                          ? 'الباقة الحالية'
                           : 'اختيار الباقة'}
                       </button>
 
                       <button
                         type="button"
-                        className="btn-sm"
                         disabled={
                           busyId === p.id
                         }
@@ -1299,7 +1635,8 @@ export default function PackagesPage() {
                           background:
                             '#fff',
                           color:
-                            '#dc2626'
+                            '#dc2626',
+                          fontWeight: 800
                         }}
                       >
                         {busyId === p.id
@@ -1315,45 +1652,41 @@ export default function PackagesPage() {
         </div>
 
         {/* =====================================================
-            ربط الباقات مع MikroTik
+            Package / Profile Mapping
             ===================================================== */}
 
         <div
           style={{
             ...cardStyle,
             padding: 22,
-            marginBottom: 20
+            marginBottom: 20,
+            opacity: mikrotikConnected ? 1 : 0.72
           }}
         >
           <div
             style={{
               display: 'flex',
-              justifyContent:
-                'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               gap: 12,
-              marginBottom: 18
+              flexWrap: 'wrap',
+              marginBottom: 17
             }}
           >
             <div>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 20
-                }}
-              >
-                ربط الباقات مع MikroTik
-              </h3>
+              <h2 style={sectionTitleStyle}>
+                ربط الباقة بـ User Manager
+              </h2>
 
-              <span
+              <div
                 style={{
-                  color: '#6b7280',
-                  fontSize: 13
+                  ...mutedStyle,
+                  marginTop: 5
                 }}
               >
-                اختر الباقة ثم اختر Profile
-                الموجود فعليًا داخل User Manager.
-              </span>
+                اختر الباقة ثم Profile الموجود
+                فعلًا في MikroTik.
+              </div>
             </div>
 
             <button
@@ -1362,10 +1695,12 @@ export default function PackagesPage() {
               onClick={
                 loadMikrotikProfiles
               }
-              disabled={mikrotikLoading}
+              disabled={
+                !mikrotikConnected ||
+                mikrotikLoading
+              }
               style={{
-                padding:
-                  '9px 14px',
+                padding: '9px 14px',
                 borderRadius: 9,
                 border:
                   '1px solid #d1d5db',
@@ -1378,235 +1713,202 @@ export default function PackagesPage() {
             </button>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(220px, 1fr))',
-              gap: 12
-            }}
-          >
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                الباقة
-              </label>
-
-              <select
-                value={selectedPackageId}
-                onChange={(e) =>
-                  handlePackageSelection(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: '100%'
-                }}
-              >
-                <option value="">
-                  اختر الباقة
-                </option>
-
-                {packages.map((p) => (
-                  <option
-                    key={p.id}
-                    value={p.id}
-                  >
-                    {p.name} — {p.price} ريال
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                MikroTik Profile
-              </label>
-
-              <select
-                value={selectedProfileName}
-                onChange={(e) =>
-                  setSelectedProfileName(
-                    e.target.value
-                  )
-                }
-                disabled={
-                  mikrotikLoading
-                }
-                style={{
-                  width: '100%'
-                }}
-              >
-                <option value="">
-                  {mikrotikLoading
-                    ? 'جارٍ تحميل Profiles...'
-                    : 'اختر Profile'}
-                </option>
-
-                {mikrotikProfiles.map(
-                  (item) => (
-                    <option
-                      key={
-                        item.id ||
-                        item.name
-                      }
-                      value={item.name}
-                    >
-                      {item.name}
-                      {item.price
-                        ? ` — ${item.price}`
-                        : ''}
-                    </option>
-                  )
-                )}
-              </select>
-            </div>
-
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={
-                saveMikrotikMapping
-              }
-              disabled={
-                mappingSaving ||
-                !selectedPackageId ||
-                !selectedProfileName
-              }
-              style={{
-                minHeight: 42,
-                alignSelf: 'end'
-              }}
-            >
-              {mappingSaving
-                ? 'جارٍ الحفظ...'
-                : 'حفظ الربط'}
-            </button>
-          </div>
-
-          {selectedProfile && (
+          {!mikrotikConnected ? (
             <div
               style={{
-                marginTop: 16,
-                display: 'flex',
-                gap: 10,
-                flexWrap: 'wrap'
+                padding: 16,
+                borderRadius: 12,
+                background: '#fff7ed',
+                border:
+                  '1px solid #fed7aa',
+                color: '#9a3412',
+                fontSize: 13,
+                fontWeight: 700
               }}
             >
+              اتصل بـ MikroTik أولًا حتى تظهر
+              Profiles الموجودة في User Manager.
+            </div>
+          ) : (
+            <>
               <div
                 style={{
-                  padding:
-                    '9px 12px',
-                  borderRadius: 10,
-                  background: '#f8fafc',
-                  border:
-                    '1px solid #e2e8f0',
-                  fontSize: 13
+                  display: 'grid',
+                  gridTemplateColumns:
+                    '1fr 1fr auto',
+                  gap: 12,
+                  alignItems: 'end'
                 }}
               >
-                <strong>
-                  Profile:
-                </strong>{' '}
-                {selectedProfile.name}
+                <div
+                  className="field"
+                  style={{
+                    marginBottom: 0
+                  }}
+                >
+                  <label>الباقة</label>
+
+                  <select
+                    value={selectedPackageId}
+                    onChange={(e) =>
+                      handlePackageSelection(
+                        e.target.value
+                      )
+                    }
+                    style={{
+                      width: '100%'
+                    }}
+                  >
+                    <option value="">
+                      اختر الباقة
+                    </option>
+
+                    {packages.map((p) => (
+                      <option
+                        key={p.id}
+                        value={p.id}
+                      >
+                        {p.name} — {p.price} ريال
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div
+                  className="field"
+                  style={{
+                    marginBottom: 0
+                  }}
+                >
+                  <label>
+                    User Manager Profile
+                  </label>
+
+                  <select
+                    value={
+                      selectedProfileName
+                    }
+                    onChange={(e) =>
+                      setSelectedProfileName(
+                        e.target.value
+                      )
+                    }
+                    disabled={
+                      mikrotikLoading
+                    }
+                    style={{
+                      width: '100%'
+                    }}
+                  >
+                    <option value="">
+                      {mikrotikLoading
+                        ? 'جارٍ التحميل...'
+                        : 'اختر Profile'}
+                    </option>
+
+                    {mikrotikProfiles.map(
+                      (item) => (
+                        <option
+                          key={
+                            item.id ||
+                            item.name
+                          }
+                          value={item.name}
+                        >
+                          {item.name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                </div>
+
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={
+                    saveMikrotikMapping
+                  }
+                  disabled={
+                    mappingSaving ||
+                    !selectedPackageId ||
+                    !selectedProfileName
+                  }
+                  style={{
+                    minHeight: 42
+                  }}
+                >
+                  {mappingSaving
+                    ? 'جارٍ الحفظ...'
+                    : 'حفظ الربط'}
+                </button>
               </div>
 
-              {selectedProfile.price && (
+              {selectedProfile && (
                 <div
                   style={{
-                    padding:
-                      '9px 12px',
-                    borderRadius: 10,
-                    background:
-                      '#f8fafc',
+                    marginTop: 14,
+                    padding: 12,
+                    borderRadius: 11,
+                    background: '#f8fafc',
                     border:
                       '1px solid #e2e8f0',
                     fontSize: 13
                   }}
                 >
                   <strong>
-                    السعر:
+                    Profile المحدد:
                   </strong>{' '}
-                  {selectedProfile.price}
+                  {selectedProfile.name}
                 </div>
               )}
-            </div>
+            </>
           )}
-
-          <div
-            style={{
-              marginTop: 16,
-              padding: 12,
-              borderRadius: 11,
-              background: '#f8fafc',
-              border:
-                '1px solid #e5e7eb',
-              color: '#64748b',
-              fontSize: 12
-            }}
-          >
-            يتم التحقق من وجود الـ Profile
-            فعليًا داخل User Manager قبل حفظ
-            الربط. لا يتم اختراع سرعة أو مدة أو
-            أي قيمة غير موجودة في MikroTik.
-          </div>
         </div>
 
         {/* =====================================================
-            إنشاء الكروت
+            Create Cards
             ===================================================== */}
 
         <div
           style={{
             ...cardStyle,
             padding: 22,
-            marginBottom: 20
+            marginBottom: 25,
+            opacity: mikrotikConnected ? 1 : 0.72
           }}
         >
           <div
             style={{
               display: 'flex',
-              justifyContent:
-                'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               gap: 12,
-              marginBottom: 18
+              flexWrap: 'wrap',
+              marginBottom: 17
             }}
           >
             <div>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 20
-                }}
-              >
-                إنشاء كروت MikroTik
-              </h3>
+              <h2 style={sectionTitleStyle}>
+                إنشاء الكروت
+              </h2>
 
-              <span
+              <div
                 style={{
-                  color: '#6b7280',
-                  fontSize: 13
+                  ...mutedStyle,
+                  marginTop: 5
                 }}
               >
-                الأكواد النهائية يتم توليدها
-                آمنًا من السيرفر ثم تُنشأ في
-                MikroTik وتُحفظ في Supabase.
-              </span>
+                يتم إنشاء المستخدمين في MikroTik
+                ثم حفظ الكروت الناجحة في Supabase.
+              </div>
             </div>
 
             {selectedPackage && (
               <div
                 style={{
-                  padding:
-                    '9px 13px',
-                  borderRadius: 12,
-                  background:
-                    '#f3e8ff',
+                  padding: '9px 13px',
+                  borderRadius: 11,
+                  background: '#f3e8ff',
                   color: '#6d28d9',
                   fontWeight: 900
                 }}
@@ -1616,661 +1918,587 @@ export default function PackagesPage() {
             )}
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(180px, 1fr))',
-              gap: 12
-            }}
-          >
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                الباقة
-              </label>
-
-              <select
-                value={selectedPackageId}
-                onChange={(e) =>
-                  handlePackageSelection(
-                    e.target.value
-                  )
-                }
-                style={{
-                  width: '100%'
-                }}
-              >
-                <option value="">
-                  اختر الباقة
-                </option>
-
-                {packages.map((p) => (
-                  <option
-                    key={p.id}
-                    value={p.id}
-                  >
-                    {p.name} — {p.price} ريال
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                MikroTik Profile
-              </label>
-
-              <input
-                value={
-                  selectedProfileName
-                }
-                readOnly
-                placeholder="يظهر بعد ربط الباقة"
-              />
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                عدد الكروت
-              </label>
-
-              <input
-                type="number"
-                min="1"
-                max="1000"
-                value={cardQuantity}
-                onChange={(e) =>
-                  setCardQuantity(
-                    e.target.value
-                  )
-                }
-              />
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                بداية الكرت
-              </label>
-
-              <input
-                type="text"
-                inputMode="numeric"
-                value={codePrefix}
-                onChange={(e) =>
-                  setCodePrefix(
-                    e.target.value.replace(
-                      /[^0-9]/g,
-                      ''
-                    )
-                  )
-                }
-                placeholder="77"
-              />
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>
-                طول الكرت
-              </label>
-
-              <input
-                type="number"
-                min="4"
-                max="32"
-                value={codeLength}
-                onChange={(e) =>
-                  setCodeLength(
-                    e.target.value
-                  )
-                }
-              />
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 18,
-              padding: 15,
-              borderRadius: 14,
-              background: '#fafafa',
-              border:
-                '1px solid #eee',
-              display: 'flex',
-              justifyContent:
-                'space-between',
-              gap: 15,
-              flexWrap: 'wrap',
-              alignItems: 'center'
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontWeight: 900,
-                  marginBottom: 4
-                }}
-              >
-                إعداد الإنشاء
-              </div>
-
-              <div
-                style={{
-                  color: '#64748b',
-                  fontSize: 12
-                }}
-              >
-                مثال: يبدأ الكود بـ{' '}
-                <strong>
-                  {codePrefix || '—'}
-                </strong>{' '}
-                وطوله{' '}
-                <strong>
-                  {codeLength || '—'}
-                </strong>{' '}
-                أرقام، والكمية{' '}
-                <strong>
-                  {cardQuantity || '—'}
-                </strong>.
-              </div>
-            </div>
-
+          {!mikrotikConnected ? (
             <div
               style={{
-                display: 'flex',
-                gap: 9,
-                flexWrap: 'wrap'
-              }}
-            >
-              <button
-                type="button"
-                className="btn-sm"
-                onClick={
-                  generatePreviewCodes
-                }
-                style={{
-                  padding:
-                    '9px 14px',
-                  borderRadius: 9,
-                  border:
-                    '1px solid #d1d5db',
-                  background: '#fff',
-                  color: '#374151'
-                }}
-              >
-                معاينة 10 أكواد
-              </button>
-
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={createCards}
-                disabled={
-                  creatingCards ||
-                  !selectedPackageId ||
-                  !selectedProfileName
-                }
-                style={{
-                  minWidth: 160
-                }}
-              >
-                {creatingCards
-                  ? 'جارٍ إنشاء الكروت...'
-                  : 'إنشاء الكروت الآن'}
-              </button>
-            </div>
-          </div>
-
-          {selectedPackageId &&
-            !selectedProfileName && (
-              <div
-                style={{
-                  marginTop: 15,
-                  padding:
-                    '11px 13px',
-                  borderRadius: 10,
-                  background:
-                    '#fff7ed',
-                  border:
-                    '1px solid #fed7aa',
-                  color: '#c2410c',
-                  fontSize: 13,
-                  fontWeight: 800
-                }}
-              >
-                لا يمكن إنشاء الكروت لهذه
-                الباقة حتى يتم ربطها بـ
-                MikroTik Profile.
-              </div>
-            )}
-
-          {previewCodes.length > 0 && (
-            <div
-              style={{
-                marginTop: 18,
                 padding: 16,
-                borderRadius: 14,
-                background:
-                  '#f8fafc',
+                borderRadius: 12,
+                background: '#fff7ed',
                 border:
-                  '1px solid #e2e8f0'
+                  '1px solid #fed7aa',
+                color: '#9a3412',
+                fontSize: 13,
+                fontWeight: 700
               }}
             >
-              <div
-                style={{
-                  fontWeight: 900,
-                  marginBottom: 10
-                }}
-              >
-                معاينة الأكواد
-              </div>
-
+              بعد نجاح الاتصال بـ MikroTik ستتمكن
+              من إنشاء الكروت.
+            </div>
+          ) : (
+            <>
               <div
                 style={{
                   display: 'grid',
                   gridTemplateColumns:
-                    'repeat(auto-fill, minmax(120px, 1fr))',
-                  gap: 8
+                    'minmax(180px, 1.3fr) repeat(3, minmax(140px, .7fr))',
+                  gap: 12
                 }}
               >
-                {previewCodes.map(
-                  (code) => (
-                    <div
-                      key={code}
-                      style={{
-                        padding: 10,
-                        background:
-                          '#fff',
-                        border:
-                          '1px solid #e2e8f0',
-                        borderRadius: 9,
-                        textAlign:
-                          'center',
-                        fontFamily:
-                          'monospace',
-                        fontWeight: 800
-                      }}
-                    >
-                      {code}
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ===================================================
-              نتيجة الإنشاء
-              =================================================== */}
-
-          {creationResult && (
-            <div
-              style={{
-                marginTop: 18,
-                padding: 18,
-                borderRadius: 15,
-                background:
-                  creationResult.success
-                    ? '#f0fdf4'
-                    : '#fef2f2',
-                border:
-                  creationResult.success
-                    ? '1px solid #bbf7d0'
-                    : '1px solid #fecaca'
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color:
-                    creationResult.success
-                      ? '#166534'
-                      : '#b91c1c',
-                  marginBottom: 10
-                }}
-              >
-                {creationResult.success
-                  ? 'تم إنشاء الكروت بنجاح'
-                  : 'فشل إنشاء الكروت'}
-              </div>
-
-              {!creationResult.success && (
                 <div
                   style={{
-                    color: '#991b1b',
-                    fontSize: 13
+                    padding: 13,
+                    borderRadius: 12,
+                    background: '#f8fafc',
+                    border:
+                      '1px solid #e2e8f0'
                   }}
                 >
-                  {creationResult.message}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: '#64748b',
+                      marginBottom: 4
+                    }}
+                  >
+                    الباقة
+                  </div>
+
+                  <strong>
+                    {selectedPackage
+                      ? `${selectedPackage.name} — ${selectedPackage.price} ريال`
+                      : 'لم يتم اختيار باقة'}
+                  </strong>
+
+                  {selectedProfileName && (
+                    <div
+                      style={{
+                        marginTop: 5,
+                        fontSize: 12,
+                        color: '#166534'
+                      }}
+                    >
+                      Profile:{' '}
+                      {selectedProfileName}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  className="field"
+                  style={{
+                    marginBottom: 0
+                  }}
+                >
+                  <label>
+                    عدد الكروت
+                  </label>
+
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={cardQuantity}
+                    onChange={(e) =>
+                      setCardQuantity(
+                        e.target.value
+                      )
+                    }
+                  />
+                </div>
+
+                <div
+                  className="field"
+                  style={{
+                    marginBottom: 0
+                  }}
+                >
+                  <label>
+                    بداية الكرت
+                  </label>
+
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={codePrefix}
+                    onChange={(e) =>
+                      setCodePrefix(
+                        e.target.value.replace(
+                          /[^0-9]/g,
+                          ''
+                        )
+                      )
+                    }
+                    placeholder="77"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div
+                  className="field"
+                  style={{
+                    marginBottom: 0
+                  }}
+                >
+                  <label>
+                    طول الكود
+                  </label>
+
+                  <input
+                    type="number"
+                    min="4"
+                    max="32"
+                    value={codeLength}
+                    onChange={(e) =>
+                      setCodeLength(
+                        e.target.value
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  display: 'flex',
+                  justifyContent:
+                    'space-between',
+                  alignItems: 'center',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  padding: 14,
+                  borderRadius: 13,
+                  background: '#fafafa',
+                  border:
+                    '1px solid #eeeeee'
+                }}
+              >
+                <div
+                  style={{
+                    color: '#64748b',
+                    fontSize: 12
+                  }}
+                >
+                  يبدأ الكود بـ{' '}
+                  <strong>
+                    {codePrefix || '—'}
+                  </strong>{' '}
+                  وطوله{' '}
+                  <strong>
+                    {codeLength || '—'}
+                  </strong>{' '}
+                  والكمية{' '}
+                  <strong>
+                    {cardQuantity || '—'}
+                  </strong>.
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="btn-sm"
+                    onClick={
+                      generatePreviewCodes
+                    }
+                    style={{
+                      padding:
+                        '9px 14px',
+                      borderRadius: 9,
+                      border:
+                        '1px solid #d1d5db',
+                      background: '#fff'
+                    }}
+                  >
+                    معاينة الأكواد
+                  </button>
+
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={createCards}
+                    disabled={
+                      creatingCards ||
+                      !selectedPackageId ||
+                      !selectedProfileName
+                    }
+                    style={{
+                      minWidth: 160
+                    }}
+                  >
+                    {creatingCards
+                      ? 'جارٍ الإنشاء...'
+                      : 'إنشاء الكروت الآن'}
+                  </button>
+                </div>
+              </div>
+
+              {selectedPackageId &&
+                !selectedProfileName && (
+                  <div
+                    style={{
+                      marginTop: 13,
+                      padding: 11,
+                      borderRadius: 10,
+                      background:
+                        '#fff7ed',
+                      border:
+                        '1px solid #fed7aa',
+                      color: '#c2410c',
+                      fontSize: 13,
+                      fontWeight: 800
+                    }}
+                  >
+                    اربط الباقة بـ User Manager
+                    Profile أولًا.
+                  </div>
+                )}
+
+              {previewCodes.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 16,
+                    padding: 15,
+                    borderRadius: 13,
+                    background: '#f8fafc',
+                    border:
+                      '1px solid #e2e8f0'
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: 900,
+                      marginBottom: 9
+                    }}
+                  >
+                    معاينة أول 10 أكواد
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fill, minmax(120px, 1fr))',
+                      gap: 8
+                    }}
+                  >
+                    {previewCodes.map(
+                      (code) => (
+                        <div
+                          key={code}
+                          style={{
+                            padding: 10,
+                            background:
+                              '#fff',
+                            border:
+                              '1px solid #e2e8f0',
+                            borderRadius: 9,
+                            textAlign:
+                              'center',
+                            fontFamily:
+                              'monospace',
+                            fontWeight: 800
+                          }}
+                        >
+                          {code}
+                        </div>
+                      )
+                    )}
+                  </div>
                 </div>
               )}
 
-              {creationResult.success &&
-                creationResult.data && (
-                  <>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns:
-                          'repeat(auto-fit, minmax(160px, 1fr))',
-                        gap: 10,
-                        marginTop: 12
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: 12,
-                          background:
-                            '#fff',
-                          borderRadius: 10
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              '#64748b'
-                          }}
-                        >
-                          المطلوب
-                        </div>
-
-                        <strong>
-                          {
-                            creationResult
-                              .data
-                              .requested
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: 12,
-                          background:
-                            '#fff',
-                          borderRadius: 10
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              '#64748b'
-                          }}
-                        >
-                          تم في MikroTik
-                        </div>
-
-                        <strong>
-                          {
-                            creationResult
-                              .data
-                              .createdInMikrotik
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: 12,
-                          background:
-                            '#fff',
-                          borderRadius: 10
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              '#64748b'
-                          }}
-                        >
-                          محفوظ في Supabase
-                        </div>
-
-                        <strong>
-                          {
-                            creationResult
-                              .data
-                              .savedInSupabase
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: 12,
-                          background:
-                            '#fff',
-                          borderRadius: 10
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 12,
-                            color:
-                              '#64748b'
-                          }}
-                        >
-                          فشل
-                        </div>
-
-                        <strong>
-                          {
-                            creationResult
-                              .data
-                              .failed
-                          }
-                        </strong>
-                      </div>
-                    </div>
-
-                    {creationResult
-                      .data.results
-                      ?.successful
-                      ?.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: 16
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontWeight: 900,
-                            marginBottom: 8
-                          }}
-                        >
-                          الكروت الناجحة
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            flexWrap:
-                              'wrap',
-                            gap: 7
-                          }}
-                        >
-                          {creationResult.data.results.successful.map(
-                            (code) => (
-                              <span
-                                key={code}
-                                style={{
-                                  padding:
-                                    '7px 10px',
-                                  borderRadius:
-                                    8,
-                                  background:
-                                    '#dcfce7',
-                                  color:
-                                    '#166534',
-                                  fontFamily:
-                                    'monospace',
-                                  fontWeight:
-                                    800,
-                                  fontSize:
-                                    12
-                                }}
-                              >
-                                {code}
-                              </span>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {creationResult
-                      .data.results
-                      ?.failed
-                      ?.length > 0 && (
-                      <div
-                        style={{
-                          marginTop: 16
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontWeight: 900,
-                            marginBottom: 8,
-                            color:
-                              '#b91c1c'
-                          }}
-                        >
-                          الكروت الفاشلة
-                        </div>
-
-                        <div
-                          style={{
-                            display:
-                              'grid',
-                            gap: 7
-                          }}
-                        >
-                          {creationResult.data.results.failed.map(
-                            (item, index) => (
-                              <div
-                                key={`${item.code}-${index}`}
-                                style={{
-                                  padding: 9,
-                                  borderRadius:
-                                    8,
-                                  background:
-                                    '#fff',
-                                  border:
-                                    '1px solid #fecaca',
-                                  fontSize:
-                                    12
-                                }}
-                              >
-                                <strong>
-                                  {item.code}
-                                </strong>
-
-                                {' — '}
-
-                                {item.error}
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-            </div>
-          )}
-        </div>
-
-        {/* =====================================================
-            تسلسل العملية
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 20,
-            marginBottom: 25
-          }}
-        >
-          <div
-            style={{
-              fontWeight: 900,
-              marginBottom: 13
-            }}
-          >
-            تسلسل العملية
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(170px, 1fr))',
-              gap: 10
-            }}
-          >
-            {[
-              'إنشاء الباقة',
-              'اختبار MikroTik',
-              'ربط الـ Profile',
-              'تحديد الكمية والكود',
-              'إنشاء المستخدمين',
-              'حفظ الكروت في Supabase'
-            ].map((step, index) => (
-              <div
-                key={step}
-                style={{
-                  padding: 12,
-                  borderRadius: 11,
-                  background:
-                    '#f8fafc',
-                  border:
-                    '1px solid #e2e8f0',
-                  fontSize: 12
-                }}
-              >
-                <span
+              {creationResult && (
+                <div
                   style={{
-                    display:
-                      'inline-grid',
-                    placeItems:
-                      'center',
-                    width: 24,
-                    height: 24,
-                    borderRadius:
-                      '50%',
+                    marginTop: 16,
+                    padding: 17,
+                    borderRadius: 14,
                     background:
-                      '#ede9fe',
-                    color:
-                      '#6d28d9',
-                    fontWeight: 900,
-                    marginLeft: 7
+                      creationResult.success
+                        ? '#f0fdf4'
+                        : '#fef2f2',
+                    border:
+                      creationResult.success
+                        ? '1px solid #bbf7d0'
+                        : '1px solid #fecaca'
                   }}
                 >
-                  {index + 1}
-                </span>
+                  <div
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 900,
+                      color:
+                        creationResult.success
+                          ? '#166534'
+                          : '#b91c1c',
+                      marginBottom: 9
+                    }}
+                  >
+                    {creationResult.success
+                      ? 'تم إنشاء الكروت بنجاح'
+                      : 'فشل إنشاء الكروت'}
+                  </div>
 
-                {step}
-              </div>
-            ))}
-          </div>
+                  {!creationResult.success && (
+                    <div
+                      style={{
+                        color: '#991b1b',
+                        fontSize: 13
+                      }}
+                    >
+                      {
+                        creationResult.message
+                      }
+                    </div>
+                  )}
+
+                  {creationResult.success &&
+                    creationResult.data && (
+                      <>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'repeat(auto-fit, minmax(150px, 1fr))',
+                            gap: 9
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: 11,
+                              background:
+                                '#fff',
+                              borderRadius: 10
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color:
+                                  '#64748b'
+                              }}
+                            >
+                              المطلوب
+                            </div>
+
+                            <strong>
+                              {
+                                creationResult
+                                  .data
+                                  .requested
+                              }
+                            </strong>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: 11,
+                              background:
+                                '#fff',
+                              borderRadius: 10
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color:
+                                  '#64748b'
+                              }}
+                            >
+                              في MikroTik
+                            </div>
+
+                            <strong>
+                              {
+                                creationResult
+                                  .data
+                                  .createdInMikrotik
+                              }
+                            </strong>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: 11,
+                              background:
+                                '#fff',
+                              borderRadius: 10
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color:
+                                  '#64748b'
+                              }}
+                            >
+                              في Supabase
+                            </div>
+
+                            <strong>
+                              {
+                                creationResult
+                                  .data
+                                  .savedInSupabase
+                              }
+                            </strong>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: 11,
+                              background:
+                                '#fff',
+                              borderRadius: 10
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color:
+                                  '#64748b'
+                              }}
+                            >
+                              فشل
+                            </div>
+
+                            <strong>
+                              {
+                                creationResult
+                                  .data
+                                  .failed
+                              }
+                            </strong>
+                          </div>
+                        </div>
+
+                        {creationResult.data
+                          .results
+                          ?.successful
+                          ?.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 15
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                marginBottom: 8
+                              }}
+                            >
+                              الكروت الناجحة
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                flexWrap:
+                                  'wrap',
+                                gap: 7
+                              }}
+                            >
+                              {creationResult.data.results.successful.map(
+                                (code) => (
+                                  <span
+                                    key={code}
+                                    style={{
+                                      padding:
+                                        '7px 10px',
+                                      borderRadius:
+                                        8,
+                                      background:
+                                        '#dcfce7',
+                                      color:
+                                        '#166534',
+                                      fontFamily:
+                                        'monospace',
+                                      fontWeight:
+                                        800,
+                                      fontSize:
+                                        12
+                                    }}
+                                  >
+                                    {code}
+                                  </span>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {creationResult.data
+                          .results
+                          ?.failed
+                          ?.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 15
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontWeight: 900,
+                                marginBottom: 8,
+                                color:
+                                  '#b91c1c'
+                              }}
+                            >
+                              الكروت الفاشلة
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gap: 7
+                              }}
+                            >
+                              {creationResult.data.results.failed.map(
+                                (
+                                  item,
+                                  index
+                                ) => (
+                                  <div
+                                    key={`${item.code}-${index}`}
+                                    style={{
+                                      padding: 9,
+                                      borderRadius:
+                                        8,
+                                      background:
+                                        '#fff',
+                                      border:
+                                        '1px solid #fecaca',
+                                      fontSize:
+                                        12
+                                    }}
+                                  >
+                                    <strong>
+                                      {
+                                        item.code
+                                      }
+                                    </strong>
+
+                                    {' — '}
+
+                                    {item.error}
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
