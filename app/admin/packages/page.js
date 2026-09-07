@@ -6,796 +6,1039 @@ import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
 /*
- * ============================================================
- * MikroTik - ربط تجريبي مؤقت
- * ============================================================
- *
- * مهم:
- * - هذا الجزء لا يتصل بالراوتر حاليًا.
- * - لا يضيف أو يحذف أو يعدل أي كروت في قاعدة البيانات.
- * - لا يغير أي شيء في نظام الباقات الحالي.
- * - الربط الموجود هنا تجريبي فقط إلى أن نتأكد من Profiles
- *   الموجودة فعليًا في MikroTik.
- *
- * سيتم لاحقًا نقل بيانات الاتصال إلى Server/API آمن.
- */
+
+* ============================================================
+* MikroTik - ربط تجريبي مؤقت
+* ============================================================
+* 
+* مهم:
+* - هذا الجزء لا يتصل بالراوتر حاليًا.
+* - لا يضيف أو يحذف أو يعدل أي كروت في قاعدة البيانات.
+* - لا يغير أي شيء في نظام الباقات الحالي.
+* - الربط الموجود هنا تجريبي فقط إلى أن يتم تجهيز Server/API.
+* 
+* طريقة إنشاء الكروت:
+* - بداية الكرت يتم إدخالها يدويًا.
+* - الأرقام المتبقية يتم توليدها عشوائيًا.
+* - مثال:
+* البداية = 77
+* طول الكود = 8
+* الناتج:
+* 77182463
+* 77490512
+* 77273184
+* ...
+* 
+* سيتم لاحقًا تنفيذ التوليد الفعلي وإرسال الكروت إلى
+* MikroTik User Manager من خلال Server/API آمن.
+  */
 
 const mikrotikProfileMappings = {
-  'أبو 200': 'new 700m-1d-200r',
-  'أبو 300': 'new 1g-3d-300r',
-  'أبو 500': 'new 2g-5d-500r',
-  'أبو 1000': 'new 4g-10d-1000r',
-  'أبو 3000': 'new 12g-30d-3000r',
-  'أبو 5000': 'new 20g-30d-5000r',
-  'أبو 7000': 'new 30g-30d-7000r'
+'أبو 200': 'new 700m-1d-200r',
+'أبو 300': 'new 1g-3d-300r',
+'أبو 500': 'new 2g-5d-500r',
+'أبو 1000': 'new 4g-10d-1000r',
+'أبو 3000': 'new 12g-30d-3000r',
+'أبو 5000': 'new 20g-30d-5000r',
+'أبو 7000': 'new 30g-30d-7000r'
 };
 
 export default function PackagesPage() {
-  const { profile, loading } = useProfile('admin');
+const { profile, loading } = useProfile('admin');
 
-  const [packages, setPackages] = useState([]);
-  const [name, setName] = useState('');
-  const [price, setPrice] = useState('');
-  const [error, setError] = useState('');
-  const [busyId, setBusyId] = useState(null);
+const [packages, setPackages] = useState([]);
+const [name, setName] = useState('');
+const [price, setPrice] = useState('');
+const [error, setError] = useState('');
+const [busyId, setBusyId] = useState(null);
 
-  /*
-   * ============================================================
-   * MikroTik UI state
-   * ============================================================
-   */
+/*
 
-  const [selectedPackageId, setSelectedPackageId] = useState('');
-  const [cardQuantity, setCardQuantity] = useState('');
-  const [startCode, setStartCode] = useState('');
-  const [codeLength, setCodeLength] = useState('8');
-  const [generationMethod, setGenerationMethod] = useState('sequential');
+* ============================================================
+* MikroTik UI state
+* ============================================================
+  */
 
-  const [routerAddress, setRouterAddress] = useState('');
-  const [routerPort, setRouterPort] = useState('8728');
-  const [routerUsername, setRouterUsername] = useState('');
-  const [routerPassword, setRouterPassword] = useState('');
+const [selectedPackageId, setSelectedPackageId] = useState('');
+const [cardQuantity, setCardQuantity] = useState('');
+const [startCode, setStartCode] = useState('');
+const [codeLength, setCodeLength] = useState('8');
 
-  const [mikrotikMessage, setMikrotikMessage] = useState('');
-  const [connectionStatus, setConnectionStatus] = useState('idle');
+const [routerAddress, setRouterAddress] = useState('');
 
-  /*
-   * ============================================================
-   * النظام الحالي - لم يتم تغييره
-   * ============================================================
-   */
+const [mikrotikMessage, setMikrotikMessage] = useState('');
+const [connectionStatus, setConnectionStatus] = useState('idle');
 
-  async function loadPackages() {
-    // جلب الباقات مع حساب عدد الكروت المرتبطة بكل باقة
-    const { data, error: fetchError } = await supabase
-      .from('packages')
-      .select('*, cards(id)')
-      .order('created_at', { ascending: false });
+/*
 
-    if (!fetchError && data) {
-      const formatted = data.map((pkg) => ({
-        ...pkg,
-        cardsCount: pkg.cards ? pkg.cards.length : 0
-      }));
+* ============================================================
+* النظام الحالي - لم يتم تغييره
+* ============================================================
+  */
 
-      setPackages(formatted);
+async function loadPackages() {
+const { data, error: fetchError } = await supabase
+.from('packages')
+.select('*, cards(id)')
+.order('created_at', { ascending: false });
 
-      /*
-       * اختيار أول باقة تلقائيًا فقط في واجهة MikroTik
-       * ولا يؤثر على الباقات أو قاعدة البيانات.
-       */
-      if (!selectedPackageId && formatted.length > 0) {
-        setSelectedPackageId(formatted[0].id);
-      }
-    } else {
-      setPackages([]);
-    }
+if (!fetchError && data) {
+  const formatted = data.map((pkg) => ({
+    ...pkg,
+    cardsCount: pkg.cards ? pkg.cards.length : 0
+  }));
+
+  setPackages(formatted);
+
+  if (!selectedPackageId && formatted.length > 0) {
+    setSelectedPackageId(formatted[0].id);
   }
+} else {
+  setPackages([]);
+}
 
-  useEffect(() => {
-    if (profile) loadPackages();
-  }, [profile]);
+}
 
-  async function addPackage(e) {
-    e.preventDefault();
-    setError('');
+useEffect(() => {
+if (profile) loadPackages();
+}, [profile]);
 
-    if (!name || !price) return;
+async function addPackage(e) {
+e.preventDefault();
+setError('');
 
-    const { error: insertError } = await supabase
-      .from('packages')
-      .insert({
-        name,
-        price: parseFloat(price)
-      });
+if (!name || !price) return;
 
-    if (insertError) {
-      setError(insertError.message);
-      return;
-    }
+const { error: insertError } = await supabase
+  .from('packages')
+  .insert({
+    name,
+    price: parseFloat(price)
+  });
 
-    setName('');
-    setPrice('');
-    loadPackages();
-  }
+if (insertError) {
+  setError(insertError.message);
+  return;
+}
 
-  async function deletePackage(id, name) {
-    if (
-      !window.confirm(
-        `سيتم حذف باقة "${name}" نهائيًا. لا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا. متابعة؟`
-      )
-    ) {
-      return;
-    }
+setName('');
+setPrice('');
+loadPackages();
 
-    setError('');
-    setBusyId(id);
+}
 
-    const { error: deleteError } = await supabase
-      .from('packages')
-      .delete()
-      .eq('id', id);
+async function deletePackage(id, name) {
+if (
+!window.confirm(
+"سيتم حذف باقة "${name}" نهائيًا. لا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا. متابعة؟"
+)
+) {
+return;
+}
 
-    setBusyId(null);
+setError('');
+setBusyId(id);
 
-    if (deleteError) {
-      setError(
-        'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا'
-      );
-      return;
-    }
+const { error: deleteError } = await supabase
+  .from('packages')
+  .delete()
+  .eq('id', id);
 
-    loadPackages();
-  }
+setBusyId(null);
 
-  /*
-   * ============================================================
-   * MikroTik - وظائف تجريبية فقط
-   * ============================================================
-   */
+if (deleteError) {
+  setError(
+    'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا'
+  );
+  return;
+}
 
-  const selectedPackage =
-    packages.find((pkg) => pkg.id === selectedPackageId) || null;
+loadPackages();
 
-  const selectedMikrotikProfile = selectedPackage
-    ? mikrotikProfileMappings[selectedPackage.name] || ''
-    : '';
+}
 
-  function handleGeneratePreview(e) {
-    e.preventDefault();
+/*
 
-    setMikrotikMessage('');
+* ============================================================
+* MikroTik
+* ============================================================
+  */
 
-    const quantity = Number(cardQuantity);
-    const start = String(startCode || '').trim();
-    const length = Number(codeLength);
+const selectedPackage =
+packages.find((pkg) => pkg.id === selectedPackageId) || null;
 
-    if (!selectedPackage) {
-      setMikrotikMessage('يرجى اختيار باقة أولًا.');
-      return;
-    }
+const selectedMikrotikProfile = selectedPackage
+? mikrotikProfileMappings[selectedPackage.name] || ''
+: '';
 
-    if (!selectedMikrotikProfile) {
-      setMikrotikMessage(
-        `الباقة "${selectedPackage.name}" غير مرتبطة حاليًا بـ Profile MikroTik.`
-      );
-      return;
-    }
+/*
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      setMikrotikMessage('أدخل عدد كروت صحيح أكبر من صفر.');
-      return;
-    }
+* ============================================================
+* توليد كود عشوائي مع بداية ثابتة
+* ============================================================
+* 
+* مثال:
+* 
+* البداية = 77
+* طول الكود = 8
+* 
+* الناتج:
+* 77182736
+* 77491628
+* 77350291
+* 
+* الجزء بعد البداية عشوائي.
+  */
 
-    if (!start) {
-      setMikrotikMessage('أدخل بداية الكرت.');
-      return;
-    }
+function generateRandomSuffix(length) {
+const chars = '0123456789';
 
-    if (!Number.isInteger(length) || length <= 0) {
-      setMikrotikMessage('أدخل طول كود صحيح.');
-      return;
-    }
+let result = '';
 
-    /*
-     * لا يتم إنشاء أي كرت فعلي هنا.
-     * مجرد اختبار للواجهة.
-     */
-    setMikrotikMessage(
-      `تم تجهيز طلب تجريبي لإنشاء ${quantity} كرت من باقة "${selectedPackage.name}" وربطها بالـ Profile "${selectedMikrotikProfile}". لم يتم إرسال أي شيء إلى MikroTik ولم يتم تعديل قاعدة البيانات.`
-    );
-  }
+for (let i = 0; i < length; i++) {
+  result += chars[Math.floor(Math.random() * chars.length)];
+}
 
-  function handleTestConnection(e) {
-    e.preventDefault();
+return result;
 
-    setConnectionStatus('testing');
-    setMikrotikMessage('');
+}
 
-    /*
-     * لا يوجد اتصال حقيقي حاليًا.
-     * ننتظر بناء Server/API آمن قبل الاتصال بالراوتر.
-     */
-    setTimeout(() => {
-      setConnectionStatus('preview');
+function generatePreviewCodes(quantity, start, length) {
+const prefix = String(start).trim();
 
-      setMikrotikMessage(
-        'وضع تجريبي: لم يتم الاتصال بالراوتر. بيانات الاتصال لم تُحفظ ولم تُرسل لأي جهة.'
-      );
-    }, 500);
-  }
+const remainingLength = length - prefix.length;
 
-  if (loading) return null;
+if (remainingLength < 1) {
+  return [];
+}
 
-  return (
-    <div className="app">
-      <Sidebar
-        role="admin"
-        active="/admin/packages"
-        name={profile.full_name}
-      />
+const codes = new Set();
 
-      <div className="main">
-        <h1>الباقات</h1>
+/*
+ * حد أمان حتى لا ندخل في حلقة لا نهائية
+ * إذا كان المجال العشوائي صغيرًا جدًا.
+ */
+const maxAttempts = quantity * 100;
 
-        <p className="greet" style={{ marginBottom: 20 }}>
-          إدارة باقات الكروت وأسعارها
-        </p>
+let attempts = 0;
 
-        {/* =====================================================
-            النظام الحالي للباقات - محفوظ كما هو
-            ===================================================== */}
+while (codes.size < quantity && attempts < maxAttempts) {
+  attempts += 1;
 
-        <div className="panel">
-          <div className="panel-head">
-            <h3>إضافة باقة جديدة</h3>
-          </div>
+  const suffix = generateRandomSuffix(remainingLength);
+  const code = `${prefix}${suffix}`;
 
-          {error && <div className="error-note">{error}</div>}
+  codes.add(code);
+}
 
-          <form
-            onSubmit={addPackage}
-            style={{
-              display: 'flex',
-              gap: 12,
-              flexWrap: 'wrap',
-              alignItems: 'flex-end'
-            }}
-          >
-            <div
-              className="field"
-              style={{
-                marginBottom: 0,
-                flex: 1,
-                minWidth: 180
-              }}
-            >
-              <label>اسم الباقة</label>
+if (codes.size !== quantity) {
+  return [];
+}
 
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: باقة 20GB"
-              />
-            </div>
+return [...codes];
 
-            <div
-              className="field"
-              style={{
-                marginBottom: 0,
-                width: 140
-              }}
-            >
-              <label>السعر (لكل كرت)</label>
+}
 
-              <input
-                type="number"
-                step="0.01"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="25"
-              />
-            </div>
+function handleGeneratePreview(e) {
+e.preventDefault();
 
-            <button
-              className="btn-primary"
-              style={{ width: 140 }}
-              type="submit"
-            >
-              إضافة
-            </button>
-          </form>
+setMikrotikMessage('');
+
+const quantity = Number(cardQuantity);
+const start = String(startCode || '').trim();
+const length = Number(codeLength);
+
+if (!selectedPackage) {
+  setMikrotikMessage('يرجى اختيار باقة أولًا.');
+  return;
+}
+
+if (!selectedMikrotikProfile) {
+  setMikrotikMessage(
+    `الباقة "${selectedPackage.name}" غير مرتبطة حاليًا بـ Profile MikroTik.`
+  );
+  return;
+}
+
+if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1000) {
+  setMikrotikMessage(
+    'أدخل عدد كروت صحيح بين 1 و1000.'
+  );
+  return;
+}
+
+if (!start) {
+  setMikrotikMessage(
+    'أدخل بداية الكرت يدويًا.'
+  );
+  return;
+}
+
+if (!/^\d+$/.test(start)) {
+  setMikrotikMessage(
+    'بداية الكرت يجب أن تحتوي على أرقام فقط.'
+  );
+  return;
+}
+
+if (!Number.isInteger(length) || length < 4 || length > 32) {
+  setMikrotikMessage(
+    'طول الكود يجب أن يكون بين 4 و32 رقمًا.'
+  );
+  return;
+}
+
+if (start.length >= length) {
+  setMikrotikMessage(
+    `بداية الكرت يجب أن تكون أقصر من طول الكود. البداية الحالية ${start.length} أرقام وطول الكود ${length} أرقام.`
+  );
+  return;
+}
+
+/*
+ * إنشاء معاينة فعلية للأكواد العشوائية فقط.
+ *
+ * لا يتم إرسالها إلى MikroTik.
+ * ولا يتم حفظها في Supabase.
+ */
+
+const previewCodes = generatePreviewCodes(
+  quantity,
+  start,
+  length
+);
+
+if (previewCodes.length !== quantity) {
+  setMikrotikMessage(
+    'تعذر إنشاء العدد المطلوب من الأكواد الفريدة. زِد طول الكود أو قلل عدد الكروت.'
+  );
+  return;
+}
+
+const preview = previewCodes.slice(0, 10);
+
+setMikrotikMessage(
+  `تم إنشاء معاينة لـ ${quantity} كرت عشوائي. البداية الثابتة: "${start}". Profile: "${selectedMikrotikProfile}". أول الأكواد: ${preview.join(' — ')}. لم يتم إرسال أي كرت إلى MikroTik ولم يتم تعديل قاعدة البيانات.`
+);
+
+}
+
+/*
+
+* ============================================================
+* اختبار الاتصال - تجريبي فقط
+* ============================================================
+  */
+
+function handleTestConnection(e) {
+e.preventDefault();
+
+setConnectionStatus('testing');
+setMikrotikMessage('');
+
+/*
+ * لا يوجد اتصال حقيقي حاليًا.
+ * الاتصال الحقيقي سيتم لاحقًا من Server/API.
+ */
+
+setTimeout(() => {
+  setConnectionStatus('preview');
+
+  setMikrotikMessage(
+    'وضع تجريبي: لم يتم الاتصال بالراوتر. سيتم تنفيذ الاتصال الحقيقي لاحقًا من الخادم بشكل آمن.'
+  );
+}, 500);
+
+}
+
+if (loading) return null;
+
+return (
+<div className="app">
+<Sidebar
+role="admin"
+active="/admin/packages"
+name={profile.full_name}
+/>
+
+  <div className="main">
+    <h1>الباقات</h1>
+
+    <p className="greet" style={{ marginBottom: 20 }}>
+      إدارة باقات الكروت وأسعارها
+    </p>
+
+    {/* =====================================================
+        النظام الحالي للباقات - محفوظ كما هو
+        ===================================================== */}
+
+    <div className="panel">
+      <div className="panel-head">
+        <h3>إضافة باقة جديدة</h3>
+      </div>
+
+      {error && <div className="error-note">{error}</div>}
+
+      <form
+        onSubmit={addPackage}
+        style={{
+          display: 'flex',
+          gap: 12,
+          flexWrap: 'wrap',
+          alignItems: 'flex-end'
+        }}
+      >
+        <div
+          className="field"
+          style={{
+            marginBottom: 0,
+            flex: 1,
+            minWidth: 180
+          }}
+        >
+          <label>اسم الباقة</label>
+
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="مثال: باقة 20GB"
+          />
         </div>
 
-        <div className="panel">
-          <div className="panel-head">
-            <h3>الباقات الحالية</h3>
-            <span className="muted">{packages.length}</span>
-          </div>
+        <div
+          className="field"
+          style={{
+            marginBottom: 0,
+            width: 140
+          }}
+        >
+          <label>السعر (لكل كرت)</label>
 
+          <input
+            type="number"
+            step="0.01"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder="25"
+          />
+        </div>
+
+        <button
+          className="btn-primary"
+          style={{ width: 140 }}
+          type="submit"
+        >
+          إضافة
+        </button>
+      </form>
+    </div>
+
+    <div className="panel">
+      <div className="panel-head">
+        <h3>الباقات الحالية</h3>
+        <span className="muted">{packages.length}</span>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns:
+            'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 14,
+          marginTop: 10
+        }}
+      >
+        {packages.map((p) => (
           <div
+            key={p.id}
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 14,
-              marginTop: 10
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 16,
+              minHeight: 82,
+              padding: '14px 18px',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: 10,
+              boxSizing: 'border-box'
             }}
           >
-            {packages.map((p) => (
+            <div
+              style={{
+                minWidth: 0,
+                flex: 1
+              }}
+            >
               <div
-                key={p.id}
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: '#111827',
+                  marginBottom: 6,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+              >
+                {p.name}
+              </div>
+
+              <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
                   gap: 16,
-                  minHeight: 82,
-                  padding: '14px 18px',
-                  background: '#ffffff',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 10,
-                  boxSizing: 'border-box'
+                  flexWrap: 'wrap',
+                  fontSize: 14
                 }}
               >
-                <div
+                <span
                   style={{
-                    minWidth: 0,
-                    flex: 1
+                    fontWeight: 700,
+                    color: '#374151'
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 800,
-                      color: '#111827',
-                      marginBottom: 6,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}
-                  >
-                    {p.name}
-                  </div>
+                  {p.price} ريال
+                </span>
 
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 16,
-                      flexWrap: 'wrap',
-                      fontSize: 14
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontWeight: 700,
-                        color: '#374151'
-                      }}
-                    >
-                      {p.price} ريال
-                    </span>
-
-                    <span
-                      style={{
-                        fontWeight: 800,
-                        color: '#5B21B6'
-                      }}
-                    >
-                      {p.cardsCount} كرت
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  className="btn-sm"
+                <span
                   style={{
-                    backgroundColor: '#dc2626',
-                    color: '#ffffff',
-                    opacity: 1,
-                    padding: '6px 14px',
-                    borderRadius: '6px',
-                    border: 'none',
-                    flexShrink: 0
+                    fontWeight: 800,
+                    color: '#5B21B6'
                   }}
-                  disabled={busyId === p.id}
-                  onClick={() => deletePackage(p.id, p.name)}
                 >
-                  {busyId === p.id ? 'جاري...' : 'حذف'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* =====================================================
-            فاصل بصري
-            ===================================================== */}
-
-        <div
-          style={{
-            height: 35
-          }}
-        />
-
-        {/* =====================================================
-            MikroTik
-            ===================================================== */}
-
-        <div className="panel">
-          <div className="panel-head">
-            <div>
-              <h3 style={{ marginBottom: 5 }}>
-                نظام إنشاء الكروت — MikroTik
-              </h3>
-
-              <div
-                style={{
-                  fontSize: 13,
-                  color: '#6b7280'
-                }}
-              >
-                مرحلة تجريبية — لا يوجد اتصال فعلي بالراوتر حاليًا
+                  {p.cardsCount} كرت
+                </span>
               </div>
             </div>
 
-            <span
+            <button
+              className="btn-sm"
               style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '5px 10px',
-                borderRadius: 999,
-                background: '#fef3c7',
-                color: '#92400e',
-                fontSize: 12,
-                fontWeight: 800
+                backgroundColor: '#dc2626',
+                color: '#ffffff',
+                opacity: 1,
+                padding: '6px 14px',
+                borderRadius: '6px',
+                border: 'none',
+                flexShrink: 0
               }}
+              disabled={busyId === p.id}
+              onClick={() => deletePackage(p.id, p.name)}
             >
-              تجريبي
-            </span>
+              {busyId === p.id ? 'جاري...' : 'حذف'}
+            </button>
           </div>
+        ))}
+      </div>
+    </div>
+
+    {/* =====================================================
+        فاصل بصري
+        ===================================================== */}
+
+    <div
+      style={{
+        height: 35
+      }}
+    />
+
+    {/* =====================================================
+        MikroTik
+        ===================================================== */}
+
+    <div className="panel">
+      <div className="panel-head">
+        <div>
+          <h3 style={{ marginBottom: 5 }}>
+            نظام إنشاء الكروت — MikroTik
+          </h3>
 
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 18,
-              marginTop: 18
+              fontSize: 13,
+              color: '#6b7280'
             }}
           >
-            {/* إنشاء الكروت */}
-            <div
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: 18,
-                background: '#ffffff'
-              }}
-            >
-              <h4
+            مرحلة تجريبية — التوليد عشوائي مع بداية يحددها المدير
+          </div>
+        </div>
+
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '5px 10px',
+            borderRadius: 999,
+            background: '#fef3c7',
+            color: '#92400e',
+            fontSize: 12,
+            fontWeight: 800
+          }}
+        >
+          تجريبي
+        </span>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns:
+            'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 18,
+          marginTop: 18
+        }}
+      >
+        {/* =================================================
+            إنشاء الكروت
+            ================================================= */}
+
+        <div
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 12,
+            padding: 18,
+            background: '#ffffff'
+          }}
+        >
+          <h4
+            style={{
+              margin: '0 0 16px',
+              fontSize: 16,
+              fontWeight: 800,
+              color: '#111827'
+            }}
+          >
+            إنشاء كروت
+          </h4>
+
+          <form onSubmit={handleGeneratePreview}>
+            <div className="field">
+              <label>الباقة</label>
+
+              <select
+                value={selectedPackageId}
+                onChange={(e) => {
+                  setSelectedPackageId(e.target.value);
+                  setMikrotikMessage('');
+                }}
                 style={{
-                  margin: '0 0 16px',
-                  fontSize: 16,
-                  fontWeight: 800,
-                  color: '#111827'
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 8,
+                  background: '#ffffff'
                 }}
               >
-                إنشاء كروت
-              </h4>
+                <option value="">اختر الباقة</option>
 
-              <form onSubmit={handleGeneratePreview}>
-                <div className="field">
-                  <label>الباقة</label>
-
-                  <select
-                    value={selectedPackageId}
-                    onChange={(e) => {
-                      setSelectedPackageId(e.target.value);
-                      setMikrotikMessage('');
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      border: '1px solid #d1d5db',
-                      borderRadius: 8,
-                      background: '#ffffff'
-                    }}
+                {packages.map((pkg) => (
+                  <option
+                    key={pkg.id}
+                    value={pkg.id}
                   >
-                    <option value="">اختر الباقة</option>
-
-                    {packages.map((pkg) => (
-                      <option key={pkg.id} value={pkg.id}>
-                        {pkg.name} — {pkg.price} ريال
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: '10px 12px',
-                    borderRadius: 8,
-                    background: selectedMikrotikProfile
-                      ? '#ecfdf5'
-                      : '#f3f4f6',
-                    border: `1px solid ${
-                      selectedMikrotikProfile ? '#a7f3d0' : '#e5e7eb'
-                    }`
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#6b7280',
-                      marginBottom: 4
-                    }}
-                  >
-                    Profile MikroTik
-                  </div>
-
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      fontSize: 14,
-                      color: selectedMikrotikProfile
-                        ? '#065f46'
-                        : '#6b7280'
-                    }}
-                  >
-                    {selectedMikrotikProfile || 'غير مرتبط حاليًا'}
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 12,
-                    marginTop: 14
-                  }}
-                >
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>عدد الكروت</label>
-
-                    <input
-                      type="number"
-                      min="1"
-                      value={cardQuantity}
-                      onChange={(e) => setCardQuantity(e.target.value)}
-                      placeholder="100"
-                    />
-                  </div>
-
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>بداية الكرت</label>
-
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={startCode}
-                      onChange={(e) => setStartCode(e.target.value)}
-                      placeholder="50000001"
-                    />
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 12,
-                    marginTop: 14
-                  }}
-                >
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>طول الكود</label>
-
-                    <input
-                      type="number"
-                      min="1"
-                      max="32"
-                      value={codeLength}
-                      onChange={(e) => setCodeLength(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>طريقة التوليد</label>
-
-                    <select
-                      value={generationMethod}
-                      onChange={(e) =>
-                        setGenerationMethod(e.target.value)
-                      }
-                      style={{
-                        width: '100%',
-                        padding: '10px 12px',
-                        border: '1px solid #d1d5db',
-                        borderRadius: 8,
-                        background: '#ffffff'
-                      }}
-                    >
-                      <option value="sequential">تسلسلي</option>
-                      <option value="random">عشوائي</option>
-                    </select>
-                  </div>
-                </div>
-
-                <button
-                  className="btn-primary"
-                  type="submit"
-                  style={{
-                    width: '100%',
-                    marginTop: 18
-                  }}
-                >
-                  توليد الكروت — تجريبي
-                </button>
-              </form>
+                    {pkg.name} — {pkg.price} ريال
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* إعدادات الاتصال */}
+            {/* السعر */}
+
             <div
               style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: 18,
-                background: '#ffffff'
+                marginTop: 12,
+                padding: '10px 12px',
+                borderRadius: 8,
+                background: '#f8fafc',
+                border: '1px solid #e5e7eb'
               }}
             >
-              <h4
-                style={{
-                  margin: '0 0 5px',
-                  fontSize: 16,
-                  fontWeight: 800,
-                  color: '#111827'
-                }}
-              >
-                إعدادات MikroTik
-              </h4>
-
               <div
                 style={{
                   fontSize: 12,
                   color: '#6b7280',
-                  marginBottom: 16
+                  marginBottom: 4
                 }}
               >
-                معاينة فقط — لا يتم حفظ هذه البيانات حاليًا
+                سعر الكرت
               </div>
-
-              <div className="field">
-                <label>عنوان الراوتر / Domain</label>
-
-                <input
-                  value={routerAddress}
-                  onChange={(e) => setRouterAddress(e.target.value)}
-                  placeholder="مثال: 192.168.88.1"
-                />
-              </div>
-
-              <div className="field">
-                <label>API Port</label>
-
-                <input
-                  type="number"
-                  value={routerPort}
-                  onChange={(e) => setRouterPort(e.target.value)}
-                  placeholder="8728"
-                />
-              </div>
-
-              <div className="field">
-                <label>اسم المستخدم</label>
-
-                <input
-                  value={routerUsername}
-                  onChange={(e) => setRouterUsername(e.target.value)}
-                  placeholder="MikroTik username"
-                  autoComplete="off"
-                />
-              </div>
-
-              <div className="field">
-                <label>كلمة المرور</label>
-
-                <input
-                  type="password"
-                  value={routerPassword}
-                  onChange={(e) => setRouterPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                />
-              </div>
-
-              <button
-                type="button"
-                className="btn-sm"
-                onClick={handleTestConnection}
-                disabled={connectionStatus === 'testing'}
-                style={{
-                  width: '100%',
-                  marginTop: 4,
-                  padding: '10px 14px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background:
-                    connectionStatus === 'testing'
-                      ? '#9ca3af'
-                      : '#111827',
-                  color: '#ffffff',
-                  fontWeight: 800
-                }}
-              >
-                {connectionStatus === 'testing'
-                  ? 'جاري الاختبار...'
-                  : 'اختبار الاتصال — تجريبي'}
-              </button>
 
               <div
                 style={{
-                  marginTop: 12,
-                  padding: '9px 11px',
-                  borderRadius: 8,
-                  background:
-                    connectionStatus === 'preview'
-                      ? '#fef3c7'
-                      : '#f9fafb',
-                  border: '1px solid #e5e7eb',
-                  fontSize: 12,
-                  color: '#6b7280'
+                  fontWeight: 800,
+                  fontSize: 15,
+                  color: '#111827'
                 }}
               >
-                الحالة:{' '}
-                <strong>
-                  {connectionStatus === 'testing'
-                    ? 'جارٍ الاختبار'
-                    : connectionStatus === 'preview'
-                      ? 'تجريبي — غير متصل'
-                      : 'لم يتم الاختبار'}
-                </strong>
+                {selectedPackage
+                  ? `${selectedPackage.price} ريال`
+                  : '—'}
               </div>
             </div>
-          </div>
 
-          {/* رسالة النظام */}
-          {mikrotikMessage && (
+            {/* Profile */}
+
             <div
               style={{
-                marginTop: 18,
-                padding: '12px 14px',
-                borderRadius: 9,
+                marginTop: 12,
+                padding: '10px 12px',
+                borderRadius: 8,
+                background: selectedMikrotikProfile
+                  ? '#ecfdf5'
+                  : '#f3f4f6',
+                border: `1px solid ${
+                  selectedMikrotikProfile
+                    ? '#a7f3d0'
+                    : '#e5e7eb'
+                }`
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  color: '#6b7280',
+                  marginBottom: 4
+                }}
+              >
+                Profile MikroTik
+              </div>
+
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: 14,
+                  color: selectedMikrotikProfile
+                    ? '#065f46'
+                    : '#6b7280',
+                  wordBreak: 'break-word'
+                }}
+              >
+                {selectedMikrotikProfile ||
+                  'غير مرتبط حاليًا'}
+              </div>
+            </div>
+
+            {/* العدد */}
+
+            <div
+              style={{
+                marginTop: 14
+              }}
+            >
+              <div className="field">
+                <label>عدد الكروت</label>
+
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={cardQuantity}
+                  onChange={(e) =>
+                    setCardQuantity(e.target.value)
+                  }
+                  placeholder="100"
+                />
+              </div>
+            </div>
+
+            {/* بداية الكرت */}
+
+            <div
+              className="field"
+              style={{
+                marginBottom: 0
+              }}
+            >
+              <label>بداية الكرت</label>
+
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={startCode}
+                onChange={(e) => {
+                  const value =
+                    e.target.value.replace(/\D/g, '');
+
+                  setStartCode(value);
+                }}
+                placeholder="مثال: 77"
+              />
+
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: '#6b7280',
+                  lineHeight: 1.7
+                }}
+              >
+                هذه البداية ثابتة في جميع الكروت، أما
+                الأرقام المتبقية فتُولد عشوائيًا.
+              </div>
+            </div>
+
+            {/* طول الكود */}
+
+            <div
+              className="field"
+              style={{
+                marginTop: 14,
+                marginBottom: 0
+              }}
+            >
+              <label>طول الكود الكامل</label>
+
+              <input
+                type="number"
+                min="4"
+                max="32"
+                value={codeLength}
+                onChange={(e) =>
+                  setCodeLength(e.target.value)
+                }
+              />
+
+              <div
+                style={{
+                  marginTop: 6,
+                  fontSize: 12,
+                  color: '#6b7280',
+                  lineHeight: 1.7
+                }}
+              >
+                مثال: البداية 77 + طول الكود 8 =
+                <strong> 6 أرقام عشوائية</strong> بعد 77.
+              </div>
+            </div>
+
+            {/* معاينة شكل الكود */}
+
+            <div
+              style={{
+                marginTop: 14,
+                padding: '11px 12px',
+                borderRadius: 8,
                 background: '#eff6ff',
                 border: '1px solid #bfdbfe',
                 color: '#1e3a8a',
-                fontSize: 13,
-                lineHeight: 1.7
+                fontSize: 12,
+                lineHeight: 1.8
               }}
             >
-              {mikrotikMessage}
-            </div>
-          )}
+              <strong>طريقة التوليد:</strong> عشوائي فقط
+              <br />
 
-          {/* تنبيه أمني */}
+              البداية:{' '}
+              <strong>
+                {startCode || '—'}
+              </strong>
+
+              <br />
+
+              طول الكود:{' '}
+              <strong>
+                {codeLength || '—'}
+              </strong>
+
+              <br />
+
+              مثال:{' '}
+              <strong>
+                {startCode &&
+                Number(codeLength) >
+                  String(startCode).length
+                  ? `${startCode}${'X'.repeat(
+                      Math.max(
+                        0,
+                        Number(codeLength) -
+                          String(startCode).length
+                      )
+                    )}`
+                  : '—'}
+              </strong>
+            </div>
+
+            <button
+              className="btn-primary"
+              type="submit"
+              style={{
+                width: '100%',
+                marginTop: 18
+              }}
+            >
+              توليد الكروت — معاينة
+            </button>
+          </form>
+        </div>
+
+        {/* =================================================
+            إعدادات الاتصال
+            ================================================= */}
+
+        <div
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: 12,
+            padding: 18,
+            background: '#ffffff'
+          }}
+        >
+          <h4
+            style={{
+              margin: '0 0 5px',
+              fontSize: 16,
+              fontWeight: 800,
+              color: '#111827'
+            }}
+          >
+            إعدادات MikroTik
+          </h4>
+
           <div
             style={{
-              marginTop: 18,
-              padding: '12px 14px',
-              borderRadius: 9,
-              background: '#fff7ed',
-              border: '1px solid #fed7aa',
-              color: '#9a3412',
               fontSize: 12,
+              color: '#6b7280',
+              marginBottom: 16
+            }}
+          >
+            سيتم تنفيذ الاتصال الحقيقي لاحقًا من
+            الخادم/API بشكل آمن.
+          </div>
+
+          <div className="field">
+            <label>عنوان الراوتر / Domain</label>
+
+            <input
+              value={routerAddress}
+              onChange={(e) =>
+                setRouterAddress(e.target.value)
+              }
+              placeholder="مثال: 192.168.88.1"
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn-sm"
+            onClick={handleTestConnection}
+            disabled={
+              connectionStatus === 'testing'
+            }
+            style={{
+              width: '100%',
+              marginTop: 4,
+              padding: '10px 14px',
+              borderRadius: 8,
+              border: 'none',
+              background:
+                connectionStatus === 'testing'
+                  ? '#9ca3af'
+                  : '#111827',
+              color: '#ffffff',
+              fontWeight: 800
+            }}
+          >
+            {connectionStatus === 'testing'
+              ? 'جاري الاختبار...'
+              : 'اختبار الاتصال — تجريبي'}
+          </button>
+
+          <div
+            style={{
+              marginTop: 12,
+              padding: '9px 11px',
+              borderRadius: 8,
+              background:
+                connectionStatus === 'preview'
+                  ? '#fef3c7'
+                  : '#f9fafb',
+              border: '1px solid #e5e7eb',
+              fontSize: 12,
+              color: '#6b7280'
+            }}
+          >
+            الحالة:{' '}
+            <strong>
+              {connectionStatus === 'testing'
+                ? 'جارٍ الاختبار'
+                : connectionStatus === 'preview'
+                  ? 'تجريبي — غير متصل'
+                  : 'لم يتم الاختبار'}
+            </strong>
+          </div>
+
+          <div
+            style={{
+              marginTop: 16,
+              padding: '11px 12px',
+              borderRadius: 8,
+              background: '#f3f4f6',
+              border: '1px solid #e5e7eb',
+              fontSize: 12,
+              color: '#4b5563',
               lineHeight: 1.8
             }}
           >
-            <strong>تنبيه أمني:</strong> عند تفعيل الاتصال الحقيقي لاحقًا،
-            لن نضع كلمة مرور MikroTik داخل كود الواجهة أو داخل JavaScript
-            الذي يصل إلى المتصفح. سيتم تنفيذ الاتصال من خادم Next.js/API
-            بشكل آمن.
+            <strong>مهم:</strong>
+            <br />
+            لن نضع اسم مستخدم MikroTik أو كلمة المرور
+            داخل كود الواجهة.
+            <br />
+            سيتم حفظ بيانات الاتصال واستخدامها من
+            Server/API فقط عند تفعيل الربط الحقيقي.
           </div>
         </div>
       </div>
+
+      {/* =====================================================
+          رسالة النظام
+          ===================================================== */}
+
+      {mikrotikMessage && (
+        <div
+          style={{
+            marginTop: 18,
+            padding: '12px 14px',
+            borderRadius: 9,
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            color: '#1e3a8a',
+            fontSize: 13,
+            lineHeight: 1.7,
+            wordBreak: 'break-word'
+          }}
+        >
+          {mikrotikMessage}
+        </div>
+      )}
+
+      {/* =====================================================
+          تنبيه أمني
+          ===================================================== */}
+
+      <div
+        style={{
+          marginTop: 18,
+          padding: '12px 14px',
+          borderRadius: 9,
+          background: '#fff7ed',
+          border: '1px solid #fed7aa',
+          color: '#9a3412',
+          fontSize: 12,
+          lineHeight: 1.8
+        }}
+      >
+        <strong>تنبيه أمني:</strong> عند تفعيل الاتصال
+        الحقيقي، لن نضع كلمة مرور MikroTik داخل كود
+        الواجهة أو JavaScript الذي يصل إلى المتصفح.
+        سيتم تنفيذ الاتصال من خادم Next.js/API بشكل آمن.
+      </div>
     </div>
-  );
+  </div>
+</div>
+
+);
 }
