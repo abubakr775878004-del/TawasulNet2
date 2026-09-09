@@ -15,58 +15,304 @@ const STATUS_LABELS = {
 
 const STATUS_STYLES = {
   available: {
-    background: '#dcfce7',
-    color: '#166534'
+    background: '#ecfdf5',
+    color: '#047857',
+    border: '#a7f3d0'
   },
   with_distributor: {
-    background: '#fef3c7',
-    color: '#92400e'
+    background: '#fffbeb',
+    color: '#b45309',
+    border: '#fde68a'
   },
   sold: {
-    background: '#fee2e2',
-    color: '#991b1b'
+    background: '#fef2f2',
+    color: '#dc2626',
+    border: '#fecaca'
   }
 };
+
+function SearchIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+function PackageIcon() {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m21 8-9-5-9 5 9 5 9-5Z" />
+      <path d="m3 8 9 5 9-5" />
+      <path d="M3 8v8l9 5 9-5V8" />
+      <path d="M12 13v8" />
+    </svg>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 10h18" />
+      <path d="M7 15h3" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open }) {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{
+        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform 0.2s ease'
+      }}
+      aria-hidden="true"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function StatusBadge({ status }) {
+  const style = STATUS_STYLES[status] || {
+    background: '#f8fafc',
+    color: '#475569',
+    border: '#e2e8f0'
+  };
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '5px 10px',
+        borderRadius: 999,
+        background: style.background,
+        color: style.color,
+        border: `1px solid ${style.border}`,
+        fontSize: 12,
+        fontWeight: 800,
+        whiteSpace: 'nowrap'
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: style.color
+        }}
+      />
+      {STATUS_LABELS[status] || status || 'غير معروف'}
+    </span>
+  );
+}
+
+function StatCard({ icon, title, value, accent }) {
+  return (
+    <div
+      style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 14,
+        padding: '16px 17px',
+        minWidth: 0,
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)'
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 11,
+            background: accent.background,
+            color: accent.color,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}
+        >
+          {icon}
+        </div>
+
+        <div
+          style={{
+            minWidth: 0,
+            flex: 1,
+            textAlign: 'right'
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              color: '#64748b',
+              marginBottom: 5,
+              fontWeight: 600
+            }}
+          >
+            {title}
+          </div>
+
+          <div
+            style={{
+              fontSize: 23,
+              lineHeight: 1,
+              fontWeight: 900,
+              color: '#0f172a'
+            }}
+          >
+            {value}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PackagesPage() {
   const { profile, loading } = useProfile('admin');
 
   const [packages, setPackages] = useState([]);
 
-  // إضافة الباقة
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
 
-  // الأخطاء والحالة العامة
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [addingPackage, setAddingPackage] = useState(false);
 
-  // الباقة المفتوحة
   const [expandedPackageId, setExpandedPackageId] = useState(null);
 
-  // كروت كل باقة
   const [packageCards, setPackageCards] = useState({});
   const [packageCardLoading, setPackageCardLoading] = useState({});
   const [packageCardSearch, setPackageCardSearch] = useState({});
   const [packageCardStatus, setPackageCardStatus] = useState({});
   const [packageCardPage, setPackageCardPage] = useState({});
 
-  // البحث العام عن أي كرت
   const [globalCardSearch, setGlobalCardSearch] = useState('');
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
   const [globalSearchResults, setGlobalSearchResults] = useState([]);
   const [globalSearchDone, setGlobalSearchDone] = useState(false);
 
-  // نسخ الكود
   const [copiedCode, setCopiedCode] = useState('');
-
-  // حذف كرت
   const [deletingCardId, setDeletingCardId] = useState(null);
 
-  // إحصائيات الباقات
   const [packageStats, setPackageStats] = useState({});
+  const [packagesLoading, setPackagesLoading] = useState(true);
 
   async function loadPackages() {
+    setPackagesLoading(true);
+
     const { data, error: fetchError } = await supabase
       .from('packages')
       .select('*')
@@ -74,14 +320,14 @@ export default function PackagesPage() {
 
     if (fetchError || !data) {
       setPackages([]);
+      setPackageStats({});
+      setPackagesLoading(false);
       setError('تعذّر تحميل الباقات');
       return;
     }
 
     setPackages(data);
 
-    // جلب إحصائيات الكروت لكل باقة.
-    // لا يتم جلب جميع الكروت هنا، وإنما أعداد فقط.
     const statsEntries = await Promise.all(
       data.map(async (pkg) => {
         const [totalResult, availableResult, distributorResult, soldResult] =
@@ -123,6 +369,7 @@ export default function PackagesPage() {
     );
 
     setPackageStats(Object.fromEntries(statsEntries));
+    setPackagesLoading(false);
   }
 
   useEffect(() => {
@@ -148,12 +395,16 @@ export default function PackagesPage() {
       return;
     }
 
+    setAddingPackage(true);
+
     const { error: insertError } = await supabase
       .from('packages')
       .insert({
         name: trimmedName,
         price: numericPrice
       });
+
+    setAddingPackage(false);
 
     if (insertError) {
       setError(insertError.message);
@@ -199,7 +450,12 @@ export default function PackagesPage() {
     await loadPackages();
   }
 
-  async function loadPackageCards(packageId, page = 0, search = '', status = 'all') {
+  async function loadPackageCards(
+    packageId,
+    page = 0,
+    search = '',
+    status = 'all'
+  ) {
     setPackageCardLoading((prev) => ({
       ...prev,
       [packageId]: true
@@ -212,7 +468,9 @@ export default function PackagesPage() {
 
     let query = supabase
       .from('cards')
-      .select('id, code, package_id, status, assigned_to, sold_at, created_at')
+      .select(
+        'id, code, package_id, status, assigned_to, sold_at, created_at'
+      )
       .eq('package_id', packageId)
       .order('created_at', { ascending: false })
       .range(from, to);
@@ -361,12 +619,10 @@ export default function PackagesPage() {
       return;
     }
 
-    // إزالة الكرت من نتائج البحث الحالية
     setGlobalSearchResults((prev) =>
       prev.filter((item) => item.id !== card.id)
     );
 
-    // تحديث قائمة الباقة إذا كانت مفتوحة
     if (card.package_id && expandedPackageId === card.package_id) {
       const page = packageCardPage[card.package_id] || 0;
       const search = packageCardSearch[card.package_id] || '';
@@ -380,7 +636,6 @@ export default function PackagesPage() {
       );
     }
 
-    // تحديث الإحصائيات
     await loadPackages();
   }
 
@@ -423,25 +678,114 @@ export default function PackagesPage() {
   if (loading) return null;
 
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={{
+        background: '#f5f7fb',
+        minHeight: '100vh'
+      }}
+    >
       <Sidebar
         role="admin"
         active="/admin/packages"
         name={profile?.full_name}
       />
 
-      <div className="main">
-        <h1>الباقات</h1>
+      <div
+        className="main"
+        style={{
+          paddingBottom: 40
+        }}
+      >
+        {/* رأس الصفحة */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'space-between',
+            gap: 20,
+            marginBottom: 22,
+            flexWrap: 'wrap'
+          }}
+        >
+          <div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 11,
+                marginBottom: 7
+              }}
+            >
+              <div
+                style={{
+                  width: 43,
+                  height: 43,
+                  borderRadius: 12,
+                  background:
+                    'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                  color: '#ffffff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 7px 18px rgba(37, 99, 235, 0.20)'
+                }}
+              >
+                <PackageIcon />
+              </div>
 
-        <p className="greet" style={{ marginBottom: 20 }}>
-          إدارة باقات الكروت وكروت النظام
-        </p>
+              <div>
+                <h1
+                  style={{
+                    margin: 0,
+                    color: '#0f172a',
+                    fontSize: 25,
+                    fontWeight: 900,
+                    letterSpacing: '-0.3px'
+                  }}
+                >
+                  إدارة الباقات والكروت
+                </h1>
+
+                <p
+                  style={{
+                    margin: '5px 0 0',
+                    color: '#64748b',
+                    fontSize: 13.5
+                  }}
+                >
+                  إدارة الباقات والكروت التابعة لها والبحث عنها بسهولة
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '9px 13px',
+              color: '#475569',
+              fontSize: 13,
+              fontWeight: 700
+            }}
+          >
+            {packages.length} باقة
+          </div>
+        </div>
 
         {error && (
           <div
-            className="error-note"
             style={{
-              marginBottom: 16,
+              marginBottom: 18,
+              padding: '12px 14px',
+              borderRadius: 11,
+              background: '#fef2f2',
+              color: '#b91c1c',
+              border: '1px solid #fecaca',
+              fontSize: 13,
+              fontWeight: 700,
               whiteSpace: 'pre-line'
             }}
           >
@@ -449,27 +793,139 @@ export default function PackagesPage() {
           </div>
         )}
 
+        {/* الإحصائيات */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(170px, 1fr))',
+            gap: 12,
+            marginBottom: 18
+          }}
+        >
+          <StatCard
+            title="إجمالي الباقات"
+            value={packages.length}
+            icon={<PackageIcon />}
+            accent={{
+              background: '#eff6ff',
+              color: '#2563eb'
+            }}
+          />
+
+          <StatCard
+            title="إجمالي الكروت"
+            value={totalCards}
+            icon={<CardIcon />}
+            accent={{
+              background: '#f1f5f9',
+              color: '#334155'
+            }}
+          />
+
+          <StatCard
+            title="الكروت المتاحة"
+            value={totalAvailable}
+            icon={<CardIcon />}
+            accent={{
+              background: '#ecfdf5',
+              color: '#059669'
+            }}
+          />
+
+          <StatCard
+            title="مع موزع"
+            value={totalWithDistributor}
+            icon={<CardIcon />}
+            accent={{
+              background: '#fffbeb',
+              color: '#d97706'
+            }}
+          />
+
+          <StatCard
+            title="الكروت المباعة"
+            value={totalSold}
+            icon={<CardIcon />}
+            accent={{
+              background: '#fef2f2',
+              color: '#dc2626'
+            }}
+          />
+        </div>
+
         {/* إضافة باقة */}
-        <div className="panel">
-          <div className="panel-head">
-            <h3>إضافة باقة جديدة</h3>
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 15,
+            padding: 18,
+            marginBottom: 18,
+            boxShadow: '0 2px 10px rgba(15, 23, 42, 0.025)'
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 15
+            }}
+          >
+            <div
+              style={{
+                width: 34,
+                height: 34,
+                borderRadius: 9,
+                background: '#eff6ff',
+                color: '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <PlusIcon />
+            </div>
+
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: '#0f172a',
+                  fontSize: 16,
+                  fontWeight: 850
+                }}
+              >
+                إضافة باقة جديدة
+              </h3>
+
+              <div
+                style={{
+                  color: '#94a3b8',
+                  fontSize: 12,
+                  marginTop: 3
+                }}
+              >
+                أضف اسم الباقة وسعر الكرت
+              </div>
+            </div>
           </div>
 
           <form
             onSubmit={addPackage}
             style={{
-              display: 'flex',
-              gap: 12,
-              flexWrap: 'wrap',
-              alignItems: 'flex-end'
+              display: 'grid',
+              gridTemplateColumns:
+                'minmax(180px, 1fr) 160px 130px',
+              gap: 10,
+              alignItems: 'end'
             }}
           >
             <div
               className="field"
               style={{
-                marginBottom: 0,
-                flex: 1,
-                minWidth: 180
+                marginBottom: 0
               }}
             >
               <label>اسم الباقة</label>
@@ -478,18 +934,20 @@ export default function PackagesPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="مثال: باقة 20GB"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
               />
             </div>
 
             <div
               className="field"
               style={{
-                marginBottom: 0,
-                width: 140,
-                maxWidth: '100%'
+                marginBottom: 0
               }}
             >
-              <label>السعر (لكل كرت)</label>
+              <label>السعر لكل كرت</label>
 
               <input
                 type="number"
@@ -497,63 +955,164 @@ export default function PackagesPage() {
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                placeholder="25"
+                placeholder="200"
+                style={{
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
               />
             </div>
 
             <button
-              className="btn-primary"
-              style={{
-                width: 140,
-                maxWidth: '100%'
-              }}
               type="submit"
+              disabled={addingPackage}
+              style={{
+                height: 42,
+                border: 'none',
+                borderRadius: 9,
+                background:
+                  'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: 14,
+                cursor: addingPackage ? 'not-allowed' : 'pointer',
+                opacity: addingPackage ? 0.7 : 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 7,
+                boxShadow:
+                  '0 5px 12px rgba(37, 99, 235, 0.16)'
+              }}
             >
-              إضافة
+              <PlusIcon />
+              {addingPackage ? 'جاري الإضافة...' : 'إضافة الباقة'}
             </button>
           </form>
         </div>
 
-        {/* البحث عن أي كرت */}
-        <div className="panel">
-          <div className="panel-head">
-            <h3>البحث عن كرت</h3>
-          </div>
-
-          <p
-            className="muted"
+        {/* البحث المركزي */}
+        <div
+          style={{
+            background:
+              'linear-gradient(135deg, #172554 0%, #1e40af 100%)',
+            borderRadius: 16,
+            padding: 20,
+            marginBottom: 18,
+            boxShadow: '0 10px 25px rgba(30, 64, 175, 0.12)'
+          }}
+        >
+          <div
             style={{
-              marginTop: -4,
-              marginBottom: 14
+              display: 'flex',
+              alignItems: 'center',
+              gap: 11,
+              marginBottom: 13
             }}
           >
-            ابحث عن أي كرت موجود في النظام باستخدام الكود.
-          </p>
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.12)',
+                color: '#ffffff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <SearchIcon />
+            </div>
+
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: '#ffffff',
+                  fontSize: 17,
+                  fontWeight: 850
+                }}
+              >
+                البحث عن كرت
+              </h3>
+
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  color: '#bfdbfe',
+                  fontSize: 12.5
+                }}
+              >
+                ابحث عن أي كرت في النظام باستخدام رقم الكرت
+              </p>
+            </div>
+          </div>
 
           <form
             onSubmit={searchAllCards}
             style={{
               display: 'flex',
-              gap: 10,
+              gap: 9,
               flexWrap: 'wrap'
             }}
           >
-            <input
-              value={globalCardSearch}
-              onChange={(e) => setGlobalCardSearch(e.target.value)}
-              placeholder="اكتب كود الكرت..."
+            <div
               style={{
+                position: 'relative',
                 flex: 1,
-                minWidth: 200
+                minWidth: 190
               }}
-            />
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  right: 13,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: '#94a3b8',
+                  pointerEvents: 'none'
+                }}
+              >
+                <SearchIcon />
+              </div>
+
+              <input
+                value={globalCardSearch}
+                onChange={(e) =>
+                  setGlobalCardSearch(e.target.value)
+                }
+                placeholder="اكتب رقم الكرت للبحث..."
+                style={{
+                  width: '100%',
+                  height: 44,
+                  boxSizing: 'border-box',
+                  padding: '0 45px 0 14px',
+                  borderRadius: 9,
+                  border: '1px solid #dbeafe',
+                  background: '#ffffff',
+                  color: '#0f172a',
+                  outline: 'none',
+                  fontSize: 14
+                }}
+              />
+            </div>
 
             <button
               type="submit"
-              className="btn-primary"
               disabled={globalSearchLoading}
               style={{
-                minWidth: 120
+                height: 44,
+                minWidth: 105,
+                border: 'none',
+                borderRadius: 9,
+                background: '#ffffff',
+                color: '#1d4ed8',
+                fontWeight: 850,
+                cursor: globalSearchLoading
+                  ? 'not-allowed'
+                  : 'pointer',
+                opacity: globalSearchLoading ? 0.75 : 1
               }}
             >
               {globalSearchLoading ? 'جاري البحث...' : 'بحث'}
@@ -562,11 +1121,16 @@ export default function PackagesPage() {
             {globalSearchDone && (
               <button
                 type="button"
-                className="btn-sm"
                 onClick={clearGlobalSearch}
                 style={{
-                  minWidth: 90,
-                  padding: '8px 14px'
+                  height: 44,
+                  minWidth: 80,
+                  borderRadius: 9,
+                  border: '1px solid rgba(255,255,255,0.25)',
+                  background: 'rgba(255,255,255,0.08)',
+                  color: '#ffffff',
+                  fontWeight: 750,
+                  cursor: 'pointer'
                 }}
               >
                 مسح
@@ -575,647 +1139,743 @@ export default function PackagesPage() {
           </form>
 
           {globalSearchDone && (
-            <div style={{ marginTop: 18 }}>
+            <div
+              style={{
+                marginTop: 14,
+                background: '#f8fafc',
+                borderRadius: 11,
+                padding: 10
+              }}
+            >
               {globalSearchResults.length === 0 ? (
                 <div
                   style={{
-                    padding: 18,
                     textAlign: 'center',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 10,
-                    color: '#6b7280'
+                    padding: 25,
+                    color: '#64748b',
+                    background: '#ffffff',
+                    borderRadius: 9,
+                    border: '1px solid #e2e8f0'
                   }}
                 >
-                  لا يوجد كرت مطابق للبحث.
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      color: '#334155',
+                      marginBottom: 5
+                    }}
+                  >
+                    لم يتم العثور على الكرت
+                  </div>
+
+                  <div style={{ fontSize: 12 }}>
+                    تأكد من رقم الكرت وحاول مرة أخرى.
+                  </div>
                 </div>
               ) : (
                 <div
                   style={{
                     display: 'grid',
-                    gap: 10
+                    gap: 8
                   }}
                 >
-                  {globalSearchResults.map((card) => {
-                    const statusStyle =
-                      STATUS_STYLES[card.status] || {
-                        background: '#f3f4f6',
-                        color: '#374151'
-                      };
-
-                    return (
+                  {globalSearchResults.map((card) => (
+                    <div
+                      key={card.id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 10,
+                        padding: '11px 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                        flexWrap: 'wrap'
+                      }}
+                    >
                       <div
-                        key={card.id}
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 12,
-                          flexWrap: 'wrap',
-                          padding: 14,
-                          border: '1px solid #e5e7eb',
-                          borderRadius: 10,
-                          background: '#ffffff'
+                          minWidth: 0,
+                          flex: 1
                         }}
                       >
-                        <div style={{ minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: 16,
-                              fontWeight: 800,
-                              color: '#111827',
-                              wordBreak: 'break-all'
-                            }}
-                          >
-                            {card.code}
-                          </div>
-
-                          <div
-                            style={{
-                              marginTop: 5,
-                              display: 'flex',
-                              gap: 10,
-                              flexWrap: 'wrap',
-                              fontSize: 13,
-                              color: '#6b7280'
-                            }}
-                          >
-                            <span>
-                              الباقة:{' '}
-                              {card.packages?.name || 'غير محددة'}
-                            </span>
-
-                            {card.packages?.price !== undefined && (
-                              <span>
-                                السعر: {card.packages.price} ريال
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
                         <div
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
+                            gap: 9,
                             flexWrap: 'wrap'
                           }}
                         >
                           <span
                             style={{
-                              ...statusStyle,
-                              padding: '5px 10px',
-                              borderRadius: 999,
-                              fontSize: 12,
-                              fontWeight: 800
+                              fontSize: 15,
+                              fontWeight: 900,
+                              color: '#0f172a',
+                              wordBreak: 'break-all'
                             }}
                           >
-                            {STATUS_LABELS[card.status] ||
-                              card.status ||
-                              'غير معروف'}
+                            {card.code}
                           </span>
 
-                          <button
-                            type="button"
-                            className="btn-sm"
-                            onClick={() => copyCardCode(card.code)}
-                            style={{
-                              padding: '6px 10px'
-                            }}
-                          >
-                            {copiedCode === String(card.code)
-                              ? 'تم النسخ'
-                              : 'نسخ'}
-                          </button>
+                          <StatusBadge status={card.status} />
+                        </div>
 
-                          <button
-                            type="button"
-                            className="btn-sm"
-                            disabled={deletingCardId === card.id}
-                            onClick={() => deleteCard(card)}
-                            style={{
-                              backgroundColor: '#dc2626',
-                              color: '#ffffff',
-                              border: 'none',
-                              padding: '6px 10px'
-                            }}
-                          >
-                            {deletingCardId === card.id
-                              ? 'حذف...'
-                              : 'حذف'}
-                          </button>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: 14,
+                            flexWrap: 'wrap',
+                            marginTop: 6,
+                            color: '#64748b',
+                            fontSize: 12
+                          }}
+                        >
+                          <span>
+                            الباقة:{' '}
+                            <strong style={{ color: '#334155' }}>
+                              {card.packages?.name || 'غير محددة'}
+                            </strong>
+                          </span>
+
+                          {card.packages?.price !== undefined && (
+                            <span>
+                              السعر:{' '}
+                              <strong style={{ color: '#334155' }}>
+                                {card.packages.price} ريال
+                              </strong>
+                            </span>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 7,
+                          flexWrap: 'wrap'
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => copyCardCode(card.code)}
+                          style={{
+                            height: 34,
+                            padding: '0 11px',
+                            borderRadius: 8,
+                            border: '1px solid #dbeafe',
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            fontWeight: 800,
+                            fontSize: 12,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <CopyIcon />
+                          {copiedCode === String(card.code)
+                            ? 'تم النسخ'
+                            : 'نسخ'}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={deletingCardId === card.id}
+                          onClick={() => deleteCard(card)}
+                          style={{
+                            height: 34,
+                            padding: '0 11px',
+                            borderRadius: 8,
+                            border: '1px solid #fecaca',
+                            background: '#fef2f2',
+                            color: '#dc2626',
+                            fontWeight: 800,
+                            fontSize: 12,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            cursor:
+                              deletingCardId === card.id
+                                ? 'not-allowed'
+                                : 'pointer',
+                            opacity:
+                              deletingCardId === card.id
+                                ? 0.65
+                                : 1
+                          }}
+                        >
+                          <TrashIcon />
+                          {deletingCardId === card.id
+                            ? 'حذف...'
+                            : 'حذف'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* إحصائيات الكروت */}
-        <div className="panel">
-          <div className="panel-head">
-            <h3>ملخص الكروت</h3>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(150px, 1fr))',
-              gap: 12,
-              marginTop: 10
-            }}
-          >
-            <div
-              style={{
-                padding: 16,
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                background: '#ffffff'
-              }}
-            >
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13,
-                  marginBottom: 5
-                }}
-              >
-                إجمالي الكروت
-              </div>
-
-              <strong
-                style={{
-                  fontSize: 24,
-                  color: '#111827'
-                }}
-              >
-                {totalCards}
-              </strong>
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                background: '#ffffff'
-              }}
-            >
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13,
-                  marginBottom: 5
-                }}
-              >
-                متاح
-              </div>
-
-              <strong
-                style={{
-                  fontSize: 24,
-                  color: '#166534'
-                }}
-              >
-                {totalAvailable}
-              </strong>
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                background: '#ffffff'
-              }}
-            >
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13,
-                  marginBottom: 5
-                }}
-              >
-                مع موزع
-              </div>
-
-              <strong
-                style={{
-                  fontSize: 24,
-                  color: '#92400e'
-                }}
-              >
-                {totalWithDistributor}
-              </strong>
-            </div>
-
-            <div
-              style={{
-                padding: 16,
-                border: '1px solid #e5e7eb',
-                borderRadius: 10,
-                background: '#ffffff'
-              }}
-            >
-              <div
-                style={{
-                  color: '#6b7280',
-                  fontSize: 13,
-                  marginBottom: 5
-                }}
-              >
-                مباع
-              </div>
-
-              <strong
-                style={{
-                  fontSize: 24,
-                  color: '#991b1b'
-                }}
-              >
-                {totalSold}
-              </strong>
-            </div>
-          </div>
-        </div>
-
         {/* الباقات */}
-        <div className="panel">
-          <div className="panel-head">
-            <h3>الباقات الحالية</h3>
-            <span className="muted">{packages.length}</span>
-          </div>
-
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 15,
+            padding: 18,
+            boxShadow: '0 2px 10px rgba(15, 23, 42, 0.025)'
+          }}
+        >
           <div
             style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: 14,
-              marginTop: 10
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              marginBottom: 16,
+              flexWrap: 'wrap'
             }}
           >
-            {packages.map((p) => {
-              const stats = packageStats[p.id] || {
-                total: 0,
-                available: 0,
-                withDistributor: 0,
-                sold: 0
-              };
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  color: '#0f172a',
+                  fontSize: 17,
+                  fontWeight: 850
+                }}
+              >
+                الباقات الحالية
+              </h3>
 
-              const isExpanded = expandedPackageId === p.id;
-              const cards = packageCards[p.id] || [];
-              const currentPage = packageCardPage[p.id] || 0;
-              const currentSearch =
-                packageCardSearch[p.id] || '';
-              const currentStatus =
-                packageCardStatus[p.id] || 'all';
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  color: '#94a3b8',
+                  fontSize: 12
+                }}
+              >
+                اختر أي باقة لعرض وإدارة الكروت التابعة لها
+              </p>
+            </div>
 
-              return (
-                <div
-                  key={p.id}
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 10,
-                    overflow: 'hidden',
-                    boxSizing: 'border-box'
-                  }}
-                >
-                  {/* معلومات الباقة */}
+            <div
+              style={{
+                minWidth: 34,
+                height: 30,
+                padding: '0 10px',
+                borderRadius: 8,
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                fontWeight: 850
+              }}
+            >
+              {packages.length}
+            </div>
+          </div>
+
+          {packagesLoading ? (
+            <div
+              style={{
+                padding: 40,
+                textAlign: 'center',
+                color: '#64748b',
+                fontSize: 13
+              }}
+            >
+              جاري تحميل الباقات...
+            </div>
+          ) : packages.length === 0 ? (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: 40,
+                border: '1px dashed #cbd5e1',
+                borderRadius: 12,
+                background: '#f8fafc'
+              }}
+            >
+              <div
+                style={{
+                  color: '#334155',
+                  fontWeight: 800,
+                  marginBottom: 5
+                }}
+              >
+                لا توجد باقات حاليًا
+              </div>
+
+              <div
+                style={{
+                  color: '#94a3b8',
+                  fontSize: 12
+                }}
+              >
+                يمكنك إضافة أول باقة من النموذج أعلاه.
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit, minmax(330px, 1fr))',
+                gap: 13
+              }}
+            >
+              {packages.map((p) => {
+                const stats = packageStats[p.id] || {
+                  total: 0,
+                  available: 0,
+                  withDistributor: 0,
+                  sold: 0
+                };
+
+                const isExpanded = expandedPackageId === p.id;
+                const cards = packageCards[p.id] || [];
+                const currentPage = packageCardPage[p.id] || 0;
+                const currentSearch =
+                  packageCardSearch[p.id] || '';
+                const currentStatus =
+                  packageCardStatus[p.id] || 'all';
+
+                return (
                   <div
+                    key={p.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 16,
-                      minHeight: 82,
-                      padding: '14px 18px'
+                      background: '#ffffff',
+                      border: isExpanded
+                        ? '1px solid #93c5fd'
+                        : '1px solid #e2e8f0',
+                      borderRadius: 13,
+                      overflow: 'hidden',
+                      boxShadow: isExpanded
+                        ? '0 5px 18px rgba(37, 99, 235, 0.08)'
+                        : '0 2px 8px rgba(15, 23, 42, 0.025)',
+                      transition: 'all 0.2s ease'
                     }}
                   >
+                    {/* رأس الباقة */}
                     <div
                       style={{
-                        minWidth: 0,
-                        flex: 1
+                        padding: 15
                       }}
                     >
                       <div
                         style={{
-                          fontSize: 16,
-                          fontWeight: 800,
-                          color: '#111827',
-                          marginBottom: 6,
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis'
-                        }}
-                      >
-                        {p.name}
-                      </div>
-
-                      <div
-                        style={{
                           display: 'flex',
-                          alignItems: 'center',
-                          gap: 16,
-                          flexWrap: 'wrap',
-                          fontSize: 14
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: 12
                         }}
                       >
-                        <span
+                        <div
                           style={{
-                            fontWeight: 700,
-                            color: '#374151'
+                            minWidth: 0,
+                            flex: 1
                           }}
                         >
-                          {p.price} ريال
-                        </span>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 9,
+                              marginBottom: 8
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 35,
+                                height: 35,
+                                borderRadius: 9,
+                                background: '#eff6ff',
+                                color: '#2563eb',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                              }}
+                            >
+                              <PackageIcon />
+                            </div>
 
-                        <span
+                            <div
+                              style={{
+                                minWidth: 0
+                              }}
+                            >
+                              <div
+                                style={{
+                                  color: '#0f172a',
+                                  fontSize: 15,
+                                  fontWeight: 900,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}
+                              >
+                                {p.name}
+                              </div>
+
+                              <div
+                                style={{
+                                  color: '#64748b',
+                                  fontSize: 12,
+                                  marginTop: 2
+                                }}
+                              >
+                                {p.price} ريال للكرت
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div
                           style={{
-                            fontWeight: 800,
-                            color: '#5B21B6'
+                            padding: '5px 9px',
+                            borderRadius: 8,
+                            background: '#f8fafc',
+                            color: '#475569',
+                            fontSize: 11,
+                            fontWeight: 850,
+                            whiteSpace: 'nowrap'
                           }}
                         >
                           {stats.total} كرت
-                        </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 7,
-                        alignItems: 'center',
-                        flexShrink: 0,
-                        flexWrap: 'wrap',
-                        justifyContent: 'flex-end'
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="btn-sm"
-                        onClick={() => togglePackage(p.id)}
-                        style={{
-                          padding: '7px 12px'
-                        }}
-                      >
-                        {isExpanded
-                          ? 'إخفاء الكروت'
-                          : 'عرض الكروت'}
-                      </button>
-
-                      <button
-                        className="btn-sm"
-                        style={{
-                          backgroundColor: '#dc2626',
-                          color: '#ffffff',
-                          opacity: 1,
-                          padding: '6px 14px',
-                          borderRadius: '6px',
-                          border: 'none'
-                        }}
-                        disabled={busyId === p.id}
-                        onClick={() => deletePackage(p.id, p.name)}
-                      >
-                        {busyId === p.id ? 'حذف...' : 'حذف'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* إحصائيات الباقة */}
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns:
-                        'repeat(3, minmax(0, 1fr))',
-                      borderTop: '1px solid #f1f5f9',
-                      borderBottom: isExpanded
-                        ? '1px solid #e5e7eb'
-                        : 'none'
-                    }}
-                  >
-                    <div
-                      style={{
-                        padding: '9px 8px',
-                        textAlign: 'center'
-                      }}
-                    >
+                      {/* أرقام الحالة */}
                       <div
                         style={{
-                          fontSize: 11,
-                          color: '#6b7280'
+                          display: 'grid',
+                          gridTemplateColumns:
+                            'repeat(3, minmax(0, 1fr))',
+                          gap: 7,
+                          marginTop: 13
                         }}
                       >
-                        متاح
+                        <div
+                          style={{
+                            padding: '8px 7px',
+                            borderRadius: 8,
+                            background: '#ecfdf5',
+                            textAlign: 'center'
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#047857',
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}
+                          >
+                            متاح
+                          </div>
+
+                          <div
+                            style={{
+                              color: '#065f46',
+                              fontSize: 15,
+                              fontWeight: 900,
+                              marginTop: 2
+                            }}
+                          >
+                            {stats.available}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '8px 7px',
+                            borderRadius: 8,
+                            background: '#fffbeb',
+                            textAlign: 'center'
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#b45309',
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}
+                          >
+                            مع موزع
+                          </div>
+
+                          <div
+                            style={{
+                              color: '#92400e',
+                              fontSize: 15,
+                              fontWeight: 900,
+                              marginTop: 2
+                            }}
+                          >
+                            {stats.withDistributor}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '8px 7px',
+                            borderRadius: 8,
+                            background: '#fef2f2',
+                            textAlign: 'center'
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#dc2626',
+                              fontSize: 11,
+                              fontWeight: 700
+                            }}
+                          >
+                            مباع
+                          </div>
+
+                          <div
+                            style={{
+                              color: '#b91c1c',
+                              fontSize: 15,
+                              fontWeight: 900,
+                              marginTop: 2
+                            }}
+                          >
+                            {stats.sold}
+                          </div>
+                        </div>
                       </div>
 
-                      <strong
-                        style={{
-                          color: '#166534',
-                          fontSize: 15
-                        }}
-                      >
-                        {stats.available}
-                      </strong>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: '9px 8px',
-                        textAlign: 'center',
-                        borderRight: '1px solid #f1f5f9',
-                        borderLeft: '1px solid #f1f5f9'
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: '#6b7280'
-                        }}
-                      >
-                        مع موزع
-                      </div>
-
-                      <strong
-                        style={{
-                          color: '#92400e',
-                          fontSize: 15
-                        }}
-                      >
-                        {stats.withDistributor}
-                      </strong>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: '9px 8px',
-                        textAlign: 'center'
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: '#6b7280'
-                        }}
-                      >
-                        مباع
-                      </div>
-
-                      <strong
-                        style={{
-                          color: '#991b1b',
-                          fontSize: 15
-                        }}
-                      >
-                        {stats.sold}
-                      </strong>
-                    </div>
-                  </div>
-
-                  {/* إدارة كروت الباقة */}
-                  {isExpanded && (
-                    <div
-                      style={{
-                        padding: 14,
-                        background: '#f8fafc'
-                      }}
-                    >
-                      {/* بحث وفلترة */}
+                      {/* أزرار الباقة */}
                       <div
                         style={{
                           display: 'flex',
-                          gap: 8,
-                          flexWrap: 'wrap',
-                          marginBottom: 14
+                          gap: 7,
+                          marginTop: 12
                         }}
                       >
-                        <input
-                          value={currentSearch}
-                          onChange={(e) =>
-                            setPackageCardSearch((prev) => ({
-                              ...prev,
-                              [p.id]: e.target.value
-                            }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              applyPackageCardFilter(p.id);
-                            }
-                          }}
-                          placeholder="بحث عن كود..."
+                        <button
+                          type="button"
+                          onClick={() => togglePackage(p.id)}
                           style={{
                             flex: 1,
-                            minWidth: 150
+                            height: 37,
+                            borderRadius: 8,
+                            border: '1px solid #bfdbfe',
+                            background: isExpanded
+                              ? '#dbeafe'
+                              : '#eff6ff',
+                            color: '#1d4ed8',
+                            fontWeight: 850,
+                            fontSize: 12,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 6
                           }}
-                        />
+                        >
+                          {isExpanded
+                            ? 'إخفاء الكروت'
+                            : 'عرض الكروت'}
+                          <ChevronIcon open={isExpanded} />
+                        </button>
 
-                        <select
-                          value={currentStatus}
-                          onChange={(e) => {
-                            const value = e.target.value;
+                        <button
+                          type="button"
+                          disabled={busyId === p.id}
+                          onClick={() =>
+                            deletePackage(p.id, p.name)
+                          }
+                          style={{
+                            height: 37,
+                            padding: '0 12px',
+                            borderRadius: 8,
+                            border: '1px solid #fecaca',
+                            background: '#fef2f2',
+                            color: '#dc2626',
+                            fontWeight: 850,
+                            fontSize: 12,
+                            cursor:
+                              busyId === p.id
+                                ? 'not-allowed'
+                                : 'pointer',
+                            opacity:
+                              busyId === p.id ? 0.65 : 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: 5
+                          }}
+                        >
+                          <TrashIcon />
+                          {busyId === p.id
+                            ? 'حذف...'
+                            : 'حذف'}
+                        </button>
+                      </div>
+                    </div>
 
-                            setPackageCardStatus((prev) => ({
-                              ...prev,
-                              [p.id]: value
-                            }));
+                    {/* كروت الباقة */}
+                    {isExpanded && (
+                      <div
+                        style={{
+                          borderTop: '1px solid #e2e8f0',
+                          background: '#f8fafc',
+                          padding: 13
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns:
+                              'minmax(150px, 1fr) 125px auto',
+                            gap: 7,
+                            marginBottom: 11
+                          }}
+                        >
+                          <input
+                            value={currentSearch}
+                            onChange={(e) =>
+                              setPackageCardSearch(
+                                (prev) => ({
+                                  ...prev,
+                                  [p.id]: e.target.value
+                                })
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                applyPackageCardFilter(p.id);
+                              }
+                            }}
+                            placeholder="بحث برقم الكرت..."
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box'
+                            }}
+                          />
 
-                            setTimeout(() => {
+                          <select
+                            value={currentStatus}
+                            onChange={(e) => {
+                              const value = e.target.value;
+
+                              setPackageCardStatus(
+                                (prev) => ({
+                                  ...prev,
+                                  [p.id]: value
+                                })
+                              );
+
                               loadPackageCards(
                                 p.id,
                                 0,
                                 currentSearch,
                                 value
                               );
-                            }, 0);
-                          }}
-                          style={{
-                            minWidth: 130
-                          }}
-                        >
-                          <option value="all">
-                            كل الحالات
-                          </option>
-                          <option value="available">
-                            متاح
-                          </option>
-                          <option value="with_distributor">
-                            مع موزع
-                          </option>
-                          <option value="sold">
-                            مباع
-                          </option>
-                        </select>
-
-                        <button
-                          type="button"
-                          className="btn-sm"
-                          onClick={() =>
-                            applyPackageCardFilter(p.id)
-                          }
-                          style={{
-                            padding: '7px 12px'
-                          }}
-                        >
-                          بحث
-                        </button>
-                      </div>
-
-                      {packageCardLoading[p.id] ? (
-                        <div
-                          style={{
-                            textAlign: 'center',
-                            padding: 25,
-                            color: '#6b7280'
-                          }}
-                        >
-                          جاري تحميل الكروت...
-                        </div>
-                      ) : cards.length === 0 ? (
-                        <div
-                          style={{
-                            textAlign: 'center',
-                            padding: 25,
-                            background: '#ffffff',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: 8,
-                            color: '#6b7280'
-                          }}
-                        >
-                          لا توجد كروت مطابقة.
-                        </div>
-                      ) : (
-                        <>
-                          <div
+                            }}
                             style={{
-                              display: 'grid',
-                              gap: 8
+                              width: '100%',
+                              boxSizing: 'border-box'
                             }}
                           >
-                            {cards.map((card) => {
-                              const statusStyle =
-                                STATUS_STYLES[card.status] || {
-                                  background: '#f3f4f6',
-                                  color: '#374151'
-                                };
+                            <option value="all">
+                              كل الحالات
+                            </option>
+                            <option value="available">
+                              متاح
+                            </option>
+                            <option value="with_distributor">
+                              مع موزع
+                            </option>
+                            <option value="sold">
+                              مباع
+                            </option>
+                          </select>
 
-                              return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              applyPackageCardFilter(p.id)
+                            }
+                            style={{
+                              height: 40,
+                              padding: '0 12px',
+                              borderRadius: 8,
+                              border: 'none',
+                              background: '#2563eb',
+                              color: '#ffffff',
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            بحث
+                          </button>
+                        </div>
+
+                        {packageCardLoading[p.id] ? (
+                          <div
+                            style={{
+                              background: '#ffffff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 9,
+                              padding: 25,
+                              textAlign: 'center',
+                              color: '#64748b',
+                              fontSize: 12
+                            }}
+                          >
+                            جاري تحميل الكروت...
+                          </div>
+                        ) : cards.length === 0 ? (
+                          <div
+                            style={{
+                              background: '#ffffff',
+                              border: '1px dashed #cbd5e1',
+                              borderRadius: 9,
+                              padding: 25,
+                              textAlign: 'center',
+                              color: '#64748b',
+                              fontSize: 12
+                            }}
+                          >
+                            لا توجد كروت مطابقة.
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              style={{
+                                display: 'grid',
+                                gap: 7
+                              }}
+                            >
+                              {cards.map((card) => (
                                 <div
                                   key={card.id}
                                   style={{
+                                    background: '#ffffff',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: 9,
+                                    padding:
+                                      '9px 10px',
                                     display: 'flex',
-                                    alignItems: 'center',
+                                    alignItems:
+                                      'center',
                                     justifyContent:
                                       'space-between',
-                                    gap: 8,
-                                    flexWrap: 'wrap',
-                                    padding: '10px 12px',
-                                    background: '#ffffff',
-                                    border: '1px solid #e5e7eb',
-                                    borderRadius: 8
+                                    gap: 9,
+                                    flexWrap: 'wrap'
                                   }}
                                 >
                                   <div
@@ -1226,88 +1886,125 @@ export default function PackagesPage() {
                                   >
                                     <div
                                       style={{
-                                        fontWeight: 800,
-                                        color: '#111827',
-                                        wordBreak: 'break-all'
-                                      }}
-                                    >
-                                      {card.code}
-                                    </div>
-
-                                    <div
-                                      style={{
-                                        marginTop: 4,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 7,
-                                        flexWrap: 'wrap'
+                                        display:
+                                          'flex',
+                                        alignItems:
+                                          'center',
+                                        gap: 8,
+                                        flexWrap:
+                                          'wrap'
                                       }}
                                     >
                                       <span
                                         style={{
-                                          ...statusStyle,
-                                          padding:
-                                            '3px 8px',
-                                          borderRadius:
-                                            999,
-                                          fontSize: 11,
-                                          fontWeight: 800
+                                          fontWeight:
+                                            900,
+                                          color:
+                                            '#0f172a',
+                                          fontSize: 14,
+                                          wordBreak:
+                                            'break-all'
                                         }}
                                       >
-                                        {STATUS_LABELS[
-                                          card.status
-                                        ] ||
-                                          card.status ||
-                                          'غير معروف'}
+                                        {card.code}
                                       </span>
+
+                                      <StatusBadge
+                                        status={
+                                          card.status
+                                        }
+                                      />
                                     </div>
                                   </div>
 
                                   <div
                                     style={{
                                       display: 'flex',
-                                      gap: 6,
-                                      flexWrap: 'wrap'
+                                      gap: 6
                                     }}
                                   >
                                     <button
                                       type="button"
-                                      className="btn-sm"
                                       onClick={() =>
                                         copyCardCode(
                                           card.code
                                         )
                                       }
                                       style={{
+                                        height: 32,
                                         padding:
-                                          '5px 9px'
+                                          '0 9px',
+                                        borderRadius: 7,
+                                        border:
+                                          '1px solid #dbeafe',
+                                        background:
+                                          '#eff6ff',
+                                        color:
+                                          '#1d4ed8',
+                                        fontWeight:
+                                          800,
+                                        fontSize: 11,
+                                        display:
+                                          'inline-flex',
+                                        alignItems:
+                                          'center',
+                                        gap: 5,
+                                        cursor:
+                                          'pointer'
                                       }}
                                     >
+                                      <CopyIcon />
                                       {copiedCode ===
-                                      String(card.code)
+                                      String(
+                                        card.code
+                                      )
                                         ? 'تم النسخ'
                                         : 'نسخ'}
                                     </button>
 
                                     <button
                                       type="button"
-                                      className="btn-sm"
                                       disabled={
                                         deletingCardId ===
                                         card.id
                                       }
                                       onClick={() =>
-                                        deleteCard(card)
+                                        deleteCard(
+                                          card
+                                        )
                                       }
                                       style={{
-                                        backgroundColor:
-                                          '#dc2626',
-                                        color: '#ffffff',
-                                        border: 'none',
+                                        height: 32,
                                         padding:
-                                          '5px 9px'
+                                          '0 9px',
+                                        borderRadius: 7,
+                                        border:
+                                          '1px solid #fecaca',
+                                        background:
+                                          '#fef2f2',
+                                        color:
+                                          '#dc2626',
+                                        fontWeight:
+                                          800,
+                                        fontSize: 11,
+                                        display:
+                                          'inline-flex',
+                                        alignItems:
+                                          'center',
+                                        gap: 5,
+                                        cursor:
+                                          deletingCardId ===
+                                          card.id
+                                            ? 'not-allowed'
+                                            : 'pointer',
+                                        opacity:
+                                          deletingCardId ===
+                                          card.id
+                                            ? 0.6
+                                            : 1
                                       }}
                                     >
+                                      <TrashIcon />
                                       {deletingCardId ===
                                       card.id
                                         ? 'حذف...'
@@ -1315,93 +2012,140 @@ export default function PackagesPage() {
                                     </button>
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
+                              ))}
+                            </div>
 
-                          {/* التنقل بين الصفحات */}
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent:
-                                'space-between',
-                              gap: 10,
-                              marginTop: 12,
-                              flexWrap: 'wrap'
-                            }}
-                          >
-                            <button
-                              type="button"
-                              className="btn-sm"
-                              disabled={
-                                currentPage === 0 ||
-                                packageCardLoading[p.id]
-                              }
-                              onClick={() =>
-                                changePackageCardPage(
-                                  p.id,
-                                  currentPage - 1
-                                )
-                              }
+                            <div
                               style={{
-                                padding: '6px 12px'
+                                display: 'flex',
+                                alignItems:
+                                  'center',
+                                justifyContent:
+                                  'space-between',
+                                gap: 8,
+                                marginTop: 10,
+                                flexWrap: 'wrap'
                               }}
                             >
-                              السابق
-                            </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  currentPage === 0 ||
+                                  packageCardLoading[
+                                    p.id
+                                  ]
+                                }
+                                onClick={() =>
+                                  changePackageCardPage(
+                                    p.id,
+                                    currentPage - 1
+                                  )
+                                }
+                                style={{
+                                  height: 32,
+                                  padding: '0 11px',
+                                  borderRadius: 7,
+                                  border:
+                                    '1px solid #cbd5e1',
+                                  background:
+                                    '#ffffff',
+                                  color: '#475569',
+                                  fontWeight: 750,
+                                  fontSize: 11,
+                                  cursor:
+                                    currentPage === 0
+                                      ? 'not-allowed'
+                                      : 'pointer',
+                                  opacity:
+                                    currentPage === 0
+                                      ? 0.5
+                                      : 1
+                                }}
+                              >
+                                السابق
+                              </button>
 
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: '#6b7280'
-                              }}
-                            >
-                              الصفحة {currentPage + 1}
-                            </span>
+                              <span
+                                style={{
+                                  color: '#64748b',
+                                  fontSize: 11,
+                                  fontWeight: 700
+                                }}
+                              >
+                                الصفحة {currentPage + 1}
+                              </span>
 
-                            <button
-                              type="button"
-                              className="btn-sm"
-                              disabled={
-                                cards.length < PAGE_SIZE ||
-                                packageCardLoading[p.id]
-                              }
-                              onClick={() =>
-                                changePackageCardPage(
-                                  p.id,
-                                  currentPage + 1
-                                )
-                              }
-                              style={{
-                                padding: '6px 12px'
-                              }}
-                            >
-                              التالي
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {packages.length === 0 && (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: 30,
-                color: '#6b7280'
-              }}
-            >
-              لا توجد باقات حاليًا.
+                              <button
+                                type="button"
+                                disabled={
+                                  cards.length <
+                                    PAGE_SIZE ||
+                                  packageCardLoading[
+                                    p.id
+                                  ]
+                                }
+                                onClick={() =>
+                                  changePackageCardPage(
+                                    p.id,
+                                    currentPage + 1
+                                  )
+                                }
+                                style={{
+                                  height: 32,
+                                  padding: '0 11px',
+                                  borderRadius: 7,
+                                  border:
+                                    '1px solid #cbd5e1',
+                                  background:
+                                    '#ffffff',
+                                  color: '#475569',
+                                  fontWeight: 750,
+                                  fontSize: 11,
+                                  cursor:
+                                    cards.length <
+                                    PAGE_SIZE
+                                      ? 'not-allowed'
+                                      : 'pointer',
+                                  opacity:
+                                    cards.length <
+                                    PAGE_SIZE
+                                      ? 0.5
+                                      : 1
+                                }}
+                              >
+                                التالي
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      <style jsx>{`
+        @media (max-width: 700px) {
+          .main {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+          }
+
+          form {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 480px) {
+          h1 {
+            font-size: 21px !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
