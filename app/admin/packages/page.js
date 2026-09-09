@@ -1,742 +1,159 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
+const PAGE_SIZE = 50;
+
+const STATUS_LABELS = {
+  available: 'متاح',
+  with_distributor: 'مع موزع',
+  sold: 'مباع'
+};
+
+const STATUS_STYLES = {
+  available: {
+    background: '#dcfce7',
+    color: '#166534'
+  },
+  with_distributor: {
+    background: '#fef3c7',
+    color: '#92400e'
+  },
+  sold: {
+    background: '#fee2e2',
+    color: '#991b1b'
+  }
+};
+
 export default function PackagesPage() {
   const { profile, loading } = useProfile('admin');
 
-  /* =========================================================
-     Packages
-     ========================================================= */
-
   const [packages, setPackages] = useState([]);
+
+  // إضافة الباقة
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+
+  // الأخطاء والحالة العامة
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
 
-  /* =========================================================
-     MikroTik Settings
-     ========================================================= */
+  // الباقة المفتوحة
+  const [expandedPackageId, setExpandedPackageId] = useState(null);
 
-  const [mikrotikUrl, setMikrotikUrl] = useState('');
-  const [mikrotikUsername, setMikrotikUsername] = useState('');
-  const [mikrotikPassword, setMikrotikPassword] = useState('');
+  // كروت كل باقة
+  const [packageCards, setPackageCards] = useState({});
+  const [packageCardLoading, setPackageCardLoading] = useState({});
+  const [packageCardSearch, setPackageCardSearch] = useState({});
+  const [packageCardStatus, setPackageCardStatus] = useState({});
+  const [packageCardPage, setPackageCardPage] = useState({});
 
-  const [settingsLoading, setSettingsLoading] = useState(false);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  // البحث العام عن أي كرت
+  const [globalCardSearch, setGlobalCardSearch] = useState('');
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [globalSearchResults, setGlobalSearchResults] = useState([]);
+  const [globalSearchDone, setGlobalSearchDone] = useState(false);
 
-  const [settingsConfigured, setSettingsConfigured] = useState(false);
-  const [settingsSource, setSettingsSource] = useState('');
-  const [passwordSaved, setPasswordSaved] = useState(false);
+  // نسخ الكود
+  const [copiedCode, setCopiedCode] = useState('');
 
-  /* =========================================================
-     MikroTik Connection
-     ========================================================= */
+  // حذف كرت
+  const [deletingCardId, setDeletingCardId] = useState(null);
 
-  const [mikrotikProfiles, setMikrotikProfiles] = useState([]);
-  const [mappings, setMappings] = useState([]);
-
-  const [mikrotikLoading, setMikrotikLoading] = useState(false);
-  const [mikrotikTesting, setMikrotikTesting] = useState(false);
-  const [mappingSaving, setMappingSaving] = useState(false);
-
-  const [mikrotikConnected, setMikrotikConnected] = useState(false);
-  const [mikrotikMessage, setMikrotikMessage] = useState('');
-
-  /* =========================================================
-     Selected Package
-     ========================================================= */
-
-  const [selectedPackageId, setSelectedPackageId] = useState('');
-  const [selectedProfileName, setSelectedProfileName] = useState('');
-
-  /* =========================================================
-     Card Creation
-     ========================================================= */
-
-  const [cardQuantity, setCardQuantity] = useState(10);
-  const [codePrefix, setCodePrefix] = useState('77');
-  const [codeLength, setCodeLength] = useState(8);
-
-  const [creatingCards, setCreatingCards] = useState(false);
-  const [creationResult, setCreationResult] = useState(null);
-  const [previewCodes, setPreviewCodes] = useState([]);
-
-  /* =========================================================
-     Common Styles
-     ========================================================= */
-
-  const cardStyle = {
-    background: '#fff',
-    border: '1px solid #e8e7ef',
-    borderRadius: 18,
-    boxShadow: '0 8px 30px rgba(31, 25, 60, 0.06)'
-  };
-
-  const sectionTitleStyle = {
-    margin: 0,
-    fontSize: 20,
-    fontWeight: 900,
-    color: '#17141f'
-  };
-
-  const mutedStyle = {
-    color: '#6b7280',
-    fontSize: 13
-  };
-
-  /* =========================================================
-     Load Packages
-     ========================================================= */
+  // إحصائيات الباقات
+  const [packageStats, setPackageStats] = useState({});
 
   async function loadPackages() {
     const { data, error: fetchError } = await supabase
       .from('packages')
-      .select('*, cards(id)')
+      .select('*')
       .order('created_at', { ascending: false });
 
-    if (!fetchError && data) {
-      setPackages(
-        data.map((pkg) => ({
-          ...pkg,
-          cardsCount: pkg.cards ? pkg.cards.length : 0
-        }))
-      );
-    } else {
+    if (fetchError || !data) {
       setPackages([]);
-    }
-  }
-
-  /* =========================================================
-     Session Token
-     ========================================================= */
-
-  async function getAccessToken() {
-    const {
-      data: { session },
-      error: sessionError
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      throw new Error(
-        sessionError.message ||
-          'تعذر الحصول على جلسة الدخول.'
-      );
-    }
-
-    if (!session?.access_token) {
-      throw new Error(
-        'جلسة الدخول غير موجودة. يرجى تسجيل الدخول مرة أخرى.'
-      );
-    }
-
-    return session.access_token;
-  }
-
-  /* =========================================================
-     MikroTik API Request
-     ========================================================= */
-
-  async function mikrotikRequest(url, options = {}) {
-    const token = await getAccessToken();
-
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...(options.headers || {}),
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      cache: 'no-store'
-    });
-
-    let data = null;
-
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
-    }
-
-    if (!response.ok) {
-      throw new Error(
-        data?.error ||
-          data?.message ||
-          `فشل الطلب. HTTP ${response.status}`
-      );
-    }
-
-    return data;
-  }
-
-  /* =========================================================
-     Load MikroTik Settings
-     ========================================================= */
-
-  async function loadMikrotikSettings() {
-    setSettingsLoading(true);
-
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager?action=settings'
-      );
-
-      if (!data?.success) {
-        throw new Error(
-          data?.error ||
-            'تعذر تحميل إعدادات MikroTik.'
-        );
-      }
-
-      setMikrotikUrl(data.routerUrl || '');
-      setMikrotikUsername(data.username || '');
-
-      setSettingsConfigured(
-        Boolean(data.configured)
-      );
-
-      setPasswordSaved(
-        Boolean(data.hasPassword)
-      );
-
-      setSettingsSource(
-        data.source || ''
-      );
-    } catch (err) {
-      setSettingsConfigured(false);
-      setPasswordSaved(false);
-
-      /*
-       * لا نظهر خطأ قوي هنا عند أول تحميل،
-       * لأن route.js سيتم تعديله في الخطوة التالية.
-       */
-      console.warn(
-        'MikroTik settings:',
-        err?.message
-      );
-    } finally {
-      setSettingsLoading(false);
-    }
-  }
-
-  /* =========================================================
-     Save MikroTik Settings
-     ========================================================= */
-
-  async function saveMikrotikSettings() {
-    setMikrotikMessage('');
-
-    const routerUrl = mikrotikUrl.trim();
-    const username = mikrotikUsername.trim();
-
-    if (!routerUrl) {
-      setMikrotikMessage(
-        'يرجى إدخال عنوان MikroTik.'
-      );
+      setError('تعذّر تحميل الباقات');
       return;
     }
 
-    if (!/^https:\/\//i.test(routerUrl)) {
-      setMikrotikMessage(
-        'عنوان MikroTik يجب أن يبدأ بـ https://'
-      );
-      return;
-    }
+    setPackages(data);
 
-    if (!username) {
-      setMikrotikMessage(
-        'يرجى إدخال اسم مستخدم User Manager.'
-      );
-      return;
-    }
+    // جلب إحصائيات الكروت لكل باقة.
+    // لا يتم جلب جميع الكروت هنا، وإنما أعداد فقط.
+    const statsEntries = await Promise.all(
+      data.map(async (pkg) => {
+        const [totalResult, availableResult, distributorResult, soldResult] =
+          await Promise.all([
+            supabase
+              .from('cards')
+              .select('id', { count: 'exact', head: true })
+              .eq('package_id', pkg.id),
 
-    /*
-     * عند وجود كلمة مرور محفوظة يمكن ترك الحقل فارغًا.
-     */
-    if (!mikrotikPassword.trim() && !passwordSaved) {
-      setMikrotikMessage(
-        'يرجى إدخال كلمة مرور MikroTik.'
-      );
-      return;
-    }
+            supabase
+              .from('cards')
+              .select('id', { count: 'exact', head: true })
+              .eq('package_id', pkg.id)
+              .eq('status', 'available'),
 
-    setSettingsSaving(true);
-    setMikrotikConnected(false);
+            supabase
+              .from('cards')
+              .select('id', { count: 'exact', head: true })
+              .eq('package_id', pkg.id)
+              .eq('status', 'with_distributor'),
 
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'save-settings',
-            routerUrl,
-            username,
-            password: mikrotikPassword
-          })
-        }
-      );
+            supabase
+              .from('cards')
+              .select('id', { count: 'exact', head: true })
+              .eq('package_id', pkg.id)
+              .eq('status', 'sold')
+          ]);
 
-      if (!data?.success) {
-        throw new Error(
-          data?.error ||
-            'تعذر حفظ إعدادات MikroTik.'
-        );
-      }
-
-      setSettingsConfigured(true);
-      setPasswordSaved(true);
-      setSettingsSource(
-        data.source || 'database'
-      );
-
-      /*
-       * لا نحتفظ بكلمة المرور في حالة الواجهة.
-       */
-      setMikrotikPassword('');
-
-      setMikrotikMessage(
-        'تم حفظ إعدادات MikroTik. جارٍ اختبار الاتصال...'
-      );
-
-      await testMikrotikConnection();
-    } catch (err) {
-      setMikrotikConnected(false);
-
-      setMikrotikMessage(
-        err?.message ||
-          'تعذر حفظ إعدادات MikroTik.'
-      );
-    } finally {
-      setSettingsSaving(false);
-    }
-  }
-
-  /* =========================================================
-     Test MikroTik Connection
-     ========================================================= */
-
-  async function testMikrotikConnection() {
-    setMikrotikTesting(true);
-    setMikrotikMessage('');
-    setMikrotikConnected(false);
-
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager?action=test'
-      );
-
-      if (!data?.success || !data?.connected) {
-        throw new Error(
-          data?.error ||
-            'تعذر تأكيد الاتصال بـ MikroTik.'
-        );
-      }
-
-      setMikrotikConnected(true);
-
-      const details = [];
-
-      if (data.board) {
-        details.push(`الجهاز: ${data.board}`);
-      }
-
-      if (data.version) {
-        details.push(`الإصدار: ${data.version}`);
-      }
-
-      setMikrotikMessage(
-        details.length
-          ? `تم الاتصال بنجاح — ${details.join(' — ')}`
-          : 'تم الاتصال بـ MikroTik بنجاح.'
-      );
-
-      await loadMikrotikProfiles();
-    } catch (err) {
-      setMikrotikConnected(false);
-
-      setMikrotikMessage(
-        err?.message ||
-          'فشل الاتصال بـ MikroTik.'
-      );
-    } finally {
-      setMikrotikTesting(false);
-    }
-  }
-
-  /* =========================================================
-     Load MikroTik Profiles
-     ========================================================= */
-
-  async function loadMikrotikProfiles() {
-    setMikrotikLoading(true);
-
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager?action=profiles'
-      );
-
-      if (!data?.success) {
-        throw new Error(
-          data?.error ||
-            'تعذر تحميل Profiles من MikroTik.'
-        );
-      }
-
-      setMikrotikProfiles(
-        Array.isArray(data.profiles)
-          ? data.profiles
-          : []
-      );
-
-      setMappings(
-        Array.isArray(data.mappings)
-          ? data.mappings
-          : []
-      );
-    } catch (err) {
-      setMikrotikProfiles([]);
-      setMappings([]);
-
-      if (!mikrotikConnected) {
-        setMikrotikMessage(
-          err?.message ||
-            'تعذر الاتصال بـ MikroTik.'
-        );
-      }
-    } finally {
-      setMikrotikLoading(false);
-    }
-  }
-
-  /* =========================================================
-     Save Package / Profile Mapping
-     ========================================================= */
-
-  async function saveMikrotikMapping() {
-    setMikrotikMessage('');
-
-    if (!selectedPackageId) {
-      setMikrotikMessage(
-        'يرجى اختيار الباقة أولًا.'
-      );
-      return;
-    }
-
-    if (!selectedProfileName) {
-      setMikrotikMessage(
-        'يرجى اختيار Profile.'
-      );
-      return;
-    }
-
-    setMappingSaving(true);
-
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'save-mapping',
-            packageId: selectedPackageId,
-            profileName: selectedProfileName
-          })
-        }
-      );
-
-      if (!data?.success) {
-        throw new Error(
-          data?.error ||
-            'تعذر حفظ الربط.'
-        );
-      }
-
-      setMikrotikMessage(
-        'تم ربط الباقة بـ Profile بنجاح.'
-      );
-
-      await loadMikrotikProfiles();
-    } catch (err) {
-      setMikrotikMessage(
-        err?.message ||
-          'تعذر حفظ ربط الباقة.'
-      );
-    } finally {
-      setMappingSaving(false);
-    }
-  }
-
-  /* =========================================================
-     Get Mapped Profile
-     ========================================================= */
-
-  function getMappedProfile(packageId) {
-    const mapping = mappings.find(
-      (item) =>
-        item.package_id === packageId
+        return [
+          pkg.id,
+          {
+            total: totalResult.count || 0,
+            available: availableResult.count || 0,
+            withDistributor: distributorResult.count || 0,
+            sold: soldResult.count || 0
+          }
+        ];
+      })
     );
 
-    return (
-      mapping?.mikrotik_profile_name || ''
-    );
+    setPackageStats(Object.fromEntries(statsEntries));
   }
-
-  /* =========================================================
-     Select Package
-     ========================================================= */
-
-  function handlePackageSelection(packageId) {
-    setSelectedPackageId(packageId);
-    setCreationResult(null);
-    setPreviewCodes([]);
-
-    setSelectedProfileName(
-      getMappedProfile(packageId)
-    );
-  }
-
-  /* =========================================================
-     Preview Codes
-     ========================================================= */
-
-  function generatePreviewCodes() {
-    setCreationResult(null);
-
-    const quantity = Number(cardQuantity);
-    const prefix = String(codePrefix).trim();
-    const length = Number(codeLength);
-
-    if (
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      quantity > 1000
-    ) {
-      setPreviewCodes([]);
-      return;
-    }
-
-    if (
-      !/^[0-9]+$/.test(prefix) ||
-      prefix.length >= length
-    ) {
-      setPreviewCodes([]);
-      return;
-    }
-
-    const generated = [];
-    const used = new Set();
-
-    let attempts = 0;
-    const maxAttempts = quantity * 100;
-
-    while (
-      generated.length <
-        Math.min(quantity, 10) &&
-      attempts < maxAttempts
-    ) {
-      attempts += 1;
-
-      let suffix = '';
-
-      for (
-        let i = prefix.length;
-        i < length;
-        i += 1
-      ) {
-        suffix += Math.floor(
-          Math.random() * 10
-        ).toString();
-      }
-
-      const code = `${prefix}${suffix}`;
-
-      if (!used.has(code)) {
-        used.add(code);
-        generated.push(code);
-      }
-    }
-
-    setPreviewCodes(generated);
-  }
-
-  /* =========================================================
-     Create Cards
-     ========================================================= */
-
-  async function createCards() {
-    setCreationResult(null);
-    setPreviewCodes([]);
-
-    if (!mikrotikConnected) {
-      setCreationResult({
-        success: false,
-        message:
-          'يرجى التأكد من اتصال MikroTik أولًا.'
-      });
-      return;
-    }
-
-    if (!selectedPackageId) {
-      setCreationResult({
-        success: false,
-        message:
-          'يرجى اختيار الباقة أولًا.'
-      });
-      return;
-    }
-
-    if (!selectedProfileName) {
-      setCreationResult({
-        success: false,
-        message:
-          'هذه الباقة غير مربوطة بـ MikroTik Profile.'
-      });
-      return;
-    }
-
-    const quantity = Number(cardQuantity);
-    const prefix = String(codePrefix).trim();
-    const length = Number(codeLength);
-
-    if (
-      !Number.isInteger(quantity) ||
-      quantity < 1 ||
-      quantity > 1000
-    ) {
-      setCreationResult({
-        success: false,
-        message:
-          'عدد الكروت يجب أن يكون بين 1 و1000.'
-      });
-      return;
-    }
-
-    if (
-      !prefix ||
-      !/^[0-9]+$/.test(prefix)
-    ) {
-      setCreationResult({
-        success: false,
-        message:
-          'بداية الكرت يجب أن تحتوي على أرقام فقط.'
-      });
-      return;
-    }
-
-    if (
-      !Number.isInteger(length) ||
-      length < 4 ||
-      length > 32
-    ) {
-      setCreationResult({
-        success: false,
-        message:
-          'طول الكرت يجب أن يكون بين 4 و32.'
-      });
-      return;
-    }
-
-    if (prefix.length >= length) {
-      setCreationResult({
-        success: false,
-        message:
-          'طول البداية يجب أن يكون أقل من طول الكرت.'
-      });
-      return;
-    }
-
-    setCreatingCards(true);
-
-    try {
-      const data = await mikrotikRequest(
-        '/api/mikrotik/user-manager',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            action: 'create-cards',
-            packageId: selectedPackageId,
-            quantity,
-            prefix,
-            codeLength: length
-          })
-        }
-      );
-
-      if (!data?.success) {
-        throw new Error(
-          data?.error ||
-            'تعذر إنشاء الكروت.'
-        );
-      }
-
-      setCreationResult({
-        success: true,
-        data
-      });
-
-      await loadPackages();
-      setPreviewCodes([]);
-    } catch (err) {
-      setCreationResult({
-        success: false,
-        message:
-          err?.message ||
-          'حدث خطأ أثناء إنشاء الكروت.'
-      });
-    } finally {
-      setCreatingCards(false);
-    }
-  }
-
-  /* =========================================================
-     Initial Load
-     ========================================================= */
 
   useEffect(() => {
-    if (!profile) return;
-
-    loadPackages();
-    loadMikrotikSettings();
+    if (profile) {
+      loadPackages();
+    }
   }, [profile]);
-
-  /* =========================================================
-     Add Package
-     ========================================================= */
 
   async function addPackage(e) {
     e.preventDefault();
-
     setError('');
 
-    const packageName = name.trim();
-    const packagePrice = Number(price);
+    const trimmedName = name.trim();
+    const numericPrice = parseFloat(price);
 
-    if (!packageName) {
-      setError('يرجى إدخال اسم الباقة.');
+    if (!trimmedName || !price) {
+      setError('يرجى إدخال اسم الباقة والسعر');
       return;
     }
 
-    if (
-      !Number.isFinite(packagePrice) ||
-      packagePrice <= 0
-    ) {
-      setError('يرجى إدخال سعر صحيح.');
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
+      setError('السعر يجب أن يكون رقمًا أكبر من صفر');
       return;
     }
 
-    const { error: insertError } =
-      await supabase
-        .from('packages')
-        .insert({
-          name: packageName,
-          price: packagePrice
-        });
+    const { error: insertError } = await supabase
+      .from('packages')
+      .insert({
+        name: trimmedName,
+        price: numericPrice
+      });
 
     if (insertError) {
       setError(insertError.message);
@@ -749,17 +166,10 @@ export default function PackagesPage() {
     await loadPackages();
   }
 
-  /* =========================================================
-     Delete Package
-     ========================================================= */
-
-  async function deletePackage(
-    id,
-    packageName
-  ) {
+  async function deletePackage(id, packageName) {
     if (
       !window.confirm(
-        `سيتم حذف باقة "${packageName}" نهائيًا. لا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا. متابعة؟`
+        `سيتم حذف باقة "${packageName}" نهائيًا.\n\nلا يمكن حذف باقة مرتبطة بكروت موجودة حاليًا.\n\nهل تريد المتابعة؟`
       )
     ) {
       return;
@@ -768,9 +178,7 @@ export default function PackagesPage() {
     setError('');
     setBusyId(id);
 
-    const {
-      error: deleteError
-    } = await supabase
+    const { error: deleteError } = await supabase
       .from('packages')
       .delete()
       .eq('id', id);
@@ -779,1725 +187,1218 @@ export default function PackagesPage() {
 
     if (deleteError) {
       setError(
-        'تعذّر حذف الباقة — على الأغلب توجد كروت أو طلبات مرتبطة بها حاليًا.'
+        'تعذّر حذف الباقة — على الأغلب توجد كروت أو بيانات مرتبطة بها حاليًا.'
       );
       return;
     }
 
-    if (selectedPackageId === id) {
-      setSelectedPackageId('');
-      setSelectedProfileName('');
-      setCreationResult(null);
-      setPreviewCodes([]);
+    if (expandedPackageId === id) {
+      setExpandedPackageId(null);
     }
 
     await loadPackages();
-    await loadMikrotikProfiles();
   }
 
-  if (loading) {
-    return null;
+  async function loadPackageCards(packageId, page = 0, search = '', status = 'all') {
+    setPackageCardLoading((prev) => ({
+      ...prev,
+      [packageId]: true
+    }));
+
+    setError('');
+
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let query = supabase
+      .from('cards')
+      .select('id, code, package_id, status, assigned_to, sold_at, created_at')
+      .eq('package_id', packageId)
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (search.trim()) {
+      query = query.ilike('code', `%${search.trim()}%`);
+    }
+
+    if (status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, error: cardsError } = await query;
+
+    setPackageCardLoading((prev) => ({
+      ...prev,
+      [packageId]: false
+    }));
+
+    if (cardsError) {
+      setError('تعذّر تحميل كروت الباقة');
+      return;
+    }
+
+    setPackageCards((prev) => ({
+      ...prev,
+      [packageId]: data || []
+    }));
+
+    setPackageCardPage((prev) => ({
+      ...prev,
+      [packageId]: page
+    }));
   }
 
-  /* =========================================================
-     Derived Data
-     ========================================================= */
+  async function togglePackage(packageId) {
+    setError('');
 
-  const selectedPackage =
-    packages.find(
-      (item) =>
-        item.id === selectedPackageId
+    if (expandedPackageId === packageId) {
+      setExpandedPackageId(null);
+      return;
+    }
+
+    setExpandedPackageId(packageId);
+
+    const search = packageCardSearch[packageId] || '';
+    const status = packageCardStatus[packageId] || 'all';
+
+    await loadPackageCards(packageId, 0, search, status);
+  }
+
+  async function applyPackageCardFilter(packageId) {
+    const search = packageCardSearch[packageId] || '';
+    const status = packageCardStatus[packageId] || 'all';
+
+    await loadPackageCards(packageId, 0, search, status);
+  }
+
+  async function changePackageCardPage(packageId, newPage) {
+    const search = packageCardSearch[packageId] || '';
+    const status = packageCardStatus[packageId] || 'all';
+
+    await loadPackageCards(packageId, newPage, search, status);
+  }
+
+  async function searchAllCards(e) {
+    e.preventDefault();
+
+    const search = globalCardSearch.trim();
+
+    if (!search) {
+      setGlobalSearchResults([]);
+      setGlobalSearchDone(false);
+      return;
+    }
+
+    setGlobalSearchLoading(true);
+    setGlobalSearchDone(false);
+    setError('');
+
+    const { data, error: searchError } = await supabase
+      .from('cards')
+      .select(
+        'id, code, package_id, status, assigned_to, sold_at, created_at, packages(name, price)'
+      )
+      .ilike('code', `%${search}%`)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    setGlobalSearchLoading(false);
+    setGlobalSearchDone(true);
+
+    if (searchError) {
+      setGlobalSearchResults([]);
+      setError('تعذّر البحث عن الكرت');
+      return;
+    }
+
+    setGlobalSearchResults(data || []);
+  }
+
+  function clearGlobalSearch() {
+    setGlobalCardSearch('');
+    setGlobalSearchResults([]);
+    setGlobalSearchDone(false);
+  }
+
+  async function copyCardCode(code) {
+    try {
+      await navigator.clipboard.writeText(String(code));
+      setCopiedCode(String(code));
+
+      setTimeout(() => {
+        setCopiedCode('');
+      }, 1500);
+    } catch {
+      setError('تعذّر نسخ الكود');
+    }
+  }
+
+  async function deleteCard(card) {
+    const code = String(card.code || '');
+
+    if (
+      !window.confirm(
+        `هل أنت متأكد من حذف الكرت "${code}" نهائيًا؟\n\nسيتم حذف الكرت من جدول الكروت فقط.`
+      )
+    ) {
+      return;
+    }
+
+    setDeletingCardId(card.id);
+    setError('');
+
+    const { error: deleteError } = await supabase
+      .from('cards')
+      .delete()
+      .eq('id', card.id);
+
+    setDeletingCardId(null);
+
+    if (deleteError) {
+      setError(
+        'تعذّر حذف الكرت. قد يكون الكرت مرتبطًا ببيانات أخرى تمنع حذفه، أو قد تكون هناك حماية في قاعدة البيانات.'
+      );
+      return;
+    }
+
+    // إزالة الكرت من نتائج البحث الحالية
+    setGlobalSearchResults((prev) =>
+      prev.filter((item) => item.id !== card.id)
     );
 
-  const selectedProfile =
-    mikrotikProfiles.find(
-      (item) =>
-        item.name === selectedProfileName
-    );
+    // تحديث قائمة الباقة إذا كانت مفتوحة
+    if (card.package_id && expandedPackageId === card.package_id) {
+      const page = packageCardPage[card.package_id] || 0;
+      const search = packageCardSearch[card.package_id] || '';
+      const status = packageCardStatus[card.package_id] || 'all';
 
-  const totalCards =
-    packages.reduce(
-      (sum, item) =>
-        sum + (item.cardsCount || 0),
-      0
-    );
+      await loadPackageCards(
+        card.package_id,
+        page,
+        search,
+        status
+      );
+    }
 
-  const mappedPackages =
-    packages.filter(
-      (item) =>
-        getMappedProfile(item.id)
-    ).length;
+    // تحديث الإحصائيات
+    await loadPackages();
+  }
+
+  const totalCards = useMemo(
+    () =>
+      Object.values(packageStats).reduce(
+        (sum, stats) => sum + (stats.total || 0),
+        0
+      ),
+    [packageStats]
+  );
+
+  const totalAvailable = useMemo(
+    () =>
+      Object.values(packageStats).reduce(
+        (sum, stats) => sum + (stats.available || 0),
+        0
+      ),
+    [packageStats]
+  );
+
+  const totalWithDistributor = useMemo(
+    () =>
+      Object.values(packageStats).reduce(
+        (sum, stats) => sum + (stats.withDistributor || 0),
+        0
+      ),
+    [packageStats]
+  );
+
+  const totalSold = useMemo(
+    () =>
+      Object.values(packageStats).reduce(
+        (sum, stats) => sum + (stats.sold || 0),
+        0
+      ),
+    [packageStats]
+  );
+
+  if (loading) return null;
 
   return (
-    <div
-      className="app"
-      dir="rtl"
-    >
+    <div className="app">
       <Sidebar
         role="admin"
         active="/admin/packages"
-        name={profile.full_name}
+        name={profile?.full_name}
       />
 
       <div className="main">
+        <h1>الباقات</h1>
 
-        {/* =====================================================
-            Header
-            ===================================================== */}
+        <p className="greet" style={{ marginBottom: 20 }}>
+          إدارة باقات الكروت وكروت النظام
+        </p>
 
-        <div
-          style={{
-            ...cardStyle,
-            padding: '25px 27px',
-            marginBottom: 18,
-            background:
-              'linear-gradient(135deg, #4c1d95 0%, #6d28d9 48%, #0f766e 140%)',
-            color: '#fff',
-            overflow: 'hidden',
-            position: 'relative'
-          }}
-        >
+        {error && (
           <div
+            className="error-note"
             style={{
-              position: 'relative',
-              zIndex: 1
+              marginBottom: 16,
+              whiteSpace: 'pre-line'
             }}
           >
-            <div
-              style={{
-                fontSize: 13,
-                opacity: 0.82,
-                marginBottom: 7
-              }}
-            >
-              TawasulNet • لوحة الإدارة
-            </div>
-
-            <h1
-              style={{
-                margin: 0,
-                fontSize: 28,
-                fontWeight: 900
-              }}
-            >
-              إدارة الباقات والكروت
-            </h1>
-
-            <p
-              style={{
-                margin: '8px 0 0',
-                opacity: 0.9,
-                maxWidth: 700
-              }}
-            >
-              كل ما تحتاجه للباقات وUser Manager
-              وإنشاء الكروت موجود هنا في صفحة واحدة.
-            </p>
+            {error}
           </div>
+        )}
 
-          <div
-            style={{
-              position: 'absolute',
-              left: -35,
-              top: -55,
-              width: 170,
-              height: 170,
-              borderRadius: '50%',
-              background:
-                'rgba(255,255,255,.08)'
-            }}
-          />
-
-          <div
-            style={{
-              position: 'absolute',
-              left: 90,
-              bottom: -95,
-              width: 220,
-              height: 220,
-              borderRadius: '50%',
-              background:
-                'rgba(20,184,166,.13)'
-            }}
-          />
-        </div>
-
-        {/* =====================================================
-            MikroTik Connection — FIRST
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 22,
-            marginBottom: 20,
-            border:
-              mikrotikConnected
-                ? '1px solid #bbf7d0'
-                : '1px solid #e8e7ef'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              gap: 15,
-              flexWrap: 'wrap',
-              marginBottom: 18
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  marginBottom: 6
-                }}
-              >
-                <span
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 11,
-                    display: 'grid',
-                    placeItems: 'center',
-                    background:
-                      mikrotikConnected
-                        ? '#dcfce7'
-                        : '#f3e8ff',
-                    color:
-                      mikrotikConnected
-                        ? '#15803d'
-                        : '#6d28d9',
-                    fontSize: 19,
-                    fontWeight: 900
-                  }}
-                >
-                  ⌁
-                </span>
-
-                <h2
-                  style={{
-                    ...sectionTitleStyle,
-                    fontSize: 21
-                  }}
-                >
-                  اتصال MikroTik / User Manager
-                </h2>
-              </div>
-
-              <div style={mutedStyle}>
-                أدخل بيانات جهاز MikroTik مرة واحدة،
-                ثم اختبر الاتصال. لا توجد صفحة إعدادات
-                منفصلة.
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 9,
-                padding: '9px 13px',
-                borderRadius: 11,
-                background:
-                  mikrotikConnected
-                    ? '#f0fdf4'
-                    : '#fff7ed',
-                border:
-                  mikrotikConnected
-                    ? '1px solid #bbf7d0'
-                    : '1px solid #fed7aa',
-                color:
-                  mikrotikConnected
-                    ? '#166534'
-                    : '#9a3412',
-                fontSize: 13,
-                fontWeight: 900
-              }}
-            >
-              <span
-                style={{
-                  width: 9,
-                  height: 9,
-                  borderRadius: '50%',
-                  background:
-                    mikrotikConnected
-                      ? '#22c55e'
-                      : '#f59e0b'
-                }}
-              />
-
-              {mikrotikConnected
-                ? 'متصل وجاهز'
-                : settingsConfigured
-                ? 'الإعدادات محفوظة'
-                : 'غير متصل'}
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'minmax(220px, 1.5fr) minmax(180px, .8fr) minmax(180px, .8fr)',
-              gap: 12
-            }}
-          >
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>عنوان MikroTik</label>
-
-              <input
-                type="url"
-                value={mikrotikUrl}
-                onChange={(e) => {
-                  setMikrotikUrl(e.target.value);
-                  setMikrotikConnected(false);
-                }}
-                disabled={settingsLoading}
-                placeholder="https://192.168.88.1"
-                dir="ltr"
-              />
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>اسم المستخدم</label>
-
-              <input
-                type="text"
-                value={mikrotikUsername}
-                onChange={(e) => {
-                  setMikrotikUsername(e.target.value);
-                  setMikrotikConnected(false);
-                }}
-                disabled={settingsLoading}
-                placeholder="admin"
-                dir="ltr"
-                autoComplete="off"
-              />
-            </div>
-
-            <div
-              className="field"
-              style={{ marginBottom: 0 }}
-            >
-              <label>كلمة المرور</label>
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: 7
-                }}
-              >
-                <input
-                  type={
-                    showPassword
-                      ? 'text'
-                      : 'password'
-                  }
-                  value={mikrotikPassword}
-                  onChange={(e) => {
-                    setMikrotikPassword(
-                      e.target.value
-                    );
-                    setMikrotikConnected(false);
-                  }}
-                  disabled={settingsLoading}
-                  placeholder={
-                    passwordSaved
-                      ? 'محفوظة — اتركها فارغة'
-                      : 'أدخل كلمة المرور'
-                  }
-                  dir="ltr"
-                  autoComplete="new-password"
-                  style={{
-                    flex: 1,
-                    minWidth: 0
-                  }}
-                />
-
-                <button
-                  type="button"
-                  className="btn-sm"
-                  onClick={() =>
-                    setShowPassword(
-                      (value) => !value
-                    )
-                  }
-                  style={{
-                    minWidth: 46,
-                    padding: '8px 10px',
-                    border:
-                      '1px solid #d1d5db',
-                    background: '#fff',
-                    borderRadius: 9
-                  }}
-                >
-                  {showPassword
-                    ? 'إخفاء'
-                    : 'إظهار'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 14,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap'
-            }}
-          >
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 12
-              }}
-            >
-              {settingsSource === 'database'
-                ? 'الإعدادات محفوظة بأمان في النظام.'
-                : settingsSource === 'environment'
-                ? 'يتم استخدام إعدادات الخادم الحالية.'
-                : passwordSaved
-                ? 'كلمة المرور محفوظة. لا تحتاج لإدخالها مرة أخرى.'
-                : 'أدخل بيانات الاتصال ثم احفظها.'}
-            </div>
-
-            <div
-              style={{
-                display: 'flex',
-                gap: 9,
-                flexWrap: 'wrap'
-              }}
-            >
-              <button
-                type="button"
-                className="btn-sm"
-                onClick={
-                  testMikrotikConnection
-                }
-                disabled={
-                  mikrotikTesting ||
-                  settingsSaving ||
-                  !settingsConfigured
-                }
-                style={{
-                  padding: '10px 15px',
-                  borderRadius: 9,
-                  border:
-                    '1px solid #d1d5db',
-                  background: '#fff',
-                  fontWeight: 800
-                }}
-              >
-                {mikrotikTesting
-                  ? 'جارٍ الاختبار...'
-                  : 'اختبار الاتصال'}
-              </button>
-
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={
-                  saveMikrotikSettings
-                }
-                disabled={
-                  settingsSaving ||
-                  settingsLoading
-                }
-                style={{
-                  minWidth: 150
-                }}
-              >
-                {settingsSaving
-                  ? 'جارٍ الحفظ...'
-                  : 'حفظ واختبار الاتصال'}
-              </button>
-            </div>
-          </div>
-
-          {mikrotikMessage && (
-            <div
-              style={{
-                marginTop: 14,
-                padding: 12,
-                borderRadius: 11,
-                background:
-                  mikrotikConnected
-                    ? '#f0fdf4'
-                    : '#fff7ed',
-                border:
-                  mikrotikConnected
-                    ? '1px solid #bbf7d0'
-                    : '1px solid #fed7aa',
-                color:
-                  mikrotikConnected
-                    ? '#166534'
-                    : '#9a3412',
-                fontSize: 13,
-                fontWeight: 700,
-                lineHeight: 1.7
-              }}
-            >
-              {mikrotikMessage}
-            </div>
-          )}
-        </div>
-
-        {/* =====================================================
-            Small Stats
-            ===================================================== */}
-
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns:
-              'repeat(auto-fit, minmax(190px, 1fr))',
-            gap: 12,
-            marginBottom: 20
-          }}
-        >
-          <div
-            style={{
-              ...cardStyle,
-              padding: 17
-            }}
-          >
-            <div style={mutedStyle}>
-              إجمالي الباقات
-            </div>
-
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 900,
-                marginTop: 4
-              }}
-            >
-              {packages.length}
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...cardStyle,
-              padding: 17
-            }}
-          >
-            <div style={mutedStyle}>
-              إجمالي الكروت
-            </div>
-
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 900,
-                marginTop: 4
-              }}
-            >
-              {totalCards}
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...cardStyle,
-              padding: 17
-            }}
-          >
-            <div style={mutedStyle}>
-              الباقات المربوطة
-            </div>
-
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 900,
-                marginTop: 4
-              }}
-            >
-              {mappedPackages}
-            </div>
-          </div>
-        </div>
-
-        {/* =====================================================
-            Add Package
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 22,
-            marginBottom: 20
-          }}
-        >
-          <div style={{ marginBottom: 16 }}>
-            <h2 style={sectionTitleStyle}>
-              إضافة باقة جديدة
-            </h2>
-
-            <div
-              style={{
-                ...mutedStyle,
-                marginTop: 5
-              }}
-            >
-              أضف اسم الباقة وسعرها فقط.
-            </div>
+        {/* إضافة باقة */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>إضافة باقة جديدة</h3>
           </div>
 
           <form
             onSubmit={addPackage}
             style={{
-              display: 'grid',
-              gridTemplateColumns:
-                'minmax(200px, 1fr) minmax(150px, .6fr) auto',
-              gap: 10,
-              alignItems: 'end'
+              display: 'flex',
+              gap: 12,
+              flexWrap: 'wrap',
+              alignItems: 'flex-end'
             }}
           >
             <div
               className="field"
-              style={{ marginBottom: 0 }}
+              style={{
+                marginBottom: 0,
+                flex: 1,
+                minWidth: 180
+              }}
             >
               <label>اسم الباقة</label>
 
               <input
                 value={name}
-                onChange={(e) =>
-                  setName(e.target.value)
-                }
-                placeholder="باقة 200"
+                onChange={(e) => setName(e.target.value)}
+                placeholder="مثال: باقة 20GB"
               />
             </div>
 
             <div
               className="field"
-              style={{ marginBottom: 0 }}
+              style={{
+                marginBottom: 0,
+                width: 140,
+                maxWidth: '100%'
+              }}
             >
-              <label>السعر</label>
+              <label>السعر (لكل كرت)</label>
 
               <input
                 type="number"
-                min="1"
+                step="0.01"
+                min="0"
                 value={price}
-                onChange={(e) =>
-                  setPrice(e.target.value)
-                }
-                placeholder="200"
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="25"
               />
             </div>
 
             <button
               className="btn-primary"
-              type="submit"
               style={{
-                minHeight: 42
+                width: 140,
+                maxWidth: '100%'
               }}
+              type="submit"
             >
-              إضافة الباقة
+              إضافة
             </button>
           </form>
+        </div>
 
-          {error && (
-            <div
+        {/* البحث عن أي كرت */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>البحث عن كرت</h3>
+          </div>
+
+          <p
+            className="muted"
+            style={{
+              marginTop: -4,
+              marginBottom: 14
+            }}
+          >
+            ابحث عن أي كرت موجود في النظام باستخدام الكود.
+          </p>
+
+          <form
+            onSubmit={searchAllCards}
+            style={{
+              display: 'flex',
+              gap: 10,
+              flexWrap: 'wrap'
+            }}
+          >
+            <input
+              value={globalCardSearch}
+              onChange={(e) => setGlobalCardSearch(e.target.value)}
+              placeholder="اكتب كود الكرت..."
               style={{
-                marginTop: 12,
-                padding: 11,
-                borderRadius: 10,
-                background: '#fef2f2',
-                border:
-                  '1px solid #fecaca',
-                color: '#b91c1c',
-                fontSize: 13,
-                fontWeight: 700
+                flex: 1,
+                minWidth: 200
+              }}
+            />
+
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={globalSearchLoading}
+              style={{
+                minWidth: 120
               }}
             >
-              {error}
+              {globalSearchLoading ? 'جاري البحث...' : 'بحث'}
+            </button>
+
+            {globalSearchDone && (
+              <button
+                type="button"
+                className="btn-sm"
+                onClick={clearGlobalSearch}
+                style={{
+                  minWidth: 90,
+                  padding: '8px 14px'
+                }}
+              >
+                مسح
+              </button>
+            )}
+          </form>
+
+          {globalSearchDone && (
+            <div style={{ marginTop: 18 }}>
+              {globalSearchResults.length === 0 ? (
+                <div
+                  style={{
+                    padding: 18,
+                    textAlign: 'center',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 10,
+                    color: '#6b7280'
+                  }}
+                >
+                  لا يوجد كرت مطابق للبحث.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 10
+                  }}
+                >
+                  {globalSearchResults.map((card) => {
+                    const statusStyle =
+                      STATUS_STYLES[card.status] || {
+                        background: '#f3f4f6',
+                        color: '#374151'
+                      };
+
+                    return (
+                      <div
+                        key={card.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12,
+                          flexWrap: 'wrap',
+                          padding: 14,
+                          border: '1px solid #e5e7eb',
+                          borderRadius: 10,
+                          background: '#ffffff'
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontSize: 16,
+                              fontWeight: 800,
+                              color: '#111827',
+                              wordBreak: 'break-all'
+                            }}
+                          >
+                            {card.code}
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: 5,
+                              display: 'flex',
+                              gap: 10,
+                              flexWrap: 'wrap',
+                              fontSize: 13,
+                              color: '#6b7280'
+                            }}
+                          >
+                            <span>
+                              الباقة:{' '}
+                              {card.packages?.name || 'غير محددة'}
+                            </span>
+
+                            {card.packages?.price !== undefined && (
+                              <span>
+                                السعر: {card.packages.price} ريال
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <span
+                            style={{
+                              ...statusStyle,
+                              padding: '5px 10px',
+                              borderRadius: 999,
+                              fontSize: 12,
+                              fontWeight: 800
+                            }}
+                          >
+                            {STATUS_LABELS[card.status] ||
+                              card.status ||
+                              'غير معروف'}
+                          </span>
+
+                          <button
+                            type="button"
+                            className="btn-sm"
+                            onClick={() => copyCardCode(card.code)}
+                            style={{
+                              padding: '6px 10px'
+                            }}
+                          >
+                            {copiedCode === String(card.code)
+                              ? 'تم النسخ'
+                              : 'نسخ'}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="btn-sm"
+                            disabled={deletingCardId === card.id}
+                            onClick={() => deleteCard(card)}
+                            style={{
+                              backgroundColor: '#dc2626',
+                              color: '#ffffff',
+                              border: 'none',
+                              padding: '6px 10px'
+                            }}
+                          >
+                            {deletingCardId === card.id
+                              ? 'حذف...'
+                              : 'حذف'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* =====================================================
-            Packages
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 22,
-            marginBottom: 20
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap',
-              marginBottom: 17
-            }}
-          >
-            <div>
-              <h2 style={sectionTitleStyle}>
-                الباقات
-              </h2>
-
-              <div
-                style={{
-                  ...mutedStyle,
-                  marginTop: 5
-                }}
-              >
-                اختر باقة واحدة للعمل عليها.
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: '7px 12px',
-                borderRadius: 10,
-                background: '#f8fafc',
-                border:
-                  '1px solid #e2e8f0',
-                fontWeight: 800,
-                fontSize: 13
-              }}
-            >
-              {packages.length} باقة
-            </div>
+        {/* إحصائيات الكروت */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>ملخص الكروت</h3>
           </div>
 
-          {packages.length === 0 ? (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: 12,
+              marginTop: 10
+            }}
+          >
             <div
               style={{
-                padding: 35,
-                textAlign: 'center',
-                background: '#f8fafc',
-                borderRadius: 14,
-                color: '#64748b'
+                padding: 16,
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                background: '#ffffff'
               }}
             >
-              لا توجد باقات حاليًا.
+              <div
+                style={{
+                  color: '#6b7280',
+                  fontSize: 13,
+                  marginBottom: 5
+                }}
+              >
+                إجمالي الكروت
+              </div>
+
+              <strong
+                style={{
+                  fontSize: 24,
+                  color: '#111827'
+                }}
+              >
+                {totalCards}
+              </strong>
             </div>
-          ) : (
+
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns:
-                  'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: 13
+                padding: 16,
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                background: '#ffffff'
               }}
             >
-              {packages.map((p) => {
-                const mapped =
-                  getMappedProfile(p.id);
+              <div
+                style={{
+                  color: '#6b7280',
+                  fontSize: 13,
+                  marginBottom: 5
+                }}
+              >
+                متاح
+              </div>
 
-                const selected =
-                  selectedPackageId === p.id;
+              <strong
+                style={{
+                  fontSize: 24,
+                  color: '#166534'
+                }}
+              >
+                {totalAvailable}
+              </strong>
+            </div>
 
-                return (
+            <div
+              style={{
+                padding: 16,
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                background: '#ffffff'
+              }}
+            >
+              <div
+                style={{
+                  color: '#6b7280',
+                  fontSize: 13,
+                  marginBottom: 5
+                }}
+              >
+                مع موزع
+              </div>
+
+              <strong
+                style={{
+                  fontSize: 24,
+                  color: '#92400e'
+                }}
+              >
+                {totalWithDistributor}
+              </strong>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                border: '1px solid #e5e7eb',
+                borderRadius: 10,
+                background: '#ffffff'
+              }}
+            >
+              <div
+                style={{
+                  color: '#6b7280',
+                  fontSize: 13,
+                  marginBottom: 5
+                }}
+              >
+                مباع
+              </div>
+
+              <strong
+                style={{
+                  fontSize: 24,
+                  color: '#991b1b'
+                }}
+              >
+                {totalSold}
+              </strong>
+            </div>
+          </div>
+        </div>
+
+        {/* الباقات */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>الباقات الحالية</h3>
+            <span className="muted">{packages.length}</span>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: 14,
+              marginTop: 10
+            }}
+          >
+            {packages.map((p) => {
+              const stats = packageStats[p.id] || {
+                total: 0,
+                available: 0,
+                withDistributor: 0,
+                sold: 0
+              };
+
+              const isExpanded = expandedPackageId === p.id;
+              const cards = packageCards[p.id] || [];
+              const currentPage = packageCardPage[p.id] || 0;
+              const currentSearch =
+                packageCardSearch[p.id] || '';
+              const currentStatus =
+                packageCardStatus[p.id] || 'all';
+
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 10,
+                    overflow: 'hidden',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  {/* معلومات الباقة */}
                   <div
-                    key={p.id}
                     style={{
-                      border: selected
-                        ? '2px solid #7c3aed'
-                        : '1px solid #e5e7eb',
-                      borderRadius: 15,
-                      padding: 16,
-                      background: selected
-                        ? '#faf5ff'
-                        : '#fff'
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      minHeight: 82,
+                      padding: '14px 18px'
                     }}
                   >
                     <div
                       style={{
-                        display: 'flex',
-                        justifyContent:
-                          'space-between',
-                        gap: 10
+                        minWidth: 0,
+                        flex: 1
                       }}
                     >
-                      <div>
-                        <div
-                          style={{
-                            fontWeight: 900,
-                            fontSize: 18
-                          }}
-                        >
-                          {p.name}
-                        </div>
-
-                        <div
-                          style={{
-                            color: '#6d28d9',
-                            fontWeight: 900,
-                            marginTop: 4
-                          }}
-                        >
-                          {p.price} ريال
-                        </div>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 800,
+                          color: '#111827',
+                          marginBottom: 6,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {p.name}
                       </div>
 
                       <div
                         style={{
-                          background:
-                            '#f1f5f9',
-                          padding:
-                            '7px 10px',
-                          borderRadius: 9,
-                          fontSize: 12,
-                          fontWeight: 800,
-                          height: 'fit-content'
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 16,
+                          flexWrap: 'wrap',
+                          fontSize: 14
                         }}
                       >
-                        {p.cardsCount || 0} كرت
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: '#374151'
+                          }}
+                        >
+                          {p.price} ريال
+                        </span>
+
+                        <span
+                          style={{
+                            fontWeight: 800,
+                            color: '#5B21B6'
+                          }}
+                        >
+                          {stats.total} كرت
+                        </span>
                       </div>
                     </div>
 
                     <div
                       style={{
-                        marginTop: 13,
-                        padding: 10,
-                        borderRadius: 10,
-                        background:
-                          mapped
-                            ? '#f0fdf4'
-                            : '#fff7ed',
-                        color:
-                          mapped
-                            ? '#166534'
-                            : '#9a3412',
-                        fontSize: 12,
-                        fontWeight: 800
-                      }}
-                    >
-                      {mapped
-                        ? `Profile: ${mapped}`
-                        : 'لم يتم ربط Profile'}
-                    </div>
-
-                    <div
-                      style={{
                         display: 'flex',
-                        gap: 8,
-                        marginTop: 13
+                        gap: 7,
+                        alignItems: 'center',
+                        flexShrink: 0,
+                        flexWrap: 'wrap',
+                        justifyContent: 'flex-end'
                       }}
                     >
                       <button
                         type="button"
-                        className="btn-primary"
-                        onClick={() =>
-                          handlePackageSelection(
-                            p.id
-                          )
-                        }
+                        className="btn-sm"
+                        onClick={() => togglePackage(p.id)}
                         style={{
-                          flex: 1,
-                          minHeight: 40
+                          padding: '7px 12px'
                         }}
                       >
-                        {selected
-                          ? 'الباقة الحالية'
-                          : 'اختيار الباقة'}
+                        {isExpanded
+                          ? 'إخفاء الكروت'
+                          : 'عرض الكروت'}
                       </button>
 
                       <button
-                        type="button"
-                        disabled={
-                          busyId === p.id
-                        }
-                        onClick={() =>
-                          deletePackage(
-                            p.id,
-                            p.name
-                          )
-                        }
+                        className="btn-sm"
                         style={{
-                          padding:
-                            '8px 12px',
-                          borderRadius: 9,
-                          border:
-                            '1px solid #fecaca',
-                          background:
-                            '#fff',
-                          color:
-                            '#dc2626',
-                          fontWeight: 800
+                          backgroundColor: '#dc2626',
+                          color: '#ffffff',
+                          opacity: 1,
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          border: 'none'
                         }}
+                        disabled={busyId === p.id}
+                        onClick={() => deletePackage(p.id, p.name)}
                       >
-                        {busyId === p.id
-                          ? '...'
-                          : 'حذف'}
+                        {busyId === p.id ? 'حذف...' : 'حذف'}
                       </button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
 
-        {/* =====================================================
-            Package / Profile Mapping
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 22,
-            marginBottom: 20,
-            opacity: mikrotikConnected ? 1 : 0.72
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap',
-              marginBottom: 17
-            }}
-          >
-            <div>
-              <h2 style={sectionTitleStyle}>
-                ربط الباقة بـ User Manager
-              </h2>
-
-              <div
-                style={{
-                  ...mutedStyle,
-                  marginTop: 5
-                }}
-              >
-                اختر الباقة ثم Profile الموجود
-                فعلًا في MikroTik.
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="btn-sm"
-              onClick={
-                loadMikrotikProfiles
-              }
-              disabled={
-                !mikrotikConnected ||
-                mikrotikLoading
-              }
-              style={{
-                padding: '9px 14px',
-                borderRadius: 9,
-                border:
-                  '1px solid #d1d5db',
-                background: '#fff'
-              }}
-            >
-              {mikrotikLoading
-                ? 'جارٍ التحديث...'
-                : 'تحديث Profiles'}
-            </button>
-          </div>
-
-          {!mikrotikConnected ? (
-            <div
-              style={{
-                padding: 16,
-                borderRadius: 12,
-                background: '#fff7ed',
-                border:
-                  '1px solid #fed7aa',
-                color: '#9a3412',
-                fontSize: 13,
-                fontWeight: 700
-              }}
-            >
-              اتصل بـ MikroTik أولًا حتى تظهر
-              Profiles الموجودة في User Manager.
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    '1fr 1fr auto',
-                  gap: 12,
-                  alignItems: 'end'
-                }}
-              >
-                <div
-                  className="field"
-                  style={{
-                    marginBottom: 0
-                  }}
-                >
-                  <label>الباقة</label>
-
-                  <select
-                    value={selectedPackageId}
-                    onChange={(e) =>
-                      handlePackageSelection(
-                        e.target.value
-                      )
-                    }
-                    style={{
-                      width: '100%'
-                    }}
-                  >
-                    <option value="">
-                      اختر الباقة
-                    </option>
-
-                    {packages.map((p) => (
-                      <option
-                        key={p.id}
-                        value={p.id}
-                      >
-                        {p.name} — {p.price} ريال
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div
-                  className="field"
-                  style={{
-                    marginBottom: 0
-                  }}
-                >
-                  <label>
-                    User Manager Profile
-                  </label>
-
-                  <select
-                    value={
-                      selectedProfileName
-                    }
-                    onChange={(e) =>
-                      setSelectedProfileName(
-                        e.target.value
-                      )
-                    }
-                    disabled={
-                      mikrotikLoading
-                    }
-                    style={{
-                      width: '100%'
-                    }}
-                  >
-                    <option value="">
-                      {mikrotikLoading
-                        ? 'جارٍ التحميل...'
-                        : 'اختر Profile'}
-                    </option>
-
-                    {mikrotikProfiles.map(
-                      (item) => (
-                        <option
-                          key={
-                            item.id ||
-                            item.name
-                          }
-                          value={item.name}
-                        >
-                          {item.name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={
-                    saveMikrotikMapping
-                  }
-                  disabled={
-                    mappingSaving ||
-                    !selectedPackageId ||
-                    !selectedProfileName
-                  }
-                  style={{
-                    minHeight: 42
-                  }}
-                >
-                  {mappingSaving
-                    ? 'جارٍ الحفظ...'
-                    : 'حفظ الربط'}
-                </button>
-              </div>
-
-              {selectedProfile && (
-                <div
-                  style={{
-                    marginTop: 14,
-                    padding: 12,
-                    borderRadius: 11,
-                    background: '#f8fafc',
-                    border:
-                      '1px solid #e2e8f0',
-                    fontSize: 13
-                  }}
-                >
-                  <strong>
-                    Profile المحدد:
-                  </strong>{' '}
-                  {selectedProfile.name}
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* =====================================================
-            Create Cards
-            ===================================================== */}
-
-        <div
-          style={{
-            ...cardStyle,
-            padding: 22,
-            marginBottom: 25,
-            opacity: mikrotikConnected ? 1 : 0.72
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap',
-              marginBottom: 17
-            }}
-          >
-            <div>
-              <h2 style={sectionTitleStyle}>
-                إنشاء الكروت
-              </h2>
-
-              <div
-                style={{
-                  ...mutedStyle,
-                  marginTop: 5
-                }}
-              >
-                يتم إنشاء المستخدمين في MikroTik
-                ثم حفظ الكروت الناجحة في Supabase.
-              </div>
-            </div>
-
-            {selectedPackage && (
-              <div
-                style={{
-                  padding: '9px 13px',
-                  borderRadius: 11,
-                  background: '#f3e8ff',
-                  color: '#6d28d9',
-                  fontWeight: 900
-                }}
-              >
-                {selectedPackage.name}
-              </div>
-            )}
-          </div>
-
-          {!mikrotikConnected ? (
-            <div
-              style={{
-                padding: 16,
-                borderRadius: 12,
-                background: '#fff7ed',
-                border:
-                  '1px solid #fed7aa',
-                color: '#9a3412',
-                fontSize: 13,
-                fontWeight: 700
-              }}
-            >
-              بعد نجاح الاتصال بـ MikroTik ستتمكن
-              من إنشاء الكروت.
-            </div>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    'minmax(180px, 1.3fr) repeat(3, minmax(140px, .7fr))',
-                  gap: 12
-                }}
-              >
-                <div
-                  style={{
-                    padding: 13,
-                    borderRadius: 12,
-                    background: '#f8fafc',
-                    border:
-                      '1px solid #e2e8f0'
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      color: '#64748b',
-                      marginBottom: 4
-                    }}
-                  >
-                    الباقة
-                  </div>
-
-                  <strong>
-                    {selectedPackage
-                      ? `${selectedPackage.name} — ${selectedPackage.price} ريال`
-                      : 'لم يتم اختيار باقة'}
-                  </strong>
-
-                  {selectedProfileName && (
-                    <div
-                      style={{
-                        marginTop: 5,
-                        fontSize: 12,
-                        color: '#166534'
-                      }}
-                    >
-                      Profile:{' '}
-                      {selectedProfileName}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  className="field"
-                  style={{
-                    marginBottom: 0
-                  }}
-                >
-                  <label>
-                    عدد الكروت
-                  </label>
-
-                  <input
-                    type="number"
-                    min="1"
-                    max="1000"
-                    value={cardQuantity}
-                    onChange={(e) =>
-                      setCardQuantity(
-                        e.target.value
-                      )
-                    }
-                  />
-                </div>
-
-                <div
-                  className="field"
-                  style={{
-                    marginBottom: 0
-                  }}
-                >
-                  <label>
-                    بداية الكرت
-                  </label>
-
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={codePrefix}
-                    onChange={(e) =>
-                      setCodePrefix(
-                        e.target.value.replace(
-                          /[^0-9]/g,
-                          ''
-                        )
-                      )
-                    }
-                    placeholder="77"
-                    dir="ltr"
-                  />
-                </div>
-
-                <div
-                  className="field"
-                  style={{
-                    marginBottom: 0
-                  }}
-                >
-                  <label>
-                    طول الكود
-                  </label>
-
-                  <input
-                    type="number"
-                    min="4"
-                    max="32"
-                    value={codeLength}
-                    onChange={(e) =>
-                      setCodeLength(
-                        e.target.value
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 16,
-                  display: 'flex',
-                  justifyContent:
-                    'space-between',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  padding: 14,
-                  borderRadius: 13,
-                  background: '#fafafa',
-                  border:
-                    '1px solid #eeeeee'
-                }}
-              >
-                <div
-                  style={{
-                    color: '#64748b',
-                    fontSize: 12
-                  }}
-                >
-                  يبدأ الكود بـ{' '}
-                  <strong>
-                    {codePrefix || '—'}
-                  </strong>{' '}
-                  وطوله{' '}
-                  <strong>
-                    {codeLength || '—'}
-                  </strong>{' '}
-                  والكمية{' '}
-                  <strong>
-                    {cardQuantity || '—'}
-                  </strong>.
-                </div>
-
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap'
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="btn-sm"
-                    onClick={
-                      generatePreviewCodes
-                    }
-                    style={{
-                      padding:
-                        '9px 14px',
-                      borderRadius: 9,
-                      border:
-                        '1px solid #d1d5db',
-                      background: '#fff'
-                    }}
-                  >
-                    معاينة الأكواد
-                  </button>
-
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={createCards}
-                    disabled={
-                      creatingCards ||
-                      !selectedPackageId ||
-                      !selectedProfileName
-                    }
-                    style={{
-                      minWidth: 160
-                    }}
-                  >
-                    {creatingCards
-                      ? 'جارٍ الإنشاء...'
-                      : 'إنشاء الكروت الآن'}
-                  </button>
-                </div>
-              </div>
-
-              {selectedPackageId &&
-                !selectedProfileName && (
-                  <div
-                    style={{
-                      marginTop: 13,
-                      padding: 11,
-                      borderRadius: 10,
-                      background:
-                        '#fff7ed',
-                      border:
-                        '1px solid #fed7aa',
-                      color: '#c2410c',
-                      fontSize: 13,
-                      fontWeight: 800
-                    }}
-                  >
-                    اربط الباقة بـ User Manager
-                    Profile أولًا.
-                  </div>
-                )}
-
-              {previewCodes.length > 0 && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: 15,
-                    borderRadius: 13,
-                    background: '#f8fafc',
-                    border:
-                      '1px solid #e2e8f0'
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 900,
-                      marginBottom: 9
-                    }}
-                  >
-                    معاينة أول 10 أكواد
-                  </div>
-
+                  {/* إحصائيات الباقة */}
                   <div
                     style={{
                       display: 'grid',
                       gridTemplateColumns:
-                        'repeat(auto-fill, minmax(120px, 1fr))',
-                      gap: 8
+                        'repeat(3, minmax(0, 1fr))',
+                      borderTop: '1px solid #f1f5f9',
+                      borderBottom: isExpanded
+                        ? '1px solid #e5e7eb'
+                        : 'none'
                     }}
                   >
-                    {previewCodes.map(
-                      (code) => (
-                        <div
-                          key={code}
-                          style={{
-                            padding: 10,
-                            background:
-                              '#fff',
-                            border:
-                              '1px solid #e2e8f0',
-                            borderRadius: 9,
-                            textAlign:
-                              'center',
-                            fontFamily:
-                              'monospace',
-                            fontWeight: 800
-                          }}
-                        >
-                          {code}
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {creationResult && (
-                <div
-                  style={{
-                    marginTop: 16,
-                    padding: 17,
-                    borderRadius: 14,
-                    background:
-                      creationResult.success
-                        ? '#f0fdf4'
-                        : '#fef2f2',
-                    border:
-                      creationResult.success
-                        ? '1px solid #bbf7d0'
-                        : '1px solid #fecaca'
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 900,
-                      color:
-                        creationResult.success
-                          ? '#166534'
-                          : '#b91c1c',
-                      marginBottom: 9
-                    }}
-                  >
-                    {creationResult.success
-                      ? 'تم إنشاء الكروت بنجاح'
-                      : 'فشل إنشاء الكروت'}
-                  </div>
-
-                  {!creationResult.success && (
                     <div
                       style={{
-                        color: '#991b1b',
-                        fontSize: 13
+                        padding: '9px 8px',
+                        textAlign: 'center'
                       }}
                     >
-                      {
-                        creationResult.message
-                      }
-                    </div>
-                  )}
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#6b7280'
+                        }}
+                      >
+                        متاح
+                      </div>
 
-                  {creationResult.success &&
-                    creationResult.data && (
-                      <>
-                        <div
+                      <strong
+                        style={{
+                          color: '#166534',
+                          fontSize: 15
+                        }}
+                      >
+                        {stats.available}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: '9px 8px',
+                        textAlign: 'center',
+                        borderRight: '1px solid #f1f5f9',
+                        borderLeft: '1px solid #f1f5f9'
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#6b7280'
+                        }}
+                      >
+                        مع موزع
+                      </div>
+
+                      <strong
+                        style={{
+                          color: '#92400e',
+                          fontSize: 15
+                        }}
+                      >
+                        {stats.withDistributor}
+                      </strong>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: '9px 8px',
+                        textAlign: 'center'
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#6b7280'
+                        }}
+                      >
+                        مباع
+                      </div>
+
+                      <strong
+                        style={{
+                          color: '#991b1b',
+                          fontSize: 15
+                        }}
+                      >
+                        {stats.sold}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* إدارة كروت الباقة */}
+                  {isExpanded && (
+                    <div
+                      style={{
+                        padding: 14,
+                        background: '#f8fafc'
+                      }}
+                    >
+                      {/* بحث وفلترة */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 8,
+                          flexWrap: 'wrap',
+                          marginBottom: 14
+                        }}
+                      >
+                        <input
+                          value={currentSearch}
+                          onChange={(e) =>
+                            setPackageCardSearch((prev) => ({
+                              ...prev,
+                              [p.id]: e.target.value
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              applyPackageCardFilter(p.id);
+                            }
+                          }}
+                          placeholder="بحث عن كود..."
                           style={{
-                            display: 'grid',
-                            gridTemplateColumns:
-                              'repeat(auto-fit, minmax(150px, 1fr))',
-                            gap: 9
+                            flex: 1,
+                            minWidth: 150
+                          }}
+                        />
+
+                        <select
+                          value={currentStatus}
+                          onChange={(e) => {
+                            const value = e.target.value;
+
+                            setPackageCardStatus((prev) => ({
+                              ...prev,
+                              [p.id]: value
+                            }));
+
+                            setTimeout(() => {
+                              loadPackageCards(
+                                p.id,
+                                0,
+                                currentSearch,
+                                value
+                              );
+                            }, 0);
+                          }}
+                          style={{
+                            minWidth: 130
                           }}
                         >
-                          <div
-                            style={{
-                              padding: 11,
-                              background:
-                                '#fff',
-                              borderRadius: 10
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color:
-                                  '#64748b'
-                              }}
-                            >
-                              المطلوب
-                            </div>
+                          <option value="all">
+                            كل الحالات
+                          </option>
+                          <option value="available">
+                            متاح
+                          </option>
+                          <option value="with_distributor">
+                            مع موزع
+                          </option>
+                          <option value="sold">
+                            مباع
+                          </option>
+                        </select>
 
-                            <strong>
-                              {
-                                creationResult
-                                  .data
-                                  .requested
-                              }
-                            </strong>
-                          </div>
+                        <button
+                          type="button"
+                          className="btn-sm"
+                          onClick={() =>
+                            applyPackageCardFilter(p.id)
+                          }
+                          style={{
+                            padding: '7px 12px'
+                          }}
+                        >
+                          بحث
+                        </button>
+                      </div>
 
-                          <div
-                            style={{
-                              padding: 11,
-                              background:
-                                '#fff',
-                              borderRadius: 10
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color:
-                                  '#64748b'
-                              }}
-                            >
-                              في MikroTik
-                            </div>
-
-                            <strong>
-                              {
-                                creationResult
-                                  .data
-                                  .createdInMikrotik
-                              }
-                            </strong>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: 11,
-                              background:
-                                '#fff',
-                              borderRadius: 10
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color:
-                                  '#64748b'
-                              }}
-                            >
-                              في Supabase
-                            </div>
-
-                            <strong>
-                              {
-                                creationResult
-                                  .data
-                                  .savedInSupabase
-                              }
-                            </strong>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: 11,
-                              background:
-                                '#fff',
-                              borderRadius: 10
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color:
-                                  '#64748b'
-                              }}
-                            >
-                              فشل
-                            </div>
-
-                            <strong>
-                              {
-                                creationResult
-                                  .data
-                                  .failed
-                              }
-                            </strong>
-                          </div>
+                      {packageCardLoading[p.id] ? (
+                        <div
+                          style={{
+                            textAlign: 'center',
+                            padding: 25,
+                            color: '#6b7280'
+                          }}
+                        >
+                          جاري تحميل الكروت...
                         </div>
-
-                        {creationResult.data
-                          .results
-                          ?.successful
-                          ?.length > 0 && (
+                      ) : cards.length === 0 ? (
+                        <div
+                          style={{
+                            textAlign: 'center',
+                            padding: 25,
+                            background: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: 8,
+                            color: '#6b7280'
+                          }}
+                        >
+                          لا توجد كروت مطابقة.
+                        </div>
+                      ) : (
+                        <>
                           <div
                             style={{
-                              marginTop: 15
+                              display: 'grid',
+                              gap: 8
                             }}
                           >
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                marginBottom: 8
-                              }}
-                            >
-                              الكروت الناجحة
-                            </div>
+                            {cards.map((card) => {
+                              const statusStyle =
+                                STATUS_STYLES[card.status] || {
+                                  background: '#f3f4f6',
+                                  color: '#374151'
+                                };
 
-                            <div
-                              style={{
-                                display: 'flex',
-                                flexWrap:
-                                  'wrap',
-                                gap: 7
-                              }}
-                            >
-                              {creationResult.data.results.successful.map(
-                                (code) => (
-                                  <span
-                                    key={code}
-                                    style={{
-                                      padding:
-                                        '7px 10px',
-                                      borderRadius:
-                                        8,
-                                      background:
-                                        '#dcfce7',
-                                      color:
-                                        '#166534',
-                                      fontFamily:
-                                        'monospace',
-                                      fontWeight:
-                                        800,
-                                      fontSize:
-                                        12
-                                    }}
-                                  >
-                                    {code}
-                                  </span>
-                                )
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {creationResult.data
-                          .results
-                          ?.failed
-                          ?.length > 0 && (
-                          <div
-                            style={{
-                              marginTop: 15
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontWeight: 900,
-                                marginBottom: 8,
-                                color:
-                                  '#b91c1c'
-                              }}
-                            >
-                              الكروت الفاشلة
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'grid',
-                                gap: 7
-                              }}
-                            >
-                              {creationResult.data.results.failed.map(
-                                (
-                                  item,
-                                  index
-                                ) => (
+                              return (
+                                <div
+                                  key={card.id}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent:
+                                      'space-between',
+                                    gap: 8,
+                                    flexWrap: 'wrap',
+                                    padding: '10px 12px',
+                                    background: '#ffffff',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: 8
+                                  }}
+                                >
                                   <div
-                                    key={`${item.code}-${index}`}
                                     style={{
-                                      padding: 9,
-                                      borderRadius:
-                                        8,
-                                      background:
-                                        '#fff',
-                                      border:
-                                        '1px solid #fecaca',
-                                      fontSize:
-                                        12
+                                      minWidth: 0,
+                                      flex: 1
                                     }}
                                   >
-                                    <strong>
-                                      {
-                                        item.code
-                                      }
-                                    </strong>
+                                    <div
+                                      style={{
+                                        fontWeight: 800,
+                                        color: '#111827',
+                                        wordBreak: 'break-all'
+                                      }}
+                                    >
+                                      {card.code}
+                                    </div>
 
-                                    {' — '}
-
-                                    {item.error}
+                                    <div
+                                      style={{
+                                        marginTop: 4,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 7,
+                                        flexWrap: 'wrap'
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          ...statusStyle,
+                                          padding:
+                                            '3px 8px',
+                                          borderRadius:
+                                            999,
+                                          fontSize: 11,
+                                          fontWeight: 800
+                                        }}
+                                      >
+                                        {STATUS_LABELS[
+                                          card.status
+                                        ] ||
+                                          card.status ||
+                                          'غير معروف'}
+                                      </span>
+                                    </div>
                                   </div>
-                                )
-                              )}
-                            </div>
+
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      gap: 6,
+                                      flexWrap: 'wrap'
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="btn-sm"
+                                      onClick={() =>
+                                        copyCardCode(
+                                          card.code
+                                        )
+                                      }
+                                      style={{
+                                        padding:
+                                          '5px 9px'
+                                      }}
+                                    >
+                                      {copiedCode ===
+                                      String(card.code)
+                                        ? 'تم النسخ'
+                                        : 'نسخ'}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      className="btn-sm"
+                                      disabled={
+                                        deletingCardId ===
+                                        card.id
+                                      }
+                                      onClick={() =>
+                                        deleteCard(card)
+                                      }
+                                      style={{
+                                        backgroundColor:
+                                          '#dc2626',
+                                        color: '#ffffff',
+                                        border: 'none',
+                                        padding:
+                                          '5px 9px'
+                                      }}
+                                    >
+                                      {deletingCardId ===
+                                      card.id
+                                        ? 'حذف...'
+                                        : 'حذف'}
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        )}
-                      </>
-                    )}
+
+                          {/* التنقل بين الصفحات */}
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent:
+                                'space-between',
+                              gap: 10,
+                              marginTop: 12,
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            <button
+                              type="button"
+                              className="btn-sm"
+                              disabled={
+                                currentPage === 0 ||
+                                packageCardLoading[p.id]
+                              }
+                              onClick={() =>
+                                changePackageCardPage(
+                                  p.id,
+                                  currentPage - 1
+                                )
+                              }
+                              style={{
+                                padding: '6px 12px'
+                              }}
+                            >
+                              السابق
+                            </button>
+
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: '#6b7280'
+                              }}
+                            >
+                              الصفحة {currentPage + 1}
+                            </span>
+
+                            <button
+                              type="button"
+                              className="btn-sm"
+                              disabled={
+                                cards.length < PAGE_SIZE ||
+                                packageCardLoading[p.id]
+                              }
+                              onClick={() =>
+                                changePackageCardPage(
+                                  p.id,
+                                  currentPage + 1
+                                )
+                              }
+                              style={{
+                                padding: '6px 12px'
+                              }}
+                            >
+                              التالي
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-              )}
-            </>
+              );
+            })}
+          </div>
+
+          {packages.length === 0 && (
+            <div
+              style={{
+                textAlign: 'center',
+                padding: 30,
+                color: '#6b7280'
+              }}
+            >
+              لا توجد باقات حاليًا.
+            </div>
           )}
         </div>
       </div>
