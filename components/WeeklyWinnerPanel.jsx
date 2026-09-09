@@ -364,9 +364,3 @@ export default function DistributorWeeklyWinner() {
     </div>
   );
 }
-
-[/code]
-
-ملاحظة مهمة قبل رفعه: هذا الملف لا ينفذ السحب ولا يختار أي فائز. هو فقط يعرض النتيجة الرسمية التي أنشأتها "draw_weekly_winners()".
-
-الآن ننتقل إلى "WeeklyGiveawayBanner.jsx" ونعدله بنفس الطريقة، بحيث يتوقف نهائيًا عن اختيار فائز عشوائي من "cards".
