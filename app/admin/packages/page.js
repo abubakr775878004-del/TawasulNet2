@@ -7,6 +7,10 @@ import { supabase } from '../../../lib/supabase';
 
 const PAGE_SIZE = 50;
 
+// الحد الذي عنده يظهر تنبيه المخزون المنخفض.
+// المخزون يعتمد على الكروت التي حالتها available فقط.
+const LOW_STOCK_THRESHOLD = 10;
+
 const STATUS_LABELS = {
   available: 'متاح',
   with_distributor: 'مع موزع',
@@ -169,6 +173,26 @@ function ChevronIcon({ open }) {
       aria-hidden="true"
     >
       <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function WarningIcon() {
+  return (
+    <svg
+      width="21"
+      height="21"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
     </svg>
   );
 }
@@ -337,6 +361,7 @@ export default function PackagesPage() {
               .select('id', { count: 'exact', head: true })
               .eq('package_id', pkg.id),
 
+            // المخزون الحقيقي = الكروت المتاحة فقط
             supabase
               .from('cards')
               .select('id', { count: 'exact', head: true })
@@ -675,6 +700,28 @@ export default function PackagesPage() {
     [packageStats]
   );
 
+  // الباقات التي مخزونها منخفض.
+  // available فقط هو الذي يدخل في هذا الحساب.
+  const lowStockPackages = useMemo(
+    () =>
+      packages.filter((pkg) => {
+        const stats = packageStats[pkg.id];
+        const available = stats?.available || 0;
+
+        return available <= LOW_STOCK_THRESHOLD;
+      }),
+    [packages, packageStats]
+  );
+
+  const outOfStockPackages = useMemo(
+    () =>
+      lowStockPackages.filter((pkg) => {
+        const stats = packageStats[pkg.id];
+        return (stats?.available || 0) === 0;
+      }),
+    [lowStockPackages, packageStats]
+  );
+
   if (loading) return null;
 
   return (
@@ -790,6 +837,151 @@ export default function PackagesPage() {
             }}
           >
             {error}
+          </div>
+        )}
+
+        {/* تنبيه المخزون المنخفض */}
+        {!packagesLoading && lowStockPackages.length > 0 && (
+          <div
+            style={{
+              marginBottom: 18,
+              padding: '14px 15px',
+              borderRadius: 13,
+              background:
+                outOfStockPackages.length > 0
+                  ? '#fff7ed'
+                  : '#fffbeb',
+              border:
+                outOfStockPackages.length > 0
+                  ? '1px solid #fed7aa'
+                  : '1px solid #fde68a',
+              boxShadow: '0 3px 10px rgba(15, 23, 42, 0.025)'
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 11
+              }}
+            >
+              <div
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background:
+                    outOfStockPackages.length > 0
+                      ? '#ffedd5'
+                      : '#fef3c7',
+                  color:
+                    outOfStockPackages.length > 0
+                      ? '#ea580c'
+                      : '#d97706',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}
+              >
+                <WarningIcon />
+              </div>
+
+              <div
+                style={{
+                  minWidth: 0,
+                  flex: 1
+                }}
+              >
+                <div
+                  style={{
+                    color:
+                      outOfStockPackages.length > 0
+                        ? '#9a3412'
+                        : '#92400e',
+                    fontSize: 14,
+                    fontWeight: 900,
+                    marginBottom: 5
+                  }}
+                >
+                  {outOfStockPackages.length > 0
+                    ? 'تنبيه: توجد باقات نفد مخزونها أو مخزونها منخفض'
+                    : 'تنبيه: توجد باقات منخفضة المخزون'}
+                </div>
+
+                <div
+                  style={{
+                    color:
+                      outOfStockPackages.length > 0
+                        ? '#c2410c'
+                        : '#b45309',
+                    fontSize: 12.5,
+                    lineHeight: 1.7
+                  }}
+                >
+                  يوجد {lowStockPackages.length} باقة تحتاج إلى متابعة.
+                  يتم احتساب المخزون من الكروت المتاحة فقط، وحد التنبيه هو{' '}
+                  <strong>{LOW_STOCK_THRESHOLD}</strong> كروت أو أقل.
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 7,
+                    marginTop: 9
+                  }}
+                >
+                  {lowStockPackages.map((pkg) => {
+                    const available =
+                      packageStats[pkg.id]?.available || 0;
+
+                    const isOutOfStock = available === 0;
+
+                    return (
+                      <button
+                        key={pkg.id}
+                        type="button"
+                        onClick={() => {
+                          setExpandedPackageId(pkg.id);
+
+                          const search =
+                            packageCardSearch[pkg.id] || '';
+                          const status =
+                            packageCardStatus[pkg.id] || 'all';
+
+                          loadPackageCards(
+                            pkg.id,
+                            0,
+                            search,
+                            status
+                          );
+                        }}
+                        style={{
+                          borderRadius: 8,
+                          border: isOutOfStock
+                            ? '1px solid #fdba74'
+                            : '1px solid #fcd34d',
+                          background: '#ffffff',
+                          color: isOutOfStock
+                            ? '#c2410c'
+                            : '#92400e',
+                          padding: '7px 10px',
+                          fontSize: 11.5,
+                          fontWeight: 850,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {pkg.name} —{' '}
+                        {isOutOfStock
+                          ? 'نفد المخزون'
+                          : `${available} متاح`}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1448,12 +1640,22 @@ export default function PackagesPage() {
                 const currentStatus =
                   packageCardStatus[p.id] || 'all';
 
+                const isLowStock =
+                  stats.available <= LOW_STOCK_THRESHOLD;
+
+                const isOutOfStock =
+                  stats.available === 0;
+
                 return (
                   <div
                     key={p.id}
                     style={{
                       background: '#ffffff',
-                      border: isExpanded
+                      border: isOutOfStock
+                        ? '1px solid #fdba74'
+                        : isLowStock
+                        ? '1px solid #fcd34d'
+                        : isExpanded
                         ? '1px solid #93c5fd'
                         : '1px solid #e2e8f0',
                       borderRadius: 13,
@@ -1497,15 +1699,27 @@ export default function PackagesPage() {
                                 width: 35,
                                 height: 35,
                                 borderRadius: 9,
-                                background: '#eff6ff',
-                                color: '#2563eb',
+                                background: isOutOfStock
+                                  ? '#fff7ed'
+                                  : isLowStock
+                                  ? '#fffbeb'
+                                  : '#eff6ff',
+                                color: isOutOfStock
+                                  ? '#ea580c'
+                                  : isLowStock
+                                  ? '#d97706'
+                                  : '#2563eb',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 flexShrink: 0
                               }}
                             >
-                              <PackageIcon />
+                              {isLowStock ? (
+                                <WarningIcon />
+                              ) : (
+                                <PackageIcon />
+                              )}
                             </div>
 
                             <div
@@ -1554,6 +1768,39 @@ export default function PackagesPage() {
                         </div>
                       </div>
 
+                      {/* تنبيه الباقة نفسها */}
+                      {isLowStock && (
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            marginTop: 10,
+                            padding: '8px 9px',
+                            borderRadius: 8,
+                            background: isOutOfStock
+                              ? '#fff7ed'
+                              : '#fffbeb',
+                            border: isOutOfStock
+                              ? '1px solid #fed7aa'
+                              : '1px solid #fde68a',
+                            color: isOutOfStock
+                              ? '#c2410c'
+                              : '#92400e',
+                            fontSize: 11.5,
+                            fontWeight: 850
+                          }}
+                        >
+                          <WarningIcon />
+
+                          <span>
+                            {isOutOfStock
+                              ? 'المخزون نافد — لا توجد كروت متاحة حاليًا'
+                              : `مخزون منخفض — متبقي ${stats.available} كرت متاح فقط`}
+                          </span>
+                        </div>
+                      )}
+
                       {/* أرقام الحالة */}
                       <div
                         style={{
@@ -1568,13 +1815,17 @@ export default function PackagesPage() {
                           style={{
                             padding: '8px 7px',
                             borderRadius: 8,
-                            background: '#ecfdf5',
+                            background: isLowStock
+                              ? '#fffbeb'
+                              : '#ecfdf5',
                             textAlign: 'center'
                           }}
                         >
                           <div
                             style={{
-                              color: '#047857',
+                              color: isLowStock
+                                ? '#b45309'
+                                : '#047857',
                               fontSize: 11,
                               fontWeight: 700
                             }}
@@ -1584,7 +1835,9 @@ export default function PackagesPage() {
 
                           <div
                             style={{
-                              color: '#065f46',
+                              color: isLowStock
+                                ? '#92400e'
+                                : '#065f46',
                               fontSize: 15,
                               fontWeight: 900,
                               marginTop: 2
