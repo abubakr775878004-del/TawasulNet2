@@ -705,9 +705,15 @@ export default function DistributorPage() {
     }
   }
 
-  async function sendNoteToAdmin(e) {
-    e.preventDefault();
-
+  /*
+   * إرسال ملاحظة للمدير.
+   *
+   * مهم:
+   * هذه الدالة لا تعتمد على form submission.
+   * يتم استدعاؤها مباشرة من زر type="button"
+   * حتى لا يحدث reload أو انتقال لصفحة أخرى.
+   */
+  async function sendNoteToAdmin() {
     if (!profile || noteBusy) {
       return;
     }
@@ -1357,11 +1363,13 @@ export default function DistributorPage() {
             </h3>
           </div>
 
-          <form
-            onSubmit={
-              sendNoteToAdmin
-            }
-          >
+          {/*
+           * لا نستخدم form هنا حتى لا يحدث أي
+           * انتقال أو reload للصفحة.
+           *
+           * الزر type="button" ويستدعي الدالة مباشرة.
+           */}
+          <div>
             <textarea
               rows={3}
               value={
@@ -1397,7 +1405,11 @@ export default function DistributorPage() {
                       '✓'
                     )
                       ? '#10B981'
-                      : '#DC2626',
+                      : noteMessage.startsWith(
+                          '⚠️'
+                        )
+                        ? '#D97706'
+                        : '#DC2626',
                 }}
               >
                 {noteMessage}
@@ -1405,7 +1417,10 @@ export default function DistributorPage() {
             )}
 
             <button
-              type="submit"
+              type="button"
+              onClick={
+                sendNoteToAdmin
+              }
               disabled={
                 noteBusy ||
                 !noteContent.trim()
@@ -1421,7 +1436,7 @@ export default function DistributorPage() {
                 ? 'جاري الإرسال...'
                 : 'إرسال للمدير'}
             </button>
-          </form>
+          </div>
         </div>
       </div>
 
