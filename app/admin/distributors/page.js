@@ -627,6 +627,9 @@ try {
 
 // =====================================================
 // حفظ الكرت الشخصي
+//
+// يتم الحفظ من خلال RPC آمن مخصص للكرت الشخصي فقط.
+// لا يتم تعديل profiles مباشرة من الواجهة.
 // =====================================================
 
 async function savePersonalCard(id) {
@@ -635,18 +638,19 @@ setBusyId(id);
 
 try {
   const {
-    error: updateError
-  } = await supabase
-    .from('profiles')
-    .update({
-      personal_card:
-        personalCards[id] ||
+    error: rpcError
+  } = await supabase.rpc(
+    'set_distributor_personal_card',
+    {
+      p_distributor_id: id,
+      p_personal_card:
+        personalCards[id]?.trim() ||
         null
-    })
-    .eq('id', id);
+    }
+  );
 
-  if (updateError) {
-    throw updateError;
+  if (rpcError) {
+    throw rpcError;
   }
 
   await loadList();
