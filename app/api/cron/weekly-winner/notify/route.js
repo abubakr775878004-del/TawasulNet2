@@ -10,21 +10,17 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 function isAuthorized(req) {
-  const secret =
-    process.env.CRON_SECRET?.trim();
+  const secret = process.env.CRON_SECRET?.trim();
 
   if (!secret) {
-    console.error(
-      'CRON_SECRET غير موجود'
-    );
+    console.error('CRON_SECRET غير موجود');
     return false;
   }
 
   const authorization =
     req.headers.get('authorization') || '';
 
-  return authorization ===
-    `Bearer ${secret}`;
+  return authorization === `Bearer ${secret}`;
 }
 
 export async function GET(req) {
@@ -33,6 +29,10 @@ export async function GET(req) {
     // التحقق من Vercel Cron
     // ==========================================
     if (!isAuthorized(req)) {
+      console.error(
+        'Weekly winner notification: طلب غير مصرح به'
+      );
+
       return NextResponse.json(
         {
           success: false,
@@ -51,10 +51,11 @@ export async function GET(req) {
     const serviceRoleKey =
       process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
 
-    if (
-      !supabaseUrl ||
-      !serviceRoleKey
-    ) {
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error(
+        'Weekly winner notification: متغيرات Supabase غير مكتملة'
+      );
+
       return NextResponse.json(
         {
           success: false,
@@ -77,26 +78,57 @@ export async function GET(req) {
     );
 
     // ==========================================
-    // الوقت الحالي بتوقيت اليمن
+    // استخراج الوقت الحالي بتوقيت اليمن
+    // بطريقة آمنة لا تعتمد على Timezone الخادم
     // ==========================================
-    const localNow = new Date(
-      new Date().toLocaleString(
-        'en-US',
-        {
-          timeZone: 'Asia/Aden',
-        }
-      )
+    const now = new Date();
+
+    const adenParts = new Intl.DateTimeFormat(
+      'en-US',
+      {
+        timeZone: 'Asia/Aden',
+        weekday: 'short',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }
+    ).formatToParts(now);
+
+    const getPart = (type) =>
+      adenParts.find(
+        (part) => part.type === type
+      )?.value;
+
+    const weekday = getPart('weekday');
+    const year = getPart('year');
+    const month = getPart('month');
+    const date = getPart('day');
+    const hour = getPart('hour');
+    const minute = getPart('minute');
+    const second = getPart('second');
+
+    console.log(
+      'Weekly winner notification - Aden time:',
+      `${year}-${month}-${date} ${hour}:${minute}:${second}`
     );
 
-    const day = localNow.getDay();
+    // الجمعة فقط
+    if (weekday !== 'Fri') {
+      console.log(
+        'Weekly winner notification: اليوم ليس الجمعة'
+      );
 
-    // الجمعة = 5
-    if (day !== 5) {
       return NextResponse.json(
         {
           success: false,
           message:
             'إشعار الفائزين يعمل يوم الجمعة فقط',
+          local_time:
+            `${year}-${month}-${date} ${hour}:${minute}:${second}`,
         },
         { status: 400 }
       );
@@ -105,21 +137,13 @@ export async function GET(req) {
     // ==========================================
     // استخراج تاريخ الجمعة
     // ==========================================
-    const year =
-      localNow.getFullYear();
-
-    const month =
-      String(
-        localNow.getMonth() + 1
-      ).padStart(2, '0');
-
-    const date =
-      String(
-        localNow.getDate()
-      ).padStart(2, '0');
-
     const weekKey =
       `${year}-${month}-${date}`;
+
+    console.log(
+      'Weekly winner notification - week_key:',
+      weekKey
+    );
 
     // ==========================================
     // جلب الفائزين المحفوظين
@@ -156,10 +180,16 @@ export async function GET(req) {
         {
           success: false,
           error: error.message,
+          week_key: weekKey,
         },
         { status: 500 }
       );
     }
+
+    console.log(
+      'Weekly winner notification - winner count:',
+      winners?.length || 0
+    );
 
     // ==========================================
     // يجب أن يكون هناك 3 فائزين بالضبط
@@ -168,6 +198,14 @@ export async function GET(req) {
       !winners ||
       winners.length !== 3
     ) {
+      console.error(
+        'Weekly winner notification: لم يتم العثور على 3 فائزين',
+        {
+          week_key: weekKey,
+          winner_count: winners?.length || 0,
+        }
+      );
+
       return NextResponse.json(
         {
           success: false,
@@ -191,12 +229,19 @@ export async function GET(req) {
       );
 
     if (alreadySent) {
+      console.log(
+        'Weekly winner notification: تم الإرسال مسبقًا',
+        {
+          week_key: weekKey,
+        }
+      );
+
       return NextResponse.json(
         {
           success: true,
           already_sent: true,
           message:
-            'تم إرسال فائزين هذا الأسبوع مسبقاً',
+            'تم إرسال الفائزين هذا الأسبوع مسبقاً',
           week_key: weekKey,
         },
         { status: 200 }
@@ -204,16 +249,22 @@ export async function GET(req) {
     }
 
     // ==========================================
-    // إنشاء نفس رسالة الفائزين المحفوظين
+    // إنشاء رسالة الفائزين
     // ==========================================
     const message =
       buildWeeklyWinnerMessage(
         winners
       );
 
+    console.log(
+      'Weekly winner notification: جاري إرسال رسالة Telegram',
+      {
+        week_key: weekKey,
+      }
+    );
+
     // ==========================================
-    // إرسال إلى نفس بوت تيليجرام
-    // المستخدم الخاص بطلب الكروت
+    // إرسال إلى Telegram
     // ==========================================
     const telegramResult =
       await sendTelegramMessage(
@@ -222,6 +273,15 @@ export async function GET(req) {
 
     const sentAt =
       new Date().toISOString();
+
+    console.log(
+      'Weekly winner notification: تم إرسال Telegram بنجاح',
+      {
+        week_key: weekKey,
+        messageId:
+          telegramResult?.messageId || null,
+      }
+    );
 
     // ==========================================
     // تسجيل وقت الإرسال
@@ -248,12 +308,20 @@ export async function GET(req) {
           database_updated: false,
           warning:
             'تم إرسال الرسالة ولكن لم يتم تسجيل وقت الإرسال في قاعدة البيانات',
+          week_key: weekKey,
           telegramMessageId:
-            telegramResult.messageId,
+            telegramResult?.messageId || null,
         },
         { status: 200 }
       );
     }
+
+    console.log(
+      'Weekly winner notification: تم تسجيل telegram_sent_at بنجاح',
+      {
+        week_key: weekKey,
+      }
+    );
 
     return NextResponse.json(
       {
@@ -263,7 +331,7 @@ export async function GET(req) {
         week_key: weekKey,
         winners,
         telegramMessageId:
-          telegramResult.messageId,
+          telegramResult?.messageId || null,
       },
       { status: 200 }
     );
