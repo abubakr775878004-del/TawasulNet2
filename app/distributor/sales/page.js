@@ -23,6 +23,22 @@ function formatNumericDate(dateString) {
   return `${year}/${month}/${day}`;
 }
 
+function formatDateTime(dateString) {
+  if (!dateString) return '';
+
+  const d = new Date(dateString);
+
+  if (isNaN(d.getTime())) return dateString;
+
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+
+  return `${year}/${month}/${day} - ${hours}:${minutes}`;
+}
+
 function getDateKey(dateString) {
   if (!dateString) return '';
 
@@ -68,6 +84,7 @@ export default function DistributorSalesPage() {
   const [currentDebt, setCurrentDebt] = useState(0);
   const [commissionRate, setCommissionRate] = useState(10);
   const [dataLoading, setDataLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const today = new Date();
 
@@ -98,10 +115,14 @@ export default function DistributorSalesPage() {
     currentYearValue
   );
 
-  async function loadData() {
+  async function loadData(showRefresh = false) {
     if (!profile) return;
 
-    setDataLoading(true);
+    if (showRefresh) {
+      setRefreshing(true);
+    } else {
+      setDataLoading(true);
+    }
 
     try {
       /*
@@ -216,6 +237,7 @@ export default function DistributorSalesPage() {
       );
     } finally {
       setDataLoading(false);
+      setRefreshing(false);
     }
   }
 
@@ -227,15 +249,6 @@ export default function DistributorSalesPage() {
 
   /*
    * فلترة المبيعات حسب نوع التقرير.
-   *
-   * يومي:
-   * YYYY-MM-DD
-   *
-   * شهري:
-   * YYYY-MM
-   *
-   * سنوي:
-   * YYYY
    */
   const filteredSales = useMemo(() => {
     return soldCards.filter((sale) => {
@@ -290,19 +303,26 @@ export default function DistributorSalesPage() {
     filteredSales.length;
 
   /*
-   * عمولة الموزع حسب النسبة المخزنة
-   * في profiles.commission_rate.
+   * عمولة الموزع.
    */
   const distributorCommission =
     salesTotal *
     (commissionRate / 100);
 
   /*
-   * حصة المدير من مبيعات الفترة.
+   * حصة المدير.
    */
   const managerShare =
     salesTotal -
     distributorCommission;
+
+  /*
+   * متوسط قيمة الكرت.
+   */
+  const averageSaleValue =
+    soldCardsCount > 0
+      ? salesTotal / soldCardsCount
+      : 0;
 
   /*
    * قيمة المخزون الحالي.
@@ -369,6 +389,21 @@ export default function DistributorSalesPage() {
     selectedYear
   ]);
 
+  function selectToday() {
+    setReportType('day');
+    setSelectedDay(currentDateValue);
+  }
+
+  function selectCurrentMonth() {
+    setReportType('month');
+    setSelectedMonth(currentMonthValue);
+  }
+
+  function selectCurrentYear() {
+    setReportType('year');
+    setSelectedYear(currentYearValue);
+  }
+
   if (loading || !profile) {
     return null;
   }
@@ -386,14 +421,56 @@ export default function DistributorSalesPage() {
 
         {/* رأس الصفحة */}
 
-        <div className="topbar">
+        <div
+          className="topbar"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 18
+          }}
+        >
+
           <div>
-            <h1>تقارير المبيعات</h1>
+            <h1
+              style={{
+                marginBottom: 5
+              }}
+            >
+              تقارير المبيعات
+            </h1>
 
             <div className="greet">
               متابعة مبيعاتك وأرباحك وحالة حسابك
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            style={{
+              border: '1px solid #CBD5E1',
+              background: refreshing
+                ? '#F1F5F9'
+                : '#FFFFFF',
+              color: '#334155',
+              borderRadius: 10,
+              padding: '10px 15px',
+              fontWeight: 800,
+              cursor: refreshing
+                ? 'not-allowed'
+                : 'pointer',
+              opacity: refreshing ? 0.7 : 1
+            }}
+          >
+            {refreshing
+              ? 'جاري التحديث...'
+              : '↻ تحديث التقرير'}
+          </button>
+
         </div>
 
         {/* اختيار نوع التقرير */}
@@ -404,37 +481,79 @@ export default function DistributorSalesPage() {
             padding: 16,
             borderRadius: 16,
             border: '1px solid #E2E8F0',
-            marginBottom: 16
+            marginBottom: 16,
+            boxShadow:
+              '0 2px 8px rgba(15,23,42,0.03)'
           }}
         >
 
           <div
             style={{
-              fontSize: 13,
-              fontWeight: 900,
-              color: '#334155',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
               marginBottom: 12
             }}
           >
-            نوع التقرير
+
+            <div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 900,
+                  color: '#0F172A'
+                }}
+              >
+                فترة التقرير
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#64748B',
+                  marginTop: 3
+                }}
+              >
+                اختر الفترة التي تريد عرض مبيعاتها
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#2563EB',
+                background: '#EFF6FF',
+                padding: '6px 10px',
+                borderRadius: 8
+              }}
+            >
+              {reportTitle}
+            </div>
+
           </div>
+
+          {/* أنواع التقارير */}
 
           <div
             style={{
               display: 'grid',
               gridTemplateColumns:
-                '1fr 1fr 1fr',
+                'repeat(3, minmax(0, 1fr))',
               gap: 8,
-              marginBottom: 14
+              marginBottom: 12
             }}
           >
 
             <button
+              type="button"
               onClick={() =>
                 setReportType('day')
               }
               style={{
-                padding: '10px',
+                padding: '11px 8px',
                 borderRadius: 10,
                 border:
                   reportType === 'day'
@@ -448,7 +567,7 @@ export default function DistributorSalesPage() {
                   reportType === 'day'
                     ? '#1D4ED8'
                     : '#475569',
-                fontWeight: 800,
+                fontWeight: 900,
                 cursor: 'pointer'
               }}
             >
@@ -456,11 +575,12 @@ export default function DistributorSalesPage() {
             </button>
 
             <button
+              type="button"
               onClick={() =>
                 setReportType('month')
               }
               style={{
-                padding: '10px',
+                padding: '11px 8px',
                 borderRadius: 10,
                 border:
                   reportType === 'month'
@@ -474,7 +594,7 @@ export default function DistributorSalesPage() {
                   reportType === 'month'
                     ? '#1D4ED8'
                     : '#475569',
-                fontWeight: 800,
+                fontWeight: 900,
                 cursor: 'pointer'
               }}
             >
@@ -482,11 +602,12 @@ export default function DistributorSalesPage() {
             </button>
 
             <button
+              type="button"
               onClick={() =>
                 setReportType('year')
               }
               style={{
-                padding: '10px',
+                padding: '11px 8px',
                 borderRadius: 10,
                 border:
                   reportType === 'year'
@@ -500,11 +621,75 @@ export default function DistributorSalesPage() {
                   reportType === 'year'
                     ? '#1D4ED8'
                     : '#475569',
-                fontWeight: 800,
+                fontWeight: 900,
                 cursor: 'pointer'
               }}
             >
               سنوي
+            </button>
+
+          </div>
+
+          {/* اختصارات */}
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              flexWrap: 'wrap',
+              marginBottom: 12
+            }}
+          >
+
+            <button
+              type="button"
+              onClick={selectToday}
+              style={{
+                border: '1px solid #DBEAFE',
+                background: '#F8FAFC',
+                color: '#1D4ED8',
+                padding: '7px 11px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              اليوم
+            </button>
+
+            <button
+              type="button"
+              onClick={selectCurrentMonth}
+              style={{
+                border: '1px solid #DBEAFE',
+                background: '#F8FAFC',
+                color: '#1D4ED8',
+                padding: '7px 11px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              هذا الشهر
+            </button>
+
+            <button
+              type="button"
+              onClick={selectCurrentYear}
+              style={{
+                border: '1px solid #DBEAFE',
+                background: '#F8FAFC',
+                color: '#1D4ED8',
+                padding: '7px 11px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              هذه السنة
             </button>
 
           </div>
@@ -528,7 +713,8 @@ export default function DistributorSalesPage() {
                   '1.5px solid #CBD5E1',
                 fontSize: 14,
                 fontWeight: 700,
-                background: '#F8FAFC'
+                background: '#F8FAFC',
+                boxSizing: 'border-box'
               }}
             />
           )}
@@ -550,7 +736,8 @@ export default function DistributorSalesPage() {
                   '1.5px solid #CBD5E1',
                 fontSize: 14,
                 fontWeight: 700,
-                background: '#F8FAFC'
+                background: '#F8FAFC',
+                boxSizing: 'border-box'
               }}
             />
           )}
@@ -571,7 +758,8 @@ export default function DistributorSalesPage() {
                   '1.5px solid #CBD5E1',
                 fontSize: 14,
                 fontWeight: 700,
-                background: '#F8FAFC'
+                background: '#F8FAFC',
+                boxSizing: 'border-box'
               }}
             >
               <option value="2025">
@@ -594,31 +782,45 @@ export default function DistributorSalesPage() {
 
         </div>
 
-        {/* عنوان الفترة */}
+        {/* الفترة الحالية */}
 
         <div
           style={{
-            background: '#F8FAFC',
+            background:
+              'linear-gradient(135deg, #F8FAFC, #F1F5F9)',
             border:
               '1px solid #E2E8F0',
             borderRadius: 12,
-            padding: '10px 14px',
+            padding: '11px 14px',
             marginBottom: 16,
-            fontSize: 13,
-            fontWeight: 800,
-            color: '#475569'
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 10,
+            flexWrap: 'wrap'
           }}
         >
-          التقرير الحالي:
-          {' '}
-          <span
+
+          <div
             style={{
-              color: '#0F172A',
-              marginRight: 6
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#64748B'
+            }}
+          >
+            التقرير الحالي
+          </div>
+
+          <div
+            style={{
+              fontSize: 14,
+              fontWeight: 900,
+              color: '#0F172A'
             }}
           >
             {reportTitle}
-          </span>
+          </div>
+
         </div>
 
         {/* بطاقات التقرير */}
@@ -627,7 +829,7 @@ export default function DistributorSalesPage() {
           style={{
             display: 'grid',
             gridTemplateColumns:
-              '1fr 1fr',
+              'repeat(2, minmax(0, 1fr))',
             gap: 12,
             marginBottom: 16
           }}
@@ -645,6 +847,7 @@ export default function DistributorSalesPage() {
                 '1px solid #BFDBFE'
             }}
           >
+
             <div
               style={{
                 fontSize: 12,
@@ -657,22 +860,23 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                fontSize: 22,
+                fontSize: 25,
                 fontWeight: 900,
                 color: '#1E3A8A',
-                marginTop: 5
+                marginTop: 6
               }}
             >
-              {soldCardsCount}
-              {' '}
+              {formatNumber(soldCardsCount)}
               <span
                 style={{
-                  fontSize: 12
+                  fontSize: 12,
+                  marginRight: 5
                 }}
               >
                 كرت
               </span>
             </div>
+
           </div>
 
           {/* إجمالي المبيعات */}
@@ -687,6 +891,7 @@ export default function DistributorSalesPage() {
                 '1px solid #DDD6FE'
             }}
           >
+
             <div
               style={{
                 fontSize: 12,
@@ -699,22 +904,23 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 900,
                 color: '#4C1D95',
-                marginTop: 5
+                marginTop: 6
               }}
             >
               {formatNumber(salesTotal)}
-              {' '}
               <span
                 style={{
-                  fontSize: 11
+                  fontSize: 11,
+                  marginRight: 5
                 }}
               >
                 ر.ي
               </span>
             </div>
+
           </div>
 
           {/* عمولة الموزع */}
@@ -729,6 +935,7 @@ export default function DistributorSalesPage() {
                 '1px solid #A7F3D0'
             }}
           >
+
             <div
               style={{
                 fontSize: 12,
@@ -741,24 +948,25 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 900,
                 color: '#059669',
-                marginTop: 5
+                marginTop: 6
               }}
             >
               {formatNumber(
                 distributorCommission
               )}
-              {' '}
               <span
                 style={{
-                  fontSize: 11
+                  fontSize: 11,
+                  marginRight: 5
                 }}
               >
                 ر.ي
               </span>
             </div>
+
           </div>
 
           {/* حصة المدير */}
@@ -773,6 +981,7 @@ export default function DistributorSalesPage() {
                 '1px solid #FED7AA'
             }}
           >
+
             <div
               style={{
                 fontSize: 12,
@@ -785,24 +994,107 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                fontSize: 20,
+                fontSize: 22,
                 fontWeight: 900,
                 color: '#9A3412',
-                marginTop: 5
+                marginTop: 6
               }}
             >
               {formatNumber(
                 managerShare
               )}
-              {' '}
               <span
                 style={{
-                  fontSize: 11
+                  fontSize: 11,
+                  marginRight: 5
                 }}
               >
                 ر.ي
               </span>
             </div>
+
+          </div>
+
+          {/* متوسط البيع */}
+
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #F0FDFA, #CCFBF1)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #99F6E4'
+            }}
+          >
+
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#0F766E'
+              }}
+            >
+              متوسط قيمة الكرت
+            </div>
+
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: '#115E59',
+                marginTop: 6
+              }}
+            >
+              {formatNumber(
+                averageSaleValue
+              )}
+              <span
+                style={{
+                  fontSize: 11,
+                  marginRight: 5
+                }}
+              >
+                ر.ي
+              </span>
+            </div>
+
+          </div>
+
+          {/* نسبة العمولة */}
+
+          <div
+            style={{
+              background:
+                'linear-gradient(135deg, #F8FAFC, #E2E8F0)',
+              padding: 16,
+              borderRadius: 16,
+              border:
+                '1px solid #CBD5E1'
+            }}
+          >
+
+            <div
+              style={{
+                fontSize: 12,
+                fontWeight: 800,
+                color: '#475569'
+              }}
+            >
+              نسبة العمولة
+            </div>
+
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: '#0F172A',
+                marginTop: 6
+              }}
+            >
+              {commissionRate}%
+            </div>
+
           </div>
 
         </div>
@@ -826,31 +1118,60 @@ export default function DistributorSalesPage() {
 
           <div
             style={{
-              fontSize: 12,
-              fontWeight: 700,
-              opacity: 0.9,
-              marginBottom: 5
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap'
             }}
           >
-            المبلغ الحالي المستحق للمدير
-          </div>
 
-          <div
-            style={{
-              fontSize: 25,
-              fontWeight: 900
-            }}
-          >
-            {formatNumber(currentDebt)}
-            {' '}
-            <span
+            <div>
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  opacity: 0.9,
+                  marginBottom: 5
+                }}
+              >
+                المبلغ الحالي المستحق للمدير
+              </div>
+
+              <div
+                style={{
+                  fontSize: 27,
+                  fontWeight: 900
+                }}
+              >
+                {formatNumber(currentDebt)}
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 500,
+                    marginRight: 5
+                  }}
+                >
+                  ر.ي
+                </span>
+              </div>
+            </div>
+
+            <div
               style={{
-                fontSize: 13,
-                fontWeight: 500
+                background:
+                  'rgba(255,255,255,0.14)',
+                borderRadius: 10,
+                padding: '8px 12px',
+                fontSize: 11,
+                fontWeight: 800
               }}
             >
-              ر.ي
-            </span>
+              {currentDebt > 0
+                ? 'يوجد مبلغ مستحق'
+                : 'لا يوجد دين حالي'}
+            </div>
+
           </div>
 
         </div>
@@ -865,71 +1186,117 @@ export default function DistributorSalesPage() {
               '1px solid #E2E8F0',
             borderRadius: 16,
             padding: 16,
-            marginBottom: 16
+            marginBottom: 16,
+            boxShadow:
+              '0 2px 8px rgba(15,23,42,0.03)'
           }}
         >
-
-          <h3
-            style={{
-              margin:
-                '0 0 12px 0',
-              fontSize: 15,
-              fontWeight: 900,
-              color: '#0F172A'
-            }}
-          >
-            المخزون الحالي
-          </h3>
 
           <div
             style={{
               display: 'flex',
-              justifyContent:
-                'space-between',
-              alignItems:
-                'center',
-              background: '#F8FAFC',
-              padding: '12px 14px',
-              borderRadius: 12,
-              border:
-                '1px solid #E2E8F0'
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 12
             }}
           >
 
             <div>
-              <div
+              <h3
                 style={{
-                  fontSize: 12,
-                  fontWeight: 800,
-                  color: '#475569'
+                  margin: 0,
+                  fontSize: 15,
+                  fontWeight: 900,
+                  color: '#0F172A'
                 }}
               >
-                الكروت المتبقية لديك
-              </div>
+                المخزون الحالي
+              </h3>
 
               <div
                 style={{
-                  fontSize: 18,
-                  fontWeight: 900,
-                  color: '#0F172A',
-                  marginTop: 4
+                  fontSize: 11,
+                  color: '#64748B',
+                  marginTop: 3
                 }}
               >
-                {myCards.length}
-                {' '}
-                كرت
+                الكروت الموجودة لديك ولم تبع بعد
               </div>
             </div>
 
             <div
               style={{
-                textAlign: 'left'
+                background: '#EFF6FF',
+                color: '#1D4ED8',
+                padding: '6px 10px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 900
               }}
             >
+              {formatNumber(myCards.length)} كرت
+            </div>
+
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                '1fr 1fr',
+              gap: 10
+            }}
+          >
+
+            <div
+              style={{
+                background: '#F8FAFC',
+                padding: 13,
+                borderRadius: 12,
+                border:
+                  '1px solid #E2E8F0'
+              }}
+            >
+
               <div
                 style={{
                   fontSize: 11,
-                  color: '#64748B'
+                  color: '#64748B',
+                  fontWeight: 700
+                }}
+              >
+                عدد الكروت
+              </div>
+
+              <div
+                style={{
+                  fontSize: 21,
+                  fontWeight: 900,
+                  color: '#0F172A',
+                  marginTop: 4
+                }}
+              >
+                {formatNumber(myCards.length)}
+              </div>
+
+            </div>
+
+            <div
+              style={{
+                background: '#F8FAFC',
+                padding: 13,
+                borderRadius: 12,
+                border:
+                  '1px solid #E2E8F0'
+              }}
+            >
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#64748B',
+                  fontWeight: 700
                 }}
               >
                 القيمة الإجمالية
@@ -937,7 +1304,7 @@ export default function DistributorSalesPage() {
 
               <div
                 style={{
-                  fontSize: 16,
+                  fontSize: 19,
                   fontWeight: 900,
                   color: '#2563EB',
                   marginTop: 4
@@ -946,9 +1313,16 @@ export default function DistributorSalesPage() {
                 {formatNumber(
                   inventoryValue
                 )}
-                {' '}
-                ر.ي
+                <span
+                  style={{
+                    fontSize: 10,
+                    marginRight: 4
+                  }}
+                >
+                  ر.ي
+                </span>
               </div>
+
             </div>
 
           </div>
@@ -965,21 +1339,55 @@ export default function DistributorSalesPage() {
               '1px solid #E2E8F0',
             borderRadius: 16,
             padding: 16,
-            marginBottom: 16
+            marginBottom: 16,
+            boxShadow:
+              '0 2px 8px rgba(15,23,42,0.03)'
           }}
         >
 
-          <h3
+          <div
             style={{
-              margin:
-                '0 0 12px 0',
-              fontSize: 15,
-              fontWeight: 900,
-              color: '#0F172A'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: 12
             }}
           >
-            ملخص الباقات المباعة
-          </h3>
+
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 15,
+                  fontWeight: 900,
+                  color: '#0F172A'
+                }}
+              >
+                ملخص الباقات المباعة
+              </h3>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#64748B',
+                  marginTop: 3
+                }}
+              >
+                توزيع مبيعات الفترة الحالية
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                color: '#64748B'
+              }}
+            >
+              {Object.keys(salesByPackage).length} باقة
+            </div>
+
+          </div>
 
           {Object.keys(
             salesByPackage
@@ -987,10 +1395,14 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                padding: '12px 0',
+                padding: '22px 10px',
                 textAlign: 'center',
                 fontSize: 13,
-                color: '#64748B'
+                color: '#64748B',
+                background: '#F8FAFC',
+                borderRadius: 12,
+                border:
+                  '1px dashed #CBD5E1'
               }}
             >
               لا توجد مبيعات في الفترة المحددة
@@ -998,72 +1410,98 @@ export default function DistributorSalesPage() {
 
           ) : (
 
-            Object.entries(
-              salesByPackage
-            ).map(
-              ([name, data]) => (
+            <div
+              style={{
+                display: 'grid',
+                gap: 8
+              }}
+            >
 
-                <div
-                  key={name}
-                  style={{
-                    display: 'flex',
-                    justifyContent:
-                      'space-between',
-                    alignItems:
-                      'center',
-                    padding: '11px 0',
-                    borderBottom:
-                      '1px solid #F1F5F9'
-                  }}
-                >
+              {Object.entries(
+                salesByPackage
+              ).map(
+                ([name, data]) => (
 
                   <div
+                    key={name}
                     style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: '#334155'
+                      display: 'flex',
+                      justifyContent:
+                        'space-between',
+                      alignItems:
+                        'center',
+                      gap: 10,
+                      padding: '12px',
+                      borderRadius: 11,
+                      background: '#F8FAFC',
+                      border:
+                        '1px solid #E2E8F0'
                     }}
                   >
-                    {name}
-                  </div>
 
-                  <div
-                    style={{
-                      textAlign: 'left'
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 900,
-                        color: '#0F172A'
-                      }}
-                    >
-                      {data.count}
-                      {' '}
-                      كرت
+                    <div>
+
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 900,
+                          color: '#334155'
+                        }}
+                      >
+                        {name}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#64748B',
+                          marginTop: 3
+                        }}
+                      >
+                        {data.count} كرت
+                      </div>
+
                     </div>
 
                     <div
                       style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        color: '#059669',
-                        marginTop: 2
+                        textAlign: 'left'
                       }}
                     >
-                      {formatNumber(
-                        data.revenue
-                      )}
-                      {' '}
-                      ر.ي
+
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 900,
+                          color: '#0F172A'
+                        }}
+                      >
+                        {formatNumber(
+                          data.revenue
+                        )}
+                        {' '}
+                        ر.ي
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#059669',
+                          marginTop: 2
+                        }}
+                      >
+                        إجمالي الباقة
+                      </div>
+
                     </div>
+
                   </div>
 
-                </div>
+                )
+              )}
 
-              )
-            )
+            </div>
 
           )}
 
@@ -1079,32 +1517,82 @@ export default function DistributorSalesPage() {
               '1px solid #E2E8F0',
             borderRadius: 16,
             padding: 16,
-            marginBottom: 20
+            marginBottom: 20,
+            boxShadow:
+              '0 2px 8px rgba(15,23,42,0.03)'
           }}
         >
 
-          <h3
+          <div
             style={{
-              margin:
-                '0 0 12px 0',
-              fontSize: 15,
-              fontWeight: 900,
-              color: '#0F172A'
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              marginBottom: 12
             }}
           >
-            سجل المبيعات
-          </h3>
+
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: 15,
+                  fontWeight: 900,
+                  color: '#0F172A'
+                }}
+              >
+                سجل المبيعات
+              </h3>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#64748B',
+                  marginTop: 3
+                }}
+              >
+                عمليات البيع الظاهرة ضمن الفترة المحددة
+              </div>
+            </div>
+
+            <div
+              style={{
+                background: '#F1F5F9',
+                color: '#475569',
+                padding: '6px 10px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 900
+              }}
+            >
+              {formatNumber(filteredSales.length)} عملية
+            </div>
+
+          </div>
 
           {dataLoading ? (
 
             <div
               style={{
                 textAlign: 'center',
-                padding: 20,
+                padding: 28,
                 fontSize: 13,
-                color: '#64748B'
+                color: '#64748B',
+                background: '#F8FAFC',
+                borderRadius: 12
               }}
             >
+              <div
+                style={{
+                  fontSize: 20,
+                  marginBottom: 7
+                }}
+              >
+                ⏳
+              </div>
+
               جاري تحميل التقرير...
             </div>
 
@@ -1113,81 +1601,154 @@ export default function DistributorSalesPage() {
             <div
               style={{
                 textAlign: 'center',
-                padding: 16,
+                padding: 28,
                 fontSize: 13,
-                color: '#64748B'
+                color: '#64748B',
+                background: '#F8FAFC',
+                borderRadius: 12,
+                border:
+                  '1px dashed #CBD5E1'
               }}
             >
-              لا توجد عمليات بيع في الفترة المحددة
+
+              <div
+                style={{
+                  fontSize: 25,
+                  marginBottom: 7
+                }}
+              >
+                📊
+              </div>
+
+              <div
+                style={{
+                  fontWeight: 900,
+                  color: '#334155',
+                  marginBottom: 4
+                }}
+              >
+                لا توجد مبيعات
+              </div>
+
+              <div
+                style={{
+                  fontSize: 11
+                }}
+              >
+                لا توجد عمليات بيع في الفترة المحددة
+              </div>
+
             </div>
 
           ) : (
 
-            filteredSales.map(
-              (item) => (
+            <div
+              style={{
+                display: 'grid',
+                gap: 8
+              }}
+            >
 
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent:
-                      'space-between',
-                    alignItems:
-                      'center',
-                    padding: '12px 0',
-                    borderBottom:
-                      '1px solid #F1F5F9'
-                  }}
-                >
-
-                  <div>
-
-                    <div
-                      style={{
-                        fontWeight: 900,
-                        fontSize: 13,
-                        color: '#0F172A'
-                      }}
-                    >
-                      {item.package_name}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 12,
-                        color: '#059669',
-                        fontWeight: 700,
-                        marginTop: 3
-                      }}
-                    >
-                      {formatNumber(
-                        item.price
-                      )}
-                      {' '}
-                      ر.ي
-                    </div>
-
-                  </div>
+              {filteredSales.map(
+                (item) => (
 
                   <div
+                    key={item.id}
                     style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: '#475569',
-                      background: '#F1F5F9',
-                      padding: '6px 9px',
-                      borderRadius: 8
+                      display: 'flex',
+                      justifyContent:
+                        'space-between',
+                      alignItems:
+                        'center',
+                      gap: 12,
+                      padding: '12px',
+                      borderRadius: 12,
+                      background: '#F8FAFC',
+                      border:
+                        '1px solid #E2E8F0'
                     }}
                   >
-                    {formatNumericDate(
-                      item.sold_at
-                    )}
+
+                    <div
+                      style={{
+                        minWidth: 0
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 13,
+                          color: '#0F172A',
+                          whiteSpace:
+                            'nowrap',
+                          overflow:
+                            'hidden',
+                          textOverflow:
+                            'ellipsis'
+                        }}
+                      >
+                        {item.package_name}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: '#64748B',
+                          marginTop: 4
+                        }}
+                      >
+                        بيع بتاريخ:
+                        {' '}
+                        {formatDateTime(
+                          item.sold_at
+                        )}
+                      </div>
+
+                    </div>
+
+                    <div
+                      style={{
+                        textAlign: 'left',
+                        flexShrink: 0
+                      }}
+                    >
+
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 900,
+                          color: '#059669'
+                        }}
+                      >
+                        {formatNumber(
+                          item.price
+                        )}
+                        {' '}
+                        ر.ي
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          color: '#64748B',
+                          marginTop: 3
+                        }}
+                      >
+                        {formatNumericDate(
+                          item.sold_at
+                        )}
+                      </div>
+
+                    </div>
+
                   </div>
 
-                </div>
+                )
+              )}
 
-              )
-            )
+            </div>
 
           )}
 
