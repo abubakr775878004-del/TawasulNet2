@@ -166,44 +166,50 @@ export default function DistributorSalesPage() {
       }
 
       /*
-       * جلب جميع الكروت المباعة الخاصة بالموزع.
+       * جلب سجل المبيعات التاريخي للموزع.
+       *
+       * مهم:
+       * لا نقرأ سعر البيع من packages.price هنا،
+       * لأن packages.price يمثل السعر الحالي للباقة.
+       *
+       * sales_log.price يحتوي على السعر الذي تم تسجيله
+       * وقت تنفيذ عملية البيع، لذلك هو المصدر الصحيح
+       * للتقارير التاريخية.
        */
       const {
-        data: cardsData,
-        error: cardsError
+        data: salesData,
+        error: salesError
       } = await supabase
-        .from('cards')
+        .from('sales_log')
         .select(`
           id,
-          sold_at,
-          packages (
-            name,
-            price
-          )
+          distributor_id,
+          package_name,
+          price,
+          sold_at
         `)
-        .eq('assigned_to', profile.id)
-        .eq('status', 'sold')
+        .eq('distributor_id', profile.id)
         .order('sold_at', {
           ascending: false
         });
 
-      if (cardsError) {
+      if (salesError) {
         console.error(
-          'Error loading sold cards:',
-          cardsError
+          'Error loading sales log:',
+          salesError
         );
       }
 
       const formattedSales =
-        (cardsData || []).map((card) => ({
-          id: card.id,
+        (salesData || []).map((sale) => ({
+          id: sale.id,
           package_name:
-            card.packages?.name ||
+            sale.package_name ||
             'باقة غير معروفة',
           price: Number(
-            card.packages?.price || 0
+            sale.price || 0
           ),
-          sold_at: card.sold_at
+          sold_at: sale.sold_at
         }));
 
       setSoldCards(formattedSales);
@@ -213,6 +219,9 @@ export default function DistributorSalesPage() {
        *
        * هذه الكروت لم تبع بعد،
        * لذلك لا تدخل في المبيعات أو الدين.
+       *
+       * هنا نستمر باستخدام سعر الباقة الحالي
+       * لأننا نتعامل مع مخزون لم يتم بيعه بعد.
        */
       const {
         data: inventoryData,
@@ -295,6 +304,8 @@ export default function DistributorSalesPage() {
 
   /*
    * إجمالي قيمة المبيعات للفترة.
+   *
+   * السعر هنا هو السعر التاريخي المحفوظ في sales_log.
    */
   const salesTotal = useMemo(() => {
     return filteredSales.reduce(
