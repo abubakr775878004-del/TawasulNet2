@@ -27,20 +27,6 @@ export default function DistributorPage() {
   const [revealError, setRevealError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  /*
-   * حماية إرسال الكرت إلى واتساب.
-   *
-   * يتم حفظ الكرت الذي تم بدء مشاركته في localStorage
-   * حتى لا يمكن إعادة مشاركته من نفس المتصفح
-   * حتى بعد Refresh أو إغلاق الصفحة.
-   *
-   * الحماية الجديدة تعتمد على:
-   * - id الخاص بالكرت
-   * - code الخاص بالكرت
-   *
-   * مع الإبقاء على مفتاح الحماية القديم
-   * للتوافق مع الحالات السابقة.
-   */
   const [whatsappShared, setWhatsappShared] = useState(false);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
 
@@ -58,12 +44,6 @@ export default function DistributorPage() {
     });
   };
 
-  /*
-   * التحقق من حالة إرسال الكرت إلى واتساب.
-   *
-   * نستخدم مفتاحًا جديدًا يعتمد على id + code.
-   * ونفحص أيضًا المفتاح القديم للتوافق مع المشاركات السابقة.
-   */
   useEffect(() => {
     if (!revealedCard?.code) {
       setWhatsappShared(false);
@@ -71,13 +51,8 @@ export default function DistributorPage() {
     }
 
     try {
-      const code = String(
-        revealedCard.code
-      ).trim();
-
-      const cardId = String(
-        revealedCard.id || ''
-      ).trim();
+      const code = String(revealedCard.code).trim();
+      const cardId = String(revealedCard.id || '').trim();
 
       const newStorageKey =
         `tawasul_whatsapp_shared_v2_${cardId}_${code}`;
@@ -100,11 +75,6 @@ export default function DistributorPage() {
     }
   }, [revealedCard]);
 
-  /*
-   * جلب بيانات الموزع.
-   *
-   * الدين يتم قراءته من قاعدة البيانات.
-   */
   async function load(isInitial = false) {
     if (!profile) return;
 
@@ -143,10 +113,7 @@ export default function DistributorPage() {
         })
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
-        .gte(
-          'sold_at',
-          since.toISOString()
-        );
+        .gte('sold_at', since.toISOString());
 
       if (soldCountError) {
         console.error(
@@ -167,10 +134,7 @@ export default function DistributorPage() {
         )
         .eq('assigned_to', profile.id)
         .eq('status', 'sold')
-        .gte(
-          'sold_at',
-          since.toISOString()
-        )
+        .gte('sold_at', since.toISOString())
         .order('sold_at', {
           ascending: false,
         })
@@ -230,26 +194,12 @@ export default function DistributorPage() {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 
-    window.addEventListener(
-      'online',
-      handleOnline
-    );
-
-    window.addEventListener(
-      'offline',
-      handleOffline
-    );
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
-      window.removeEventListener(
-        'online',
-        handleOnline
-      );
-
-      window.removeEventListener(
-        'offline',
-        handleOffline
-      );
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
   }, [profile]);
 
@@ -272,11 +222,7 @@ export default function DistributorPage() {
   }
 
   async function confirmReveal() {
-    if (
-      !pendingPackage ||
-      !profile ||
-      revealBusy
-    ) {
+    if (!pendingPackage || !profile || revealBusy) {
       return;
     }
 
@@ -284,10 +230,6 @@ export default function DistributorPage() {
     setRevealError('');
 
     try {
-      /*
-       * نبحث عن أول كرت متاح للموزع
-       * من الباقة المطلوبة.
-       */
       const {
         data,
         error,
@@ -297,10 +239,7 @@ export default function DistributorPage() {
           'id, code, package_id, packages(name, price)'
         )
         .eq('assigned_to', profile.id)
-        .eq(
-          'package_id',
-          pendingPackage.id
-        )
+        .eq('package_id', pendingPackage.id)
         .eq('status', 'with_distributor')
         .order('created_at', {
           ascending: true,
@@ -350,17 +289,9 @@ export default function DistributorPage() {
         return;
       }
 
-      const managerShare =
-        cardPrice * 0.9;
+      const managerShare = cardPrice * 0.9;
+      const distributorShare = cardPrice * 0.1;
 
-      const distributorShare =
-        cardPrice * 0.1;
-
-      /*
-       * حفظ وقت البيع المحلي مباشرة بعد نجاح RPC.
-       *
-       * هذا أفضل من استخدام وقت الضغط على واتساب.
-       */
       const saleCompletedAt =
         new Date().toISOString();
 
@@ -374,10 +305,8 @@ export default function DistributorPage() {
           p_distributor_id: profile.id,
           p_package_id: card.package_id,
           p_price: cardPrice,
-          p_manager_share:
-            managerShare,
-          p_distributor_share:
-            distributorShare,
+          p_manager_share: managerShare,
+          p_distributor_share: distributorShare,
           p_customer_name:
             trimmedCustomerName !== ''
               ? trimmedCustomerName
@@ -399,17 +328,12 @@ export default function DistributorPage() {
         return;
       }
 
-      /*
-       * إعادة قراءة الدين الحقيقي من قاعدة البيانات.
-       */
       const {
         data: updatedProfile,
         error: updatedProfileError,
       } = await supabase
         .from('profiles')
-        .select(
-          'debt_balance, debt'
-        )
+        .select('debt_balance, debt')
         .eq('id', profile.id)
         .single();
 
@@ -432,9 +356,6 @@ export default function DistributorPage() {
         );
       }
 
-      /*
-       * نحافظ على الكود القادم من RPC إن وجد.
-       */
       let soldCode = card.code;
 
       if (
@@ -443,35 +364,21 @@ export default function DistributorPage() {
       ) {
         if (saleResult.code) {
           soldCode = saleResult.code;
-        } else if (
-          saleResult.card_code
-        ) {
-          soldCode =
-            saleResult.card_code;
+        } else if (saleResult.card_code) {
+          soldCode = saleResult.card_code;
         }
       }
 
-      /*
-       * نحتفظ أيضًا بـ:
-       * - id
-       * - وقت البيع
-       *
-       * حتى نستخدمهما عند مشاركة الكرت.
-       */
       setRevealedCard({
         id: card.id,
         code: soldCode,
-        packageName:
-          pendingPackage.name,
+        packageName: pendingPackage.name,
         soldAt:
           saleResult?.sold_at ||
           saleResult?.sale_time ||
           saleCompletedAt,
       });
 
-      /*
-       * هذا كرت جديد ولم تتم مشاركته بعد.
-       */
       setWhatsappShared(false);
 
       setPendingPackage(null);
@@ -520,9 +427,7 @@ export default function DistributorPage() {
     }
   }
 
-  async function copyPersonalCode(
-    codeText
-  ) {
+  async function copyPersonalCode(codeText) {
     if (!codeText) return;
 
     try {
@@ -543,11 +448,6 @@ export default function DistributorPage() {
     }
   }
 
-  /*
-   * 30 ذكرًا / دعاءً / حكمة قصيرة.
-   *
-   * يتم اختيار واحدة عشوائيًا عند مشاركة الكرت.
-   */
   const dailyReminders = [
     'سبحان الله وبحمده، سبحان الله العظيم.',
     'أستغفر الله وأتوب إليه.',
@@ -581,18 +481,6 @@ export default function DistributorPage() {
     'اللهم اختم يومنا برضاك ومغفرتك.',
   ];
 
-  /*
-   * إرسال الكرت إلى واتساب.
-   *
-   * الحماية:
-   * 1. منع الضغط أثناء فتح المشاركة.
-   * 2. منع مشاركة نفس الكرت مرة أخرى.
-   * 3. حفظ حالة المشاركة في localStorage.
-   * 4. مفتاح الحماية يعتمد على id + code.
-   * 5. فحص المفتاح القديم أيضًا للتوافق.
-   * 6. تسجيل المشاركة قبل فتح واتساب.
-   * 7. وقت الرسالة = وقت البيع وليس وقت الضغط على واتساب.
-   */
   function shareWhatsapp() {
     if (
       !revealedCard?.code ||
@@ -618,31 +506,13 @@ export default function DistributorPage() {
       return;
     }
 
-    /*
-     * مفتاح جديد خاص بالكرت نفسه.
-     *
-     * استخدام id يمنع الخلط بين كرتين لهما نفس الكود
-     * في حال وجود بيانات قديمة أو إعادة استخدام أكواد.
-     */
     const newStorageKey =
       `tawasul_whatsapp_shared_v2_${cardId}_${code}`;
 
-    /*
-     * المفتاح القديم يبقى موجودًا للتوافق مع
-     * أي كرت تمت مشاركته قبل هذا التعديل.
-     */
     const oldStorageKey =
       `tawasul_whatsapp_shared_${code}`;
 
     try {
-      /*
-       * فحص إضافي قبل أي تغيير في الحالة.
-       *
-       * مهم جدًا:
-       * لا يوجد await بين الفحص والتسجيل،
-       * لذلك لا توجد فترة انتظار تسمح بضغطتين
-       * متتاليتين داخل نفس تنفيذ JavaScript.
-       */
       const alreadyShared =
         localStorage.getItem(
           newStorageKey
@@ -656,17 +526,8 @@ export default function DistributorPage() {
         return;
       }
 
-      /*
-       * قفل فوري داخل الصفحة.
-       *
-       * يتم وضعه قبل إنشاء رابط واتساب.
-       */
       setWhatsappBusy(true);
 
-      /*
-       * نتحقق مرة ثانية بعد تفعيل القفل
-       * تحسبًا لأي حالة غير متوقعة.
-       */
       const secondCheck =
         localStorage.getItem(
           newStorageKey
@@ -688,11 +549,6 @@ export default function DistributorPage() {
           )
         ];
 
-      /*
-       * نستخدم وقت البيع المحفوظ.
-       * إذا لم يكن موجودًا لأي سبب نستخدم الوقت الحالي
-       * كحل احتياطي فقط.
-       */
       const saleDateTime =
         revealedCard.soldAt
           ? new Date(
@@ -719,12 +575,6 @@ export default function DistributorPage() {
           }
         );
 
-      /*
-       * رسالة واتساب الجديدة.
-       *
-       * تم استخدام تنسيق واتساب الرسمي:
-       * Bold + Inline Code + Italic.
-       */
       const text = `🌐 *شبكة تواصل* 📶
 
 🎫 *كرت إنترنت*
@@ -739,13 +589,6 @@ export default function DistributorPage() {
 
 💙 *شكرًا لاختياركم شبكة تواصل*`;
 
-      /*
-       * نحفظ حالة المشاركة قبل فتح واتساب.
-       *
-       * نكتب المفتاح الجديد والمفتاح القديم.
-       * المفتاح الجديد هو الأساسي،
-       * والقديم يحافظ على التوافق مع النظام السابق.
-       */
       localStorage.setItem(
         newStorageKey,
         '1'
@@ -756,17 +599,8 @@ export default function DistributorPage() {
         '1'
       );
 
-      /*
-       * تحديث حالة الواجهة فورًا.
-       */
       setWhatsappShared(true);
 
-      /*
-       * فتح واتساب مرة واحدة فقط.
-       *
-       * لا يوجد أي استدعاء آخر لهذه الدالة
-       * من داخل هذا المسار.
-       */
       window.open(
         `https://wa.me/?text=${encodeURIComponent(
           text
@@ -779,13 +613,6 @@ export default function DistributorPage() {
         error
       );
 
-      /*
-       * إذا فشلت عملية إنشاء/فتح المشاركة،
-       * نزيل مفاتيح الحماية حتى يستطيع المستخدم
-       * المحاولة مرة أخرى.
-       *
-       * لا نلمس قاعدة البيانات ولا حالة البيع.
-       */
       try {
         localStorage.removeItem(
           newStorageKey
@@ -807,14 +634,6 @@ export default function DistributorPage() {
     }
   }
 
-  /*
-   * إرسال ملاحظة للمدير.
-   *
-   * مهم:
-   * هذه الدالة لا تعتمد على form submission.
-   * يتم استدعاؤها مباشرة من زر type="button"
-   * حتى لا يحدث reload أو انتقال لصفحة أخرى.
-   */
   async function sendNoteToAdmin() {
     if (!profile || noteBusy) {
       return;
@@ -887,6 +706,14 @@ export default function DistributorPage() {
     return null;
   }
 
+  /*
+   * تجميع الكروت الموجودة عند الموزع حسب الباقة.
+   *
+   * مهم:
+   * لا نعرض code هنا.
+   * هذه الكروت ما زالت with_distributor.
+   * الكود لا يظهر إلا بعد نجاح البيع.
+   */
   const byPackage = {};
 
   myCards.forEach((c) => {
@@ -897,15 +724,19 @@ export default function DistributorPage() {
     if (!byPackage[key]) {
       byPackage[key] = {
         count: 0,
-        packageId:
-          c.package_id,
-        price:
-          c.packages?.price || 0,
+        packageId: c.package_id,
+        price: c.packages?.price || 0,
       };
     }
 
     byPackage[key].count += 1;
   });
+
+  const packageEntries =
+    Object.entries(byPackage);
+
+  const totalInventory =
+    myCards.length;
 
   return (
     <div className="app">
@@ -916,23 +747,49 @@ export default function DistributorPage() {
       />
 
       <div className="main">
+        {/* ================= HEADER ================= */}
+
         <div
-          className="topbar"
           style={{
             display: 'flex',
-            justifyContent:
-              'space-between',
+            justifyContent: 'space-between',
             alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 18,
           }}
         >
           <div>
-            <h1>
-              مرحبًا،{' '}
-              {profile.full_name} 👋
+            <div
+              style={{
+                color: '#7C3AED',
+                fontSize: 12,
+                fontWeight: '900',
+                marginBottom: 5,
+              }}
+            >
+              لوحة الموزع
+            </div>
+
+            <h1
+              style={{
+                margin: 0,
+                fontSize: 25,
+                fontWeight: '900',
+                color: '#1E293B',
+              }}
+            >
+              مرحبًا، {profile.full_name} 👋
             </h1>
 
-            <div className="greet">
-              إليك ملخص حسابك اليوم
+            <div
+              style={{
+                marginTop: 6,
+                color: '#64748B',
+                fontSize: 13,
+              }}
+            >
+              كل ما تحتاجه لإدارة الكروت والمبيعات والحساب في مكان واحد.
             </div>
           </div>
 
@@ -940,107 +797,146 @@ export default function DistributorPage() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
+              gap: 7,
               background: isOnline
                 ? '#ECFDF5'
                 : '#FEF2F2',
               color: isOnline
                 ? '#059669'
                 : '#DC2626',
-              padding: '6px 12px',
-              borderRadius: 20,
+              padding: '8px 13px',
+              borderRadius: 30,
               fontSize: 11.5,
-              fontWeight: '800',
+              fontWeight: '900',
               border: `1px solid ${
                 isOnline
                   ? '#A7F3D0'
                   : '#FECACA'
               }`,
+              boxShadow:
+                '0 4px 12px rgba(15,23,42,0.05)',
             }}
           >
             <span
               style={{
-                width: 7,
-                height: 7,
+                width: 8,
+                height: 8,
                 borderRadius: '50%',
                 background: isOnline
                   ? '#10B981'
                   : '#EF4444',
-                display:
-                  'inline-block',
+                display: 'inline-block',
               }}
             />
 
             {isOnline
-              ? 'نشط'
-              : 'خامل'}
+              ? 'متصل ونشط'
+              : 'غير متصل'}
           </div>
         </div>
+
+        {/* ================= ADS ================= */}
 
         <AdSlotBar />
 
         <WeeklyWinnerPanel />
 
+        {/* ================= PERSONAL CARD ================= */}
+
         {profile.personal_card && (
           <div
             style={{
               background:
-                'linear-gradient(135deg, #5B21B6 0%, #7C3AED 50%, #DB2777 100%)',
-              borderRadius: 20,
-              padding:
-                '20px 24px',
+                'linear-gradient(135deg, #4C1D95 0%, #7C3AED 48%, #DB2777 100%)',
+              borderRadius: 22,
+              padding: '20px 22px',
               color: '#fff',
               marginBottom: 20,
               display: 'flex',
-              justifyContent:
-                'space-between',
+              justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: 15,
+              boxShadow:
+                '0 14px 35px rgba(91,33,182,0.22)',
+              position: 'relative',
+              overflow: 'hidden',
             }}
           >
-            <div>
+            <div
+              style={{
+                position: 'absolute',
+                width: 150,
+                height: 150,
+                borderRadius: '50%',
+                background:
+                  'rgba(255,255,255,0.08)',
+                left: -50,
+                bottom: -80,
+              }}
+            />
+
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+              }}
+            >
               <div
                 style={{
-                  fontSize: 12,
-                  color: '#E3D6FF',
-                  fontWeight: '700',
-                  marginBottom: 4,
+                  fontSize: 11.5,
+                  color: '#E9D5FF',
+                  fontWeight: '800',
+                  marginBottom: 5,
                 }}
               >
-                ⭐ كرتك الشخصي (ثابت ومميز)
+                ⭐ كرتك الشخصي الثابت
               </div>
 
               <div
                 className="mono"
                 style={{
-                  fontSize: 24,
+                  fontSize: 25,
                   fontWeight: '900',
                   letterSpacing: 1.5,
                 }}
               >
                 {profile.personal_card}
               </div>
+
+              <div
+                style={{
+                  fontSize: 10.5,
+                  color: '#F3E8FF',
+                  marginTop: 5,
+                }}
+              >
+                كرت شخصي مميز خاص بحسابك
+              </div>
             </div>
 
             <button
+              type="button"
               onClick={() =>
                 copyPersonalCode(
                   profile.personal_card
                 )
               }
               style={{
+                position: 'relative',
+                zIndex: 1,
                 background:
-                  'rgba(255,255,255,0.2)',
+                  'rgba(255,255,255,0.18)',
                 border:
-                  '1px solid rgba(255,255,255,0.4)',
+                  '1px solid rgba(255,255,255,0.38)',
                 color: '#fff',
-                padding:
-                  '10px 18px',
-                borderRadius: 12,
-                fontWeight: '800',
-                fontSize: 13,
+                padding: '11px 17px',
+                borderRadius: 13,
+                fontWeight: '900',
+                fontSize: 12.5,
                 cursor: 'pointer',
+                backdropFilter:
+                  'blur(8px)',
               }}
             >
               {personalCopied
@@ -1050,31 +946,31 @@ export default function DistributorPage() {
           </div>
         )}
 
+        {/* ================= FINANCIAL SUMMARY ================= */}
+
         <div
           style={{
             display: 'grid',
             gridTemplateColumns:
-              '1fr 1fr',
-            gap: 12,
-            marginBottom: 20,
+              'repeat(2,minmax(0,1fr))',
+            gap: 13,
+            marginBottom: 14,
           }}
         >
           <div
             className="balance-card"
             style={{
               marginBottom: 0,
+              minHeight: 158,
+              borderRadius: 22,
             }}
           >
             <div className="lbl">
-              رصيدك الحالي بمخزنك
+              💰 رصيدك الحالي
             </div>
 
             <div className="amt">
-              {Number(
-                profile.balance
-              ).toLocaleString(
-                'en-US'
-              )}{' '}
+              {formatNum(profile.balance)}{' '}
               <span>ريال</span>
             </div>
 
@@ -1085,13 +981,18 @@ export default function DistributorPage() {
                   color: '#E3D6FF',
                 }}
               >
-                كروت لديك الآن:{' '}
-                {myCards.length}
+                المخزون عندك:{' '}
+                {totalInventory} كرت
               </div>
 
-              <Link href="/distributor/request">
+              <Link
+                href="/distributor/request"
+                style={{
+                  textDecoration: 'none',
+                }}
+              >
                 <button className="req-btn">
-                  طلب كروت جديد
+                  طلب كروت
                 </button>
               </Link>
             </div>
@@ -1101,50 +1002,43 @@ export default function DistributorPage() {
             style={{
               background:
                 netDebt > 0
-                  ? 'linear-gradient(135deg, #991b1b 0%, #dc2626 100%)'
-                  : 'linear-gradient(135deg, #065f46 0%, #059669 100%)',
-              borderRadius: 20,
+                  ? 'linear-gradient(135deg, #991B1B 0%, #DC2626 100%)'
+                  : 'linear-gradient(135deg, #065F46 0%, #059669 100%)',
+              borderRadius: 22,
               padding: 20,
               color: '#fff',
+              minHeight: 158,
               display: 'flex',
-              flexDirection:
-                'column',
-              justifyContent:
-                'space-between',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
               boxShadow:
-                '0 10px 25px rgba(0, 0, 0, 0.1)',
-              transition:
-                'background 0.3s ease',
+                '0 12px 28px rgba(0,0,0,0.10)',
             }}
           >
             <div>
               <div
                 style={{
-                  fontSize: 12,
-                  color: '#f1f5f9',
-                  fontWeight: '700',
-                  marginBottom: 6,
+                  fontSize: 11.5,
+                  color: '#F8FAFC',
+                  fontWeight: '800',
+                  marginBottom: 7,
                 }}
               >
-                المبلغ الصافي المستحق للمدير
+                💳 المبلغ المستحق للمدير
               </div>
 
               <div
                 className="mono"
                 style={{
-                  fontSize: 26,
+                  fontSize: 27,
                   fontWeight: '900',
-                  letterSpacing: 0.5,
                 }}
               >
-                {formatNum(
-                  netDebt
-                )}{' '}
+                {formatNum(netDebt)}{' '}
                 <span
                   style={{
-                    fontSize: 13,
-                    fontWeight:
-                      'normal',
+                    fontSize: 12,
+                    fontWeight: '700',
                   }}
                 >
                   ريال
@@ -1154,8 +1048,8 @@ export default function DistributorPage() {
 
             <div
               style={{
-                fontSize: 11.5,
-                color: '#f8fafc',
+                fontSize: 11,
+                color: '#fff',
                 marginTop: 10,
                 opacity: 0.9,
               }}
@@ -1167,35 +1061,113 @@ export default function DistributorPage() {
           </div>
         </div>
 
+        {/* ================= QUICK STATS ================= */}
+
         <div
-          className="grid-stats"
           style={{
+            display: 'grid',
             gridTemplateColumns:
-              'repeat(2,1fr)',
+              'repeat(2,minmax(0,1fr))',
+            gap: 12,
+            marginBottom: 20,
           }}
         >
-          <div className="stat">
-            <div className="label">
-              كروت متاحة عندي
+          <div
+            style={{
+              background: '#fff',
+              border: '1px solid #E2E8F0',
+              borderRadius: 18,
+              padding: '16px 18px',
+              boxShadow:
+                '0 5px 18px rgba(15,23,42,0.05)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11.5,
+                color: '#64748B',
+                fontWeight: '800',
+                marginBottom: 6,
+              }}
+            >
+              📦 كروت موزعة عندك
             </div>
 
-            <div className="value">
-              {myCards.length}
+            <div
+              style={{
+                fontSize: 27,
+                fontWeight: '900',
+                color: '#5B21B6',
+              }}
+            >
+              {formatNum(totalInventory)}
+            </div>
+
+            <div
+              style={{
+                marginTop: 3,
+                fontSize: 10.5,
+                color: '#94A3B8',
+              }}
+            >
+              متاحة للبيع
             </div>
           </div>
 
-          <div className="stat">
-            <div className="label">
-              مبيعات اليوم
+          <div
+            style={{
+              background: '#fff',
+              border: '1px solid #E2E8F0',
+              borderRadius: 18,
+              padding: '16px 18px',
+              boxShadow:
+                '0 5px 18px rgba(15,23,42,0.05)',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11.5,
+                color: '#64748B',
+                fontWeight: '800',
+                marginBottom: 6,
+              }}
+            >
+              🎫 مبيعات اليوم
             </div>
 
-            <div className="value">
-              {soldToday}
+            <div
+              style={{
+                fontSize: 27,
+                fontWeight: '900',
+                color: '#059669',
+              }}
+            >
+              {formatNum(soldToday)}
+            </div>
+
+            <div
+              style={{
+                marginTop: 3,
+                fontSize: 10.5,
+                color: '#94A3B8',
+              }}
+            >
+              كروت تم بيعها اليوم
             </div>
           </div>
         </div>
 
-        <div className="panel">
+        {/* ================= INVENTORY ================= */}
+
+        <div
+          className="panel"
+          style={{
+            borderRadius: 22,
+            overflow: 'hidden',
+            border:
+              '1px solid #E5E7EB',
+          }}
+        >
           <div
             className="panel-head"
             style={{
@@ -1203,162 +1175,326 @@ export default function DistributorPage() {
               justifyContent:
                 'space-between',
               alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap',
             }}
           >
             <div>
-              <h3>
-                باقاتي المتاحة
-              </h3>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 5,
+                }}
+              >
+                <span
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#F3F0FB',
+                    fontSize: 17,
+                  }}
+                >
+                  📦
+                </span>
+
+                <h3
+                  style={{
+                    margin: 0,
+                  }}
+                >
+                  مخزون الكروت الموزعة عندك
+                </h3>
+              </div>
 
               <span className="muted">
-                اضغط &quot;إظهار كرت&quot; عند وجود زبون
+                الكروت هنا مخزون فقط، ولن يظهر رقم أي كرت إلا بعد نجاح البيع.
               </span>
             </div>
 
             <button
-              onClick={() =>
-                load(true)
-              }
-              disabled={
-                isRefreshing
-              }
+              type="button"
+              onClick={() => load(true)}
+              disabled={isRefreshing}
               style={{
-                background:
-                  '#F3F0FB',
+                background: '#F3F0FB',
                 border:
                   '1px solid #DDD3F5',
-                color:
-                  '#5B21B6',
-                padding:
-                  '6px 12px',
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: '800',
-                cursor:
-                  'pointer',
-                display: 'flex',
-                alignItems:
-                  'center',
-                gap: 5,
+                color: '#5B21B6',
+                padding: '8px 13px',
+                borderRadius: 11,
+                fontSize: 11.5,
+                fontWeight: '900',
+                cursor: isRefreshing
+                  ? 'not-allowed'
+                  : 'pointer',
+                opacity: isRefreshing
+                  ? 0.7
+                  : 1,
               }}
             >
-              <span
-                style={{
-                  display:
-                    'inline-block',
-                  transform:
-                    isRefreshing
-                      ? 'rotate(360deg)'
-                      : 'none',
-                  transition:
-                    'transform 0.5s',
-                }}
-              >
-                🔄
-              </span>
-
               {isRefreshing
-                ? 'جاري التحديث...'
-                : 'تحديث القائمة'}
+                ? '⏳ جاري التحديث...'
+                : '🔄 تحديث المخزون'}
             </button>
           </div>
 
           {revealError && (
             <div
               style={{
-                color: '#DC2626',
-                background:
-                  '#FEF2F2',
-                padding: 10,
-                borderRadius: 8,
-                marginBottom: 10,
-                fontSize: 13,
+                color: '#B91C1C',
+                background: '#FEF2F2',
+                border:
+                  '1px solid #FECACA',
+                padding: 11,
+                borderRadius: 12,
+                marginBottom: 13,
+                fontSize: 12.5,
+                fontWeight: '700',
               }}
             >
               {revealError}
             </div>
           )}
 
-          {Object.keys(
-            byPackage
-          ).length === 0 && (
+          {packageEntries.length === 0 ? (
             <div
               style={{
-                color:
-                  'var(--ink-soft)',
+                padding: '28px 10px',
+                textAlign: 'center',
+                color: 'var(--ink-soft)',
                 fontSize: 13,
               }}
             >
-              لا توجد كروت لديك حاليًا
+              <div
+                style={{
+                  fontSize: 30,
+                  marginBottom: 8,
+                }}
+              >
+                📦
+              </div>
+
+              لا توجد كروت موزعة عندك حاليًا.
+            </div>
+          ) : (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(auto-fit,minmax(190px,1fr))',
+                gap: 12,
+              }}
+            >
+              {packageEntries.map(
+                ([name, info]) => (
+                  <div
+                    key={name}
+                    style={{
+                      background:
+                        'linear-gradient(180deg,#FFFFFF 0%,#FAF8FF 100%)',
+                      border:
+                        '1px solid #E7E0F7',
+                      borderRadius: 18,
+                      padding: 16,
+                      boxShadow:
+                        '0 5px 16px rgba(91,33,182,0.05)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent:
+                          'space-between',
+                        alignItems: 'flex-start',
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            fontWeight: '900',
+                            color: '#312E81',
+                          }}
+                        >
+                          {name}
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            color: '#64748B',
+                            marginTop: 4,
+                          }}
+                        >
+                          مخزون موزع
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          minWidth: 46,
+                          height: 46,
+                          borderRadius: 14,
+                          background: '#EDE9FE',
+                          color: '#6D28D9',
+                          display: 'flex',
+                          flexDirection:
+                            'column',
+                          alignItems:
+                            'center',
+                          justifyContent:
+                            'center',
+                        }}
+                      >
+                        <strong
+                          style={{
+                            fontSize: 17,
+                            lineHeight: 1,
+                          }}
+                        >
+                          {info.count}
+                        </strong>
+
+                        <span
+                          style={{
+                            fontSize: 8.5,
+                            marginTop: 3,
+                          }}
+                        >
+                          كرت
+                        </span>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 13,
+                        paddingTop: 11,
+                        borderTop:
+                          '1px dashed #DDD6FE',
+                        fontSize: 11,
+                        color: '#64748B',
+                      }}
+                    >
+                      السعر:{' '}
+                      <strong
+                        style={{
+                          color: '#334155',
+                        }}
+                      >
+                        {formatNum(info.price)} ريال
+                      </strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={() =>
+                        askReveal(
+                          info.packageId,
+                          name
+                        )
+                      }
+                      style={{
+                        marginTop: 13,
+                        width: '100%',
+                        borderRadius: 12,
+                        fontWeight: '900',
+                      }}
+                    >
+                      بيع كرت
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           )}
-
-          <div className="pkg-grid">
-            {Object.entries(
-              byPackage
-            ).map(
-              ([name, info]) => (
-                <div
-                  className="pkg-card"
-                  key={name}
-                >
-                  <div className="pname">
-                    {name}
-                  </div>
-
-                  <div className="pcount">
-                    {info.count}{' '}
-                    <span>
-                      كرت لديك
-                    </span>
-                  </div>
-
-                  <button
-                    className="btn-primary"
-                    style={{
-                      marginTop: 14,
-                      width: '100%',
-                    }}
-                    onClick={() =>
-                      askReveal(
-                        info.packageId,
-                        name
-                      )
-                    }
-                  >
-                    إظهار كرت
-                  </button>
-                </div>
-              )
-            )}
-          </div>
         </div>
+
+        {/* ================= RECENT SALES ================= */}
 
         <div
           className="panel"
           style={{
             marginTop: 20,
+            borderRadius: 22,
           }}
         >
-          <div className="panel-head">
-            <h3>
-              سجل مبيعات اليوم الأخيرة
-            </h3>
+          <div
+            className="panel-head"
+            style={{
+              display: 'flex',
+              justifyContent:
+                'space-between',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 11,
+                    background: '#ECFDF5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  🎫
+                </span>
 
-            <span className="muted">
-              آخر الكروت التي قمت ببيعها اليوم
-            </span>
-          </div>
+                <h3
+                  style={{
+                    margin: 0,
+                  }}
+                >
+                  سجل مبيعات اليوم
+                </h3>
+              </div>
 
-          {recentSales.length ===
-          0 ? (
+              <span className="muted">
+                الكروت التي تم بيعها فعلًا اليوم فقط
+              </span>
+            </div>
+
             <div
               style={{
-                color:
-                  'var(--ink-soft)',
+                background: '#ECFDF5',
+                color: '#047857',
+                padding: '6px 10px',
+                borderRadius: 10,
+                fontSize: 10.5,
+                fontWeight: '900',
+              }}
+            >
+              {soldToday} مبيعات
+            </div>
+          </div>
+
+          {recentSales.length === 0 ? (
+            <div
+              style={{
+                color: 'var(--ink-soft)',
                 fontSize: 13,
-                padding:
-                  '10px 0',
+                padding: '18px 0 8px',
+                textAlign: 'center',
               }}
             >
               لم تقم ببيع أي كرت حتى الآن اليوم.
@@ -1367,9 +1503,8 @@ export default function DistributorPage() {
             <div
               style={{
                 display: 'flex',
-                flexDirection:
-                  'column',
-                gap: 10,
+                flexDirection: 'column',
+                gap: 9,
                 marginTop: 10,
               }}
             >
@@ -1378,47 +1513,64 @@ export default function DistributorPage() {
                   <div
                     key={sale.id}
                     style={{
-                      display:
-                        'flex',
+                      display: 'flex',
                       justifyContent:
                         'space-between',
-                      alignItems:
-                        'center',
+                      alignItems: 'center',
+                      gap: 12,
                       background:
                         '#F8FAFC',
                       padding:
-                        '10px 14px',
-                      borderRadius:
-                        12,
+                        '12px 14px',
+                      borderRadius: 14,
                       border:
                         '1px solid #E2E8F0',
                     }}
                   >
-                    <div>
+                    <div
+                      style={{
+                        minWidth: 0,
+                      }}
+                    >
                       <div
                         style={{
                           fontSize: 13,
-                          fontWeight:
-                            '800',
-                          color:
-                            '#1E293B',
+                          fontWeight: '900',
+                          color: '#1E293B',
                         }}
                       >
-                        {sale
-                          .packages
-                          ?.name ||
-                          'باقة'}{' '}
-                        {sale.customer_name
-                          ? `(الزبون: ${sale.customer_name})`
-                          : ''}
+                        {sale.packages?.name ||
+                          'باقة'}
                       </div>
 
+                      {sale.customer_name && (
+                        <div
+                          style={{
+                            fontSize: 10.5,
+                            color: '#64748B',
+                            marginTop: 3,
+                          }}
+                        >
+                          👤 الزبون:{' '}
+                          {sale.customer_name}
+                        </div>
+                      )}
+
                       <div
-                        className="mono"
                         style={{
-                          fontSize: 12,
+                          display: 'inline-block',
+                          marginTop: 5,
+                          background:
+                            '#EDE9FE',
                           color:
-                            '#64748B',
+                            '#5B21B6',
+                          padding:
+                            '4px 7px',
+                          borderRadius: 7,
+                          fontSize: 11,
+                          fontWeight: '900',
+                          letterSpacing:
+                            0.5,
                         }}
                       >
                         {sale.code}
@@ -1427,12 +1579,11 @@ export default function DistributorPage() {
 
                     <div
                       style={{
-                        textAlign:
-                          'left',
-                        fontSize:
-                          10.5,
-                        color:
-                          '#94A3B8',
+                        textAlign: 'left',
+                        fontSize: 10.5,
+                        color: '#94A3B8',
+                        whiteSpace:
+                          'nowrap',
                       }}
                     >
                       {new Date(
@@ -1453,30 +1604,56 @@ export default function DistributorPage() {
           )}
         </div>
 
+        {/* ================= NOTES ================= */}
+
         <div
           className="panel"
           style={{
             marginTop: 20,
+            borderRadius: 22,
           }}
         >
-          <div className="panel-head">
-            <h3>
-              إرسال ملاحظة أو طلب للمدير
-            </h3>
+          <div
+            className="panel-head"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 9,
+            }}
+          >
+            <span
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 11,
+                background: '#FFF7ED',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              💬
+            </span>
+
+            <div>
+              <h3
+                style={{
+                  margin: 0,
+                }}
+              >
+                إرسال ملاحظة أو طلب للمدير
+              </h3>
+
+              <span className="muted">
+                ستصل الرسالة إلى المدير مباشرة
+              </span>
+            </div>
           </div>
 
-          {/*
-           * لا نستخدم form هنا حتى لا يحدث أي
-           * انتقال أو reload للصفحة.
-           *
-           * الزر type="button" ويستدعي الدالة مباشرة.
-           */}
           <div>
             <textarea
               rows={3}
-              value={
-                noteContent
-              }
+              value={noteContent}
               onChange={(e) =>
                 setNoteContent(
                   e.target.value
@@ -1486,13 +1663,15 @@ export default function DistributorPage() {
               placeholder="اكتب رسالتك أو طلبك هنا ليظهر لدى المدير مباشرة..."
               style={{
                 width: '100%',
-                padding: 12,
-                borderRadius: 10,
+                padding: 13,
+                borderRadius: 13,
                 border:
                   '1.5px solid var(--line)',
                 marginBottom: 10,
                 fontSize: 13.5,
                 resize: 'vertical',
+                outline: 'none',
+                boxSizing: 'border-box',
               }}
             />
 
@@ -1500,7 +1679,7 @@ export default function DistributorPage() {
               <div
                 style={{
                   fontSize: 12.5,
-                  fontWeight: '700',
+                  fontWeight: '800',
                   marginBottom: 10,
                   color:
                     noteMessage.startsWith(
@@ -1530,8 +1709,10 @@ export default function DistributorPage() {
               className="btn-primary"
               style={{
                 width: 'auto',
+                minWidth: 145,
                 padding:
-                  '10px 20px',
+                  '11px 20px',
+                borderRadius: 12,
               }}
             >
               {noteBusy
@@ -1542,18 +1723,20 @@ export default function DistributorPage() {
         </div>
       </div>
 
+      {/* ================= SALE CONFIRMATION ================= */}
+
       {pendingPackage && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
             background:
-              'rgba(20,10,40,0.6)',
+              'rgba(15,23,42,0.68)',
+            backdropFilter:
+              'blur(5px)',
             display: 'flex',
-            alignItems:
-              'center',
-            justifyContent:
-              'center',
+            alignItems: 'center',
+            justifyContent: 'center',
             zIndex: 1000,
             padding: 20,
           }}
@@ -1561,48 +1744,52 @@ export default function DistributorPage() {
           <div
             style={{
               background: '#fff',
-              borderRadius: 22,
-              maxWidth: 340,
+              borderRadius: 24,
+              maxWidth: 370,
               width: '100%',
-              textAlign:
-                'center',
+              textAlign: 'center',
               boxShadow:
-                '0 20px 60px rgba(0,0,0,0.35)',
+                '0 25px 80px rgba(0,0,0,0.35)',
               overflow: 'hidden',
             }}
           >
             <div
               style={{
                 background:
-                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                  'linear-gradient(120deg,#5B21B6,#7C3AED,#DB2777)',
                 padding:
-                  '26px 20px 22px',
+                  '25px 20px 22px',
                 color: '#fff',
               }}
             >
               <div
                 style={{
-                  fontSize: 12,
-                  color:
-                    '#E3D6FF',
-                  fontWeight:
-                    '700',
+                  fontSize: 11.5,
+                  color: '#E9D5FF',
+                  fontWeight: '800',
                   marginBottom: 6,
                 }}
               >
-                إظهار كرت من باقة
+                تأكيد بيع كرت
               </div>
 
               <div
                 style={{
-                  fontSize: 26,
-                  fontWeight:
-                    '900',
+                  fontSize: 25,
+                  fontWeight: '900',
                 }}
               >
-                {
-                  pendingPackage.name
-                }
+                {pendingPackage.name}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 7,
+                  fontSize: 10.5,
+                  color: '#F3E8FF',
+                }}
+              >
+                سيتم أخذ كرت واحد من مخزونك
               </div>
             </div>
 
@@ -1614,33 +1801,55 @@ export default function DistributorPage() {
             >
               <div
                 style={{
+                  background:
+                    '#F8FAFC',
+                  border:
+                    '1px solid #E2E8F0',
+                  borderRadius: 13,
+                  padding: 11,
+                  marginBottom: 15,
+                  fontSize: 11.5,
+                  color: '#64748B',
+                  textAlign: 'right',
+                }}
+              >
+                🔐 رقم الكرت لن يظهر الآن.
+                <br />
+                سيظهر لك فقط بعد نجاح عملية البيع.
+              </div>
+
+              <div
+                style={{
                   fontSize: 12.5,
                   color:
                     'var(--ink-soft)',
                   marginBottom: 15,
-                  textAlign:
-                    'right',
+                  textAlign: 'right',
                 }}
               >
                 <label
                   style={{
-                    display:
-                      'block',
+                    display: 'block',
                     marginBottom: 6,
-                    fontWeight:
-                      '700',
-                    color:
-                      '#374151',
+                    fontWeight: '800',
+                    color: '#374151',
                   }}
                 >
-                  اسم الزبون (اختياري للسحب الأسبوعي):
+                  اسم الزبون
+                  <span
+                    style={{
+                      fontWeight: '500',
+                      color: '#94A3B8',
+                    }}
+                  >
+                    {' '}
+                    (اختياري للسحب الأسبوعي)
+                  </span>
                 </label>
 
                 <input
                   type="text"
-                  value={
-                    customerName
-                  }
+                  value={customerName}
                   onChange={(e) =>
                     setCustomerName(
                       e.target.value
@@ -1650,24 +1859,25 @@ export default function DistributorPage() {
                   style={{
                     width: '100%',
                     padding:
-                      '10px 12px',
-                    borderRadius:
-                      10,
+                      '11px 12px',
+                    borderRadius: 11,
                     border:
                       '1.5px solid var(--line)',
                     fontSize: 13,
+                    boxSizing:
+                      'border-box',
                   }}
                 />
               </div>
 
               <div
                 style={{
-                  display:
-                    'flex',
+                  display: 'flex',
                   gap: 10,
                 }}
               >
                 <button
+                  type="button"
                   onClick={
                     cancelReveal
                   }
@@ -1687,13 +1897,16 @@ export default function DistributorPage() {
                     fontWeight:
                       '800',
                     cursor:
-                      'pointer',
+                      revealBusy
+                        ? 'not-allowed'
+                        : 'pointer',
                   }}
                 >
                   إلغاء
                 </button>
 
                 <button
+                  type="button"
                   onClick={
                     confirmReveal
                   }
@@ -1708,16 +1921,22 @@ export default function DistributorPage() {
                       12,
                     border: 'none',
                     background:
-                      'linear-gradient(120deg, #7C3AED, #DB2777)',
+                      'linear-gradient(120deg,#7C3AED,#DB2777)',
                     color: '#fff',
                     fontWeight:
-                      '800',
+                      '900',
                     cursor:
-                      'pointer',
+                      revealBusy
+                        ? 'not-allowed'
+                        : 'pointer',
+                    opacity:
+                      revealBusy
+                        ? 0.75
+                        : 1,
                   }}
                 >
                   {revealBusy
-                    ? 'جاري التأكيد...'
+                    ? 'جاري تأكيد البيع...'
                     : 'تأكيد البيع'}
                 </button>
               </div>
@@ -1726,18 +1945,20 @@ export default function DistributorPage() {
         </div>
       )}
 
+      {/* ================= SOLD CARD ================= */}
+
       {revealedCard && (
         <div
           style={{
             position: 'fixed',
             inset: 0,
             background:
-              'rgba(20,10,40,0.6)',
+              'rgba(15,23,42,0.68)',
+            backdropFilter:
+              'blur(5px)',
             display: 'flex',
-            alignItems:
-              'center',
-            justifyContent:
-              'center',
+            alignItems: 'center',
+            justifyContent: 'center',
             zIndex: 1000,
             padding: 20,
           }}
@@ -1745,28 +1966,28 @@ export default function DistributorPage() {
           <div
             style={{
               background: '#fff',
-              borderRadius: 24,
-              maxWidth: 380,
+              borderRadius: 25,
+              maxWidth: 390,
               width: '100%',
-              textAlign:
-                'center',
+              textAlign: 'center',
               boxShadow:
-                '0 20px 60px rgba(0,0,0,0.35)',
+                '0 25px 80px rgba(0,0,0,0.35)',
               overflow: 'hidden',
             }}
           >
             <div
               style={{
                 background:
-                  'linear-gradient(120deg, #5B21B6, #7C3AED, #DB2777)',
+                  'linear-gradient(120deg,#5B21B6,#7C3AED,#DB2777)',
                 padding:
-                  '18px 20px',
+                  '20px 20px',
                 color: '#fff',
                 position:
                   'relative',
               }}
             >
               <button
+                type="button"
                 onClick={
                   closeModal
                 }
@@ -1775,13 +1996,13 @@ export default function DistributorPage() {
                     'absolute',
                   top: 12,
                   left: 12,
-                  width: 30,
-                  height: 30,
+                  width: 31,
+                  height: 31,
                   borderRadius:
                     10,
                   border: 'none',
                   background:
-                    'rgba(255,255,255,0.25)',
+                    'rgba(255,255,255,0.22)',
                   color: '#fff',
                   fontWeight:
                     '900',
@@ -1796,22 +2017,20 @@ export default function DistributorPage() {
                 style={{
                   fontSize: 12.5,
                   color:
-                    '#E3D6FF',
+                    '#E9D5FF',
                   fontWeight:
-                    '700',
+                    '800',
                 }}
               >
-                {
-                  revealedCard.packageName
-                }
+                {revealedCard.packageName}
               </div>
 
               <div
                 style={{
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight:
                     '900',
-                  marginTop: 2,
+                  marginTop: 4,
                 }}
               >
                 ✓ تم البيع بنجاح
@@ -1824,33 +2043,55 @@ export default function DistributorPage() {
               }}
             >
               <div
-                className="mono"
                 style={{
-                  fontSize: 28,
-                  fontWeight:
-                    '900',
-                  margin:
-                    '4px 0 18px',
-                  direction:
-                    'ltr',
-                  color:
-                    '#3A1D66',
+                  background:
+                    '#F8FAFC',
+                  border:
+                    '1px solid #E2E8F0',
+                  borderRadius: 16,
+                  padding:
+                    '15px 10px',
+                  marginBottom: 16,
                 }}
               >
-                {
-                  revealedCard.code
-                }
+                <div
+                  style={{
+                    fontSize: 10.5,
+                    color: '#64748B',
+                    fontWeight: '800',
+                    marginBottom: 7,
+                  }}
+                >
+                  🔐 كود الكرت المباع
+                </div>
+
+                <div
+                  className="mono"
+                  style={{
+                    fontSize: 29,
+                    fontWeight:
+                      '900',
+                    direction:
+                      'ltr',
+                    color:
+                      '#3A1D66',
+                    letterSpacing:
+                      1.5,
+                  }}
+                >
+                  {revealedCard.code}
+                </div>
               </div>
 
               <div
                 style={{
-                  display:
-                    'flex',
+                  display: 'flex',
                   gap: 10,
                   marginBottom: 18,
                 }}
               >
                 <button
+                  type="button"
                   onClick={
                     copyCode
                   }
@@ -1867,7 +2108,7 @@ export default function DistributorPage() {
                     color:
                       '#5B21B6',
                     fontWeight:
-                      '800',
+                      '900',
                     cursor:
                       'pointer',
                   }}
@@ -1878,6 +2119,7 @@ export default function DistributorPage() {
                 </button>
 
                 <button
+                  type="button"
                   onClick={
                     shareWhatsapp
                   }
@@ -1898,7 +2140,7 @@ export default function DistributorPage() {
                         : '#25D366',
                     color: '#fff',
                     fontWeight:
-                      '800',
+                      '900',
                     cursor:
                       whatsappShared ||
                       whatsappBusy
@@ -1919,6 +2161,7 @@ export default function DistributorPage() {
               </div>
 
               <button
+                type="button"
                 onClick={
                   closeModal
                 }
@@ -1934,7 +2177,7 @@ export default function DistributorPage() {
                   color:
                     '#5B21B6',
                   fontWeight:
-                    '800',
+                    '900',
                   cursor:
                     'pointer',
                 }}
