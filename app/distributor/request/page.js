@@ -12,14 +12,18 @@ export default function RequestCardsPage() {
   const [packageId, setPackageId] = useState('');
   const [quantity, setQuantity] = useState('');
   const [myRequests, setMyRequests] = useState([]);
+
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function loadData() {
+    if (!profile?.id) return;
+
     const [{ data: pkgs }, { data: reqs }] = await Promise.all([
       supabase.from('packages').select('*'),
+
       supabase
         .from('card_requests')
         .select('*, packages(name)')
@@ -32,41 +36,94 @@ export default function RequestCardsPage() {
   }
 
   useEffect(() => {
-    if (profile) loadData();
+    if (profile) {
+      loadData();
+    }
   }, [profile]);
 
   const parsedQty = parseInt(quantity, 10) || 0;
-  const selectedPkg = packages.find((p) => p.id === packageId);
 
-  const total = selectedPkg
-    ? (selectedPkg.price * parsedQty).toFixed(2)
-    : '0.00';
-
-  const currentBalance = Number(profile?.balance || 0);
-  const numericTotal = Number(total || 0);
-
-  // معلومة بصرية فقط، ولا يتم استخدامها لاتخاذ أي قرار مالي.
-  const expectedBalance = currentBalance - numericTotal;
-
-  const totalRequestedCards = myRequests.reduce(
-    (sum, request) => sum + (Number(request.quantity) || 0),
-    0
+  const selectedPkg = packages.find(
+    (p) => p.id === packageId
   );
 
-  const pendingRequests = myRequests.filter(
-    (request) => request.status !== 'fulfilled' && request.status !== 'rejected'
-  ).length;
+  const totalNumber = selectedPkg
+    ? Number(selectedPkg.price || 0) * parsedQty
+    : 0;
+
+  const total = totalNumber.toFixed(2);
+
+  const currentBalance = Number(profile?.balance || 0);
+
+  const insufficientBalance =
+    !!selectedPkg &&
+    parsedQty > 0 &&
+    totalNumber > currentBalance;
+
+  const shortage = insufficientBalance
+    ? totalNumber - currentBalance
+    : 0;
+
+  const expectedBalance = insufficientBalance
+    ? 0
+    : currentBalance - totalNumber;
+
+  function formatDate(date) {
+    if (!date) return '—';
+
+    try {
+      return new Date(date).toLocaleString('ar-SA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return date;
+    }
+  }
+
+  function getRequestStatus(status) {
+    if (status === 'fulfilled') {
+      return {
+        text: 'تم التنفيذ',
+        className: 'green',
+      };
+    }
+
+    if (status === 'rejected') {
+      return {
+        text: 'مرفوض',
+        className: 'red',
+      };
+    }
+
+    return {
+      text: 'قيد الانتظار',
+      className: 'amber',
+    };
+  }
 
   async function submitRequest(e) {
     e.preventDefault();
-
-    if (submitting) return;
 
     setError('');
     setDone(false);
 
     if (!packageId || parsedQty < 1) {
       setError('يرجى اختيار الباقة وإدخال كمية صحيحة.');
+      return;
+    }
+
+    // فحص واجهة فقط للتأكد من وضوح حالة الرصيد للموزع.
+    // لا يغيّر هذا الفحص أي منطق مالي في قاعدة البيانات.
+    if (insufficientBalance) {
+      setError(
+        `الرصيد غير كافٍ. تحتاج إلى ${shortage.toFixed(
+          2
+        )} ريال إضافية لإتمام هذا الطلب.`
+      );
       return;
     }
 
@@ -93,9 +150,13 @@ export default function RequestCardsPage() {
       try {
         const packageName = selectedPkg
           ? selectedPkg.name
-          : 'باقة غير معروفةة';
+          : 'باقة غير معروفة';
 
-        const telegramContent = `طلب كروت جديد:\n📦 الباقة: ${packageName}\n🔢 الكمية: ${parsedQty}\n💰 الإجمالي: ${total} ريال`;
+        const telegramContent =
+          `طلب كروت جديد:\n` +
+          `📦 الباقة: ${packageName}\n` +
+          `🔢 الكمية: ${parsedQty}\n` +
+          `💰 الإجمالي: ${total} ريال`;
 
         await fetch('/api/telegram', {
           method: 'POST',
@@ -117,10 +178,11 @@ export default function RequestCardsPage() {
 
       setQuantity('');
       setPackageId('');
+
       await loadData();
     } catch (requestError) {
       console.error('Card request error:', requestError);
-      setError('حدث خطأ غير متوقع أثناء إرسال الطلب. حاول مرة أخرى.');
+      setError('حدث خطأ أثناء إرسال الطلب. حاول مرة أخرى.');
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +190,7 @@ export default function RequestCardsPage() {
 
   async function deleteRequest(id) {
     const confirmed = window.confirm(
-      'هل أنت متأكد من حذف هذا الطلب؟\n\nلا يمكن التراجع عن عملية الحذف.'
+      'هل أنت متأكد من حذف هذا الطلب؟'
     );
 
     if (!confirmed) return;
@@ -142,47 +204,9 @@ export default function RequestCardsPage() {
         .eq('id', id);
 
       await loadData();
-    } catch (deleteError) {
-      console.error('Delete request error:', deleteError);
-      setError('حدث خطأ أثناء حذف الطلب.');
     } finally {
       setBusyId(null);
     }
-  }
-
-  function formatDate(dateValue) {
-    if (!dateValue) return '—';
-
-    const date = new Date(dateValue);
-
-    if (Number.isNaN(date.getTime())) return '—';
-
-    return date.toLocaleDateString('ar-YE', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  }
-
-  function getRequestStatus(status) {
-    if (status === 'fulfilled') {
-      return {
-        label: 'تم التنفيذ',
-        className: 'green',
-      };
-    }
-
-    if (status === 'rejected') {
-      return {
-        label: 'مرفوض',
-        className: 'red',
-      };
-    }
-
-    return {
-      label: 'قيد الانتظار',
-      className: 'amber',
-    };
   }
 
   if (loading) return null;
@@ -192,130 +216,20 @@ export default function RequestCardsPage() {
       <Sidebar
         role="distributor"
         active="/distributor/request"
-        name={profile.full_name}
+        name={profile?.full_name}
       />
 
       <div className="main">
         <h1>طلب كروت جديد</h1>
 
-        <p className="greet" style={{ marginBottom: 20 }}>
-          يُخصم المبلغ من رصيدك تلقائيًا فور موافقة المدير
-        </p>
-
-        {/* ملخص سريع */}
-        <div
+        <p
+          className="greet"
           style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-            gap: 12,
-            marginBottom: 18,
+            marginBottom: 20,
           }}
         >
-          <div
-            className="panel"
-            style={{
-              margin: 0,
-              padding: 18,
-              borderRadius: 12,
-            }}
-          >
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
-              رصيدك الحالي
-            </div>
-
-            <div
-              style={{
-                fontSize: 24,
-                fontWeight: 800,
-              }}
-            >
-              {currentBalance.toFixed(2)}{' '}
-              <span style={{ fontSize: 13, fontWeight: 500 }}>ريال</span>
-            </div>
-          </div>
-
-          <div
-            className="panel"
-            style={{
-              margin: 0,
-              padding: 18,
-              borderRadius: 12,
-            }}
-          >
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
-              إجمالي الطلبات
-            </div>
-
-            <div
-              style={{
-                fontSize: 24,
-                fontWeight: 800,
-              }}
-            >
-              {myRequests.length}
-            </div>
-
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 12,
-                marginTop: 4,
-              }}
-            >
-              منها {pendingRequests} قيد الانتظار
-            </div>
-          </div>
-
-          <div
-            className="panel"
-            style={{
-              margin: 0,
-              padding: 18,
-              borderRadius: 12,
-            }}
-          >
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
-              إجمالي الكروت المطلوبة
-            </div>
-
-            <div
-              style={{
-                fontSize: 24,
-                fontWeight: 800,
-              }}
-            >
-              {totalRequestedCards}
-            </div>
-
-            <div
-              style={{
-                color: '#64748b',
-                fontSize: 12,
-                marginTop: 4,
-              }}
-            >
-              جميع الطلبات السابقة
-            </div>
-          </div>
-        </div>
+          يُخصم المبلغ من رصيدك تلقائيًا فور موافقة المدير
+        </p>
 
         {/* نموذج الطلب */}
         <div className="panel">
@@ -324,10 +238,9 @@ export default function RequestCardsPage() {
               className="error-note"
               style={{
                 marginBottom: 16,
-                lineHeight: 1.7,
               }}
             >
-              ❌ {error}
+              {error}
             </div>
           )}
 
@@ -336,32 +249,11 @@ export default function RequestCardsPage() {
               className="pending-note"
               style={{
                 marginBottom: 16,
-                lineHeight: 1.7,
               }}
             >
-              ✅ تم إرسال طلبك وحفظه بنجاح، وتم إرسال إشعار المدير.
+              ✅ تم إرسال طلبك وحفظه، وتم إشعار المدير بنجاح
             </div>
           )}
-
-          <div
-            style={{
-              marginBottom: 18,
-            }}
-          >
-            <h3 style={{ margin: 0, marginBottom: 6 }}>
-              إنشاء طلب جديد
-            </h3>
-
-            <p
-              style={{
-                margin: 0,
-                color: '#64748b',
-                fontSize: 13,
-              }}
-            >
-              اختر الباقة ثم حدد عدد الكروت المطلوبة.
-            </p>
-          </div>
 
           <form
             onSubmit={submitRequest}
@@ -372,6 +264,7 @@ export default function RequestCardsPage() {
               alignItems: 'flex-end',
             }}
           >
+            {/* الباقة */}
             <div
               className="field"
               style={{
@@ -384,8 +277,11 @@ export default function RequestCardsPage() {
 
               <select
                 value={packageId}
-                disabled={submitting}
-                onChange={(e) => setPackageId(e.target.value)}
+                onChange={(e) => {
+                  setPackageId(e.target.value);
+                  setError('');
+                  setDone(false);
+                }}
               >
                 <option value="">اختر باقة</option>
 
@@ -397,6 +293,7 @@ export default function RequestCardsPage() {
               </select>
             </div>
 
+            {/* الكمية */}
             <div
               className="field"
               style={{
@@ -410,28 +307,43 @@ export default function RequestCardsPage() {
                 type="number"
                 min="1"
                 value={quantity}
-                disabled={submitting}
-                onChange={(e) =>
+                onChange={(e) => {
                   setQuantity(
-                    e.target.value === '' ? '' : e.target.value
-                  )
-                }
+                    e.target.value === ''
+                      ? ''
+                      : e.target.value
+                  );
+
+                  setError('');
+                  setDone(false);
+                }}
               />
             </div>
 
+            {/* زر الإرسال */}
             <button
               className="btn-primary"
               style={{
                 width: 170,
                 minHeight: 42,
-                opacity: submitting ? 0.7 : 1,
-                cursor: submitting ? 'not-allowed' : 'pointer',
+                opacity:
+                  submitting || insufficientBalance
+                    ? 0.6
+                    : 1,
+                cursor:
+                  submitting || insufficientBalance
+                    ? 'not-allowed'
+                    : 'pointer',
               }}
               type="submit"
-              disabled={submitting}
+              disabled={
+                submitting || insufficientBalance
+              }
             >
               {submitting
                 ? 'جاري الإرسال...'
+                : insufficientBalance
+                ? 'الرصيد غير كافٍ'
                 : `إرسال الطلب${
                     selectedPkg && parsedQty > 0
                       ? ` (${total} ريال)`
@@ -440,394 +352,676 @@ export default function RequestCardsPage() {
             </button>
           </form>
 
-          {/* تفاصيل الطلب الحالي */}
+          {/* ملخص الطلب */}
           {selectedPkg && parsedQty > 0 && (
             <div
               style={{
-                marginTop: 20,
+                marginTop: 22,
                 padding: 16,
-                borderRadius: 10,
-                background: '#f8fafc',
-                border: '1px solid #e2e8f0',
+                borderRadius: 14,
+                background: insufficientBalance
+                  ? '#fff7f7'
+                  : '#f8fafc',
+                border: insufficientBalance
+                  ? '1px solid #fecaca'
+                  : '1px solid #e2e8f0',
               }}
             >
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns:
-                    'repeat(auto-fit, minmax(150px, 1fr))',
-                  gap: 14,
-                }}
-              >
+              {insufficientBalance ? (
+                /* حالة الرصيد غير الكافي */
                 <div>
                   <div
                     style={{
-                      color: '#64748b',
-                      fontSize: 12,
-                      marginBottom: 5,
-                    }}
-                  >
-                    الباقة
-                  </div>
-
-                  <strong>{selectedPkg.name}</strong>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      color: '#64748b',
-                      fontSize: 12,
-                      marginBottom: 5,
-                    }}
-                  >
-                    سعر الكرت
-                  </div>
-
-                  <strong>
-                    {Number(selectedPkg.price).toFixed(2)} ريال
-                  </strong>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      color: '#64748b',
-                      fontSize: 12,
-                      marginBottom: 5,
-                    }}
-                  >
-                    الكمية
-                  </div>
-
-                  <strong>{parsedQty} كرت</strong>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      color: '#64748b',
-                      fontSize: 12,
-                      marginBottom: 5,
-                    }}
-                  >
-                    إجمالي الطلب
-                  </div>
-
-                  <strong
-                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 14,
+                      color: '#b91c1c',
                       fontSize: 17,
+                      fontWeight: 800,
                     }}
                   >
-                    {total} ريال
-                  </strong>
-                </div>
-
-                <div>
-                  <div
-                    style={{
-                      color: '#64748b',
-                      fontSize: 12,
-                      marginBottom: 5,
-                    }}
-                  >
-                    الرصيد المتوقع بعد التنفيذ
+                    <span>⚠️</span>
+                    <span>الرصيد غير كافٍ</span>
                   </div>
-
-                  <strong
-                    style={{
-                      fontSize: 17,
-                    }}
-                  >
-                    {expectedBalance.toFixed(2)} ريال
-                  </strong>
 
                   <div
                     style={{
-                      color: '#94a3b8',
-                      fontSize: 11,
-                      marginTop: 4,
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 10,
                     }}
                   >
-                    تقديري فقط — لا يغيّر الرصيد فعليًا
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* سجل الطلبات */}
-        <div className="panel">
-          <div
-            className="panel-head"
-            style={{
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-            }}
-          >
-            <h3>طلباتي السابقة</h3>
-
-            <span className="muted">
-              {myRequests.length} طلب
-            </span>
-          </div>
-
-          {myRequests.length === 0 ? (
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '35px 15px',
-                color: '#64748b',
-              }}
-            >
-              لا توجد طلبات سابقة حتى الآن.
-            </div>
-          ) : (
-            <>
-              {/* عرض الجوال */}
-              <div
-                style={{
-                  display: 'none',
-                }}
-                className="request-mobile-list"
-              >
-                {myRequests.map((r) => {
-                  const status = getRequestStatus(r.status);
-                  const requestPackage = packages.find(
-                    (p) => p.id === r.package_id
-                  );
-
-                  const price = requestPackage
-                    ? Number(requestPackage.price || 0)
-                    : 0;
-
-                  const requestTotal = (
-                    price * Number(r.quantity || 0)
-                  ).toFixed(2);
-
-                  return (
+                    {/* الباقة */}
                     <div
-                      key={r.id}
                       style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 10,
-                        padding: 14,
-                        marginBottom: 10,
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
                       }}
                     >
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                          marginBottom: 10,
+                          fontSize: 12,
+                          color: '#2563eb',
+                          marginBottom: 5,
                         }}
                       >
-                        <strong>
-                          {r.packages?.name || '—'}
-                        </strong>
+                        📦 الباقة
+                      </div>
 
-                        <span className={`pill ${status.className}`}>
-                          {status.label}
-                        </span>
+                      <strong
+                        style={{
+                          fontSize: 15,
+                          color: '#1e3a8a',
+                        }}
+                      >
+                        {selectedPkg.name}
+                      </strong>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#64748b',
+                          marginTop: 4,
+                        }}
+                      >
+                        {Number(
+                          selectedPkg.price || 0
+                        ).toFixed(2)}{' '}
+                        ريال / كرت
+                      </div>
+                    </div>
+
+                    {/* الكمية */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#f5f3ff',
+                        border: '1px solid #ddd6fe',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#7c3aed',
+                          marginBottom: 5,
+                        }}
+                      >
+                        🔢 الكمية
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#5b21b6',
+                        }}
+                      >
+                        {parsedQty}
+                      </strong>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#64748b',
+                          marginTop: 4,
+                        }}
+                      >
+                        كرت
+                      </div>
+                    </div>
+
+                    {/* إجمالي الطلب */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#fff7ed',
+                        border: '1px solid #fed7aa',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#ea580c',
+                          marginBottom: 5,
+                        }}
+                      >
+                        💰 إجمالي الطلب
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#c2410c',
+                        }}
+                      >
+                        {total} ريال
+                      </strong>
+                    </div>
+
+                    {/* الرصيد الحالي */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#16a34a',
+                          marginBottom: 5,
+                        }}
+                      >
+                        💳 رصيدك الحالي
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#15803d',
+                        }}
+                      >
+                        {currentBalance.toFixed(2)} ريال
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* مقدار النقص */}
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 13,
+                      borderRadius: 10,
+                      background: '#fee2e2',
+                      border:
+                        '1px solid #fecaca',
+                      color: '#991b1b',
+                      lineHeight: 1.8,
+                      fontSize: 13,
+                    }}
+                  >
+                    تحتاج إلى إضافة{' '}
+                    <strong>
+                      {shortage.toFixed(2)} ريال
+                    </strong>{' '}
+                    إلى رصيدك حتى تتمكن من طلب هذه الكمية.
+                  </div>
+                </div>
+              ) : (
+                /* حالة الرصيد الكافي */
+                <div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 14,
+                      color: '#166534',
+                      fontSize: 17,
+                      fontWeight: 800,
+                    }}
+                  >
+                    <span>✅</span>
+                    <span>تفاصيل الطلب</span>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(150px, 1fr))',
+                      gap: 10,
+                    }}
+                  >
+                    {/* الباقة */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#2563eb',
+                          marginBottom: 5,
+                        }}
+                      >
+                        📦 الباقة
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 15,
+                          color: '#1e3a8a',
+                        }}
+                      >
+                        {selectedPkg.name}
+                      </strong>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#64748b',
+                          marginTop: 4,
+                        }}
+                      >
+                        {Number(
+                          selectedPkg.price || 0
+                        ).toFixed(2)}{' '}
+                        ريال / كرت
+                      </div>
+                    </div>
+
+                    {/* الكمية */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#f5f3ff',
+                        border: '1px solid #ddd6fe',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#7c3aed',
+                          marginBottom: 5,
+                        }}
+                      >
+                        🔢 الكمية
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#5b21b6',
+                        }}
+                      >
+                        {parsedQty}
+                      </strong>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#64748b',
+                          marginTop: 4,
+                        }}
+                      >
+                        كرت
+                      </div>
+                    </div>
+
+                    {/* الإجمالي */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#fff7ed',
+                        border: '1px solid #fed7aa',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#ea580c',
+                          marginBottom: 5,
+                        }}
+                      >
+                        💰 إجمالي الطلب
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#c2410c',
+                        }}
+                      >
+                        {total} ريال
+                      </strong>
+                    </div>
+
+                    {/* الرصيد الحالي */}
+                    <div
+                      style={{
+                        padding: 13,
+                        borderRadius: 11,
+                        background: '#f0fdf4',
+                        border: '1px solid #bbf7d0',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#16a34a',
+                          marginBottom: 5,
+                        }}
+                      >
+                        💳 الرصيد الحالي
+                      </div>
+
+                      <strong
+                        style={{
+                          fontSize: 18,
+                          color: '#15803d',
+                        }}
+                      >
+                        {currentBalance.toFixed(2)} ريال
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* الرصيد المتوقع */}
+                  <div
+                    style={{
+                      marginTop: 12,
+                      padding: 14,
+                      borderRadius: 11,
+                      background:
+                        'linear-gradient(135deg, #ecfdf5, #f0fdf4)',
+                      border: '1px solid #86efac',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: '#15803d',
+                          marginBottom: 5,
+                          fontWeight: 700,
+                        }}
+                      >
+                        💵 الرصيد المتبقي المتوقع
                       </div>
 
                       <div
                         style={{
-                          display: 'grid',
-                          gridTemplateColumns:
-                            'repeat(2, 1fr)',
-                          gap: 10,
-                          fontSize: 13,
+                          fontSize: 11,
+                          color: '#64748b',
                         }}
                       >
-                        <div>
-                          <span style={{ color: '#64748b' }}>
-                            الكمية
-                          </span>
-                          <div>
-                            {r.quantity} كرت
-                          </div>
-                        </div>
-
-                        <div>
-                          <span style={{ color: '#64748b' }}>
-                            السعر
-                          </span>
-                          <div>
-                            {price.toFixed(2)} ريال
-                          </div>
-                        </div>
-
-                        <div>
-                          <span style={{ color: '#64748b' }}>
-                            الإجمالي
-                          </span>
-                          <div>
-                            {requestTotal} ريال
-                          </div>
-                        </div>
-
-                        <div>
-                          <span style={{ color: '#64748b' }}>
-                            التاريخ
-                          </span>
-                          <div>
-                            {formatDate(r.created_at)}
-                          </div>
-                        </div>
+                        بعد تنفيذ الطلب
                       </div>
-
-                      <button
-                        type="button"
-                        className="btn-sm"
-                        style={{
-                          backgroundColor: '#dc2626',
-                          color: '#ffffff',
-                          opacity:
-                            busyId === r.id ? 0.6 : 1,
-                          padding: '7px 14px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          marginTop: 12,
-                          width: '100%',
-                          cursor:
-                            busyId === r.id
-                              ? 'not-allowed'
-                              : 'pointer',
-                        }}
-                        disabled={busyId === r.id}
-                        onClick={() => deleteRequest(r.id)}
-                      >
-                        {busyId === r.id
-                          ? 'جاري الحذف...'
-                          : 'حذف الطلب'}
-                      </button>
                     </div>
-                  );
-                })}
-              </div>
 
-              {/* عرض الكمبيوتر */}
-              <div
-                className="request-desktop-table"
-                style={{
-                  overflowX: 'auto',
-                }}
-              >
-                <table>
-                  <thead>
-                    <tr>
-                      <th>الباقة</th>
-                      <th>الكمية</th>
-                      <th>السعر</th>
-                      <th>الإجمالي</th>
-                      <th>التاريخ</th>
-                      <th>الحالة</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {myRequests.map((r) => {
-                      const status = getRequestStatus(r.status);
-
-                      const requestPackage = packages.find(
-                        (p) => p.id === r.package_id
-                      );
-
-                      const price = requestPackage
-                        ? Number(requestPackage.price || 0)
-                        : 0;
-
-                      const requestTotal = (
-                        price * Number(r.quantity || 0)
-                      ).toFixed(2);
-
-                      return (
-                        <tr key={r.id}>
-                          <td>
-                            {r.packages?.name || '—'}
-                          </td>
-
-                          <td>
-                            {r.quantity}
-                          </td>
-
-                          <td>
-                            {price.toFixed(2)} ريال
-                          </td>
-
-                          <td>
-                            <strong>
-                              {requestTotal} ريال
-                            </strong>
-                          </td>
-
-                          <td>
-                            {formatDate(r.created_at)}
-                          </td>
-
-                          <td>
-                            <span
-                              className={`pill ${status.className}`}
-                            >
-                              {status.label}
-                            </span>
-                          </td>
-
-                          <td>
-                            <button
-                              type="button"
-                              className="btn-sm"
-                              style={{
-                                backgroundColor: '#dc2626',
-                                color: '#ffffff',
-                                opacity:
-                                  busyId === r.id ? 0.6 : 1,
-                                padding: '6px 14px',
-                                borderRadius: '6px',
-                                border: 'none',
-                                cursor:
-                                  busyId === r.id
-                                    ? 'not-allowed'
-                                    : 'pointer',
-                              }}
-                              disabled={busyId === r.id}
-                              onClick={() =>
-                                deleteRequest(r.id)
-                              }
-                            >
-                              {busyId === r.id
-                                ? 'جاري الحذف...'
-                                : 'حذف'}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </>
+                    <strong
+                      style={{
+                        fontSize: 21,
+                        color: '#166534',
+                      }}
+                    >
+                      {expectedBalance.toFixed(2)} ريال
+                    </strong>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* تحسين عرض الجدول على الجوال */}
-        <style jsx>{`
-          @media (max-width: 700px) {
-            .request-desktop-table {
-              display: none !important;
-            }
+        {/* الطلبات السابقة */}
+        <div className="panel">
+          <div className="panel-head">
+            <h3>طلباتي السابقة</h3>
 
-            .request-mobile-list {
-              display: block !important;
-            }
-          }
-        `}</style>
+            <span className="muted">
+              {myRequests.length}
+            </span>
+          </div>
+
+          {/* عرض الجوال */}
+          <div
+            style={{
+              display: 'none',
+            }}
+            className="mobile-request-list"
+          >
+            {myRequests.length === 0 ? (
+              <div
+                style={{
+                  textAlign: 'center',
+                  padding: 25,
+                  color: '#64748b',
+                }}
+              >
+                لا توجد طلبات سابقة
+              </div>
+            ) : (
+              myRequests.map((r) => {
+                const status = getRequestStatus(
+                  r.status
+                );
+
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 12,
+                      padding: 14,
+                      marginBottom: 10,
+                      background: '#ffffff',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent:
+                          'space-between',
+                        gap: 10,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <strong>
+                        {r.packages?.name ||
+                          'باقة غير معروفة'}
+                      </strong>
+
+                      <span
+                        className={`pill ${status.className}`}
+                      >
+                        {status.text}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        color: '#64748b',
+                        lineHeight: 1.9,
+                      }}
+                    >
+                      <div>
+                        🔢 الكمية:{' '}
+                        <strong>
+                          {r.quantity}
+                        </strong>
+                      </div>
+
+                      {r.created_at && (
+                        <div>
+                          🕐 التاريخ:{' '}
+                          <strong>
+                            {formatDate(
+                              r.created_at
+                            )}
+                          </strong>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      className="btn-sm"
+                      style={{
+                        marginTop: 10,
+                        backgroundColor:
+                          '#dc2626',
+                        color: '#ffffff',
+                        opacity:
+                          busyId === r.id
+                            ? 0.6
+                            : 1,
+                        padding:
+                          '7px 14px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor:
+                          busyId === r.id
+                            ? 'not-allowed'
+                            : 'pointer',
+                      }}
+                      disabled={
+                        busyId === r.id
+                      }
+                      onClick={() =>
+                        deleteRequest(r.id)
+                      }
+                    >
+                      {busyId === r.id
+                        ? 'جاري الحذف...'
+                        : 'حذف'}
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* عرض سطح المكتب */}
+          <div
+            style={{
+              overflowX: 'auto',
+            }}
+          >
+            <table>
+              <thead>
+                <tr>
+                  <th>الباقة</th>
+                  <th>الكمية</th>
+                  <th>التاريخ</th>
+                  <th>الحالة</th>
+                  <th></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {myRequests.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="5"
+                      style={{
+                        textAlign: 'center',
+                        padding: 30,
+                        color: '#64748b',
+                      }}
+                    >
+                      لا توجد طلبات سابقة
+                    </td>
+                  </tr>
+                ) : (
+                  myRequests.map((r) => {
+                    const status =
+                      getRequestStatus(r.status);
+
+                    return (
+                      <tr key={r.id}>
+                        <td>
+                          <strong>
+                            {r.packages?.name ||
+                              'باقة غير معروفة'}
+                          </strong>
+                        </td>
+
+                        <td>{r.quantity}</td>
+
+                        <td
+                          style={{
+                            color: '#64748b',
+                            fontSize: 13,
+                          }}
+                        >
+                          {formatDate(
+                            r.created_at
+                          )}
+                        </td>
+
+                        <td>
+                          <span
+                            className={`pill ${status.className}`}
+                          >
+                            {status.text}
+                          </span>
+                        </td>
+
+                        <td>
+                          <button
+                            className="btn-sm"
+                            style={{
+                              backgroundColor:
+                                '#dc2626',
+                              color: '#ffffff',
+                              opacity:
+                                busyId === r.id
+                                  ? 0.6
+                                  : 1,
+                              padding:
+                                '6px 14px',
+                              borderRadius:
+                                '6px',
+                              border: 'none',
+                              cursor:
+                                busyId === r.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                            }}
+                            disabled={
+                              busyId === r.id
+                            }
+                            onClick={() =>
+                              deleteRequest(r.id)
+                            }
+                          >
+                            {busyId === r.id
+                              ? 'جاري الحذف...'
+                              : 'حذف'}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
+
+      {/* تحسين عرض البطاقات على الجوال */}
+      <style jsx>{`
+        @media (max-width: 700px) {
+          .mobile-request-list {
+            display: block !important;
+          }
+
+          .mobile-request-list + div {
+            display: none !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
