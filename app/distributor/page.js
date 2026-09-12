@@ -30,9 +30,16 @@ export default function DistributorPage() {
   /*
    * حماية إرسال الكرت إلى واتساب.
    *
-   * يتم حفظ الكرت الذي تم بدء مشاركته في واتساب
-   * في localStorage حتى لا يمكن إعادة مشاركته
-   * من نفس المتصفح حتى بعد Refresh أو إغلاق الصفحة.
+   * يتم حفظ الكرت الذي تم بدء مشاركته في localStorage
+   * حتى لا يمكن إعادة مشاركته من نفس المتصفح
+   * حتى بعد Refresh أو إغلاق الصفحة.
+   *
+   * الحماية الجديدة تعتمد على:
+   * - id الخاص بالكرت
+   * - code الخاص بالكرت
+   *
+   * مع الإبقاء على مفتاح الحماية القديم
+   * للتوافق مع الحالات السابقة.
    */
   const [whatsappShared, setWhatsappShared] = useState(false);
   const [whatsappBusy, setWhatsappBusy] = useState(false);
@@ -53,6 +60,9 @@ export default function DistributorPage() {
 
   /*
    * التحقق من حالة إرسال الكرت إلى واتساب.
+   *
+   * نستخدم مفتاحًا جديدًا يعتمد على id + code.
+   * ونفحص أيضًا المفتاح القديم للتوافق مع المشاركات السابقة.
    */
   useEffect(() => {
     if (!revealedCard?.code) {
@@ -61,11 +71,23 @@ export default function DistributorPage() {
     }
 
     try {
-      const storageKey =
-        `tawasul_whatsapp_shared_${revealedCard.code}`;
+      const code = String(
+        revealedCard.code
+      ).trim();
+
+      const cardId = String(
+        revealedCard.id || ''
+      ).trim();
+
+      const newStorageKey =
+        `tawasul_whatsapp_shared_v2_${cardId}_${code}`;
+
+      const oldStorageKey =
+        `tawasul_whatsapp_shared_${code}`;
 
       const alreadyShared =
-        localStorage.getItem(storageKey) === '1';
+        localStorage.getItem(newStorageKey) === '1' ||
+        localStorage.getItem(oldStorageKey) === '1';
 
       setWhatsappShared(alreadyShared);
     } catch (error) {
@@ -566,7 +588,10 @@ export default function DistributorPage() {
    * 1. منع الضغط أثناء فتح المشاركة.
    * 2. منع مشاركة نفس الكرت مرة أخرى.
    * 3. حفظ حالة المشاركة في localStorage.
-   * 4. وقت الرسالة = وقت البيع وليس وقت الضغط على واتساب.
+   * 4. مفتاح الحماية يعتمد على id + code.
+   * 5. فحص المفتاح القديم أيضًا للتوافق.
+   * 6. تسجيل المشاركة قبل فتح واتساب.
+   * 7. وقت الرسالة = وقت البيع وليس وقت الضغط على واتساب.
    */
   function shareWhatsapp() {
     if (
@@ -581,25 +606,79 @@ export default function DistributorPage() {
       revealedCard.code
     ).trim();
 
-    if (!code) return;
+    const cardId = String(
+      revealedCard.id || ''
+    ).trim();
 
-    const storageKey =
+    if (!code || !cardId) {
+      console.error(
+        'WhatsApp share blocked: missing card id or code'
+      );
+
+      return;
+    }
+
+    /*
+     * مفتاح جديد خاص بالكرت نفسه.
+     *
+     * استخدام id يمنع الخلط بين كرتين لهما نفس الكود
+     * في حال وجود بيانات قديمة أو إعادة استخدام أكواد.
+     */
+    const newStorageKey =
+      `tawasul_whatsapp_shared_v2_${cardId}_${code}`;
+
+    /*
+     * المفتاح القديم يبقى موجودًا للتوافق مع
+     * أي كرت تمت مشاركته قبل هذا التعديل.
+     */
+    const oldStorageKey =
       `tawasul_whatsapp_shared_${code}`;
 
     try {
       /*
-       * فحص إضافي قبل فتح واتساب.
+       * فحص إضافي قبل أي تغيير في الحالة.
+       *
+       * مهم جدًا:
+       * لا يوجد await بين الفحص والتسجيل،
+       * لذلك لا توجد فترة انتظار تسمح بضغطتين
+       * متتاليتين داخل نفس تنفيذ JavaScript.
        */
-      if (
+      const alreadyShared =
         localStorage.getItem(
-          storageKey
-        ) === '1'
-      ) {
+          newStorageKey
+        ) === '1' ||
+        localStorage.getItem(
+          oldStorageKey
+        ) === '1';
+
+      if (alreadyShared) {
         setWhatsappShared(true);
         return;
       }
 
+      /*
+       * قفل فوري داخل الصفحة.
+       *
+       * يتم وضعه قبل إنشاء رابط واتساب.
+       */
       setWhatsappBusy(true);
+
+      /*
+       * نتحقق مرة ثانية بعد تفعيل القفل
+       * تحسبًا لأي حالة غير متوقعة.
+       */
+      const secondCheck =
+        localStorage.getItem(
+          newStorageKey
+        ) === '1' ||
+        localStorage.getItem(
+          oldStorageKey
+        ) === '1';
+
+      if (secondCheck) {
+        setWhatsappShared(true);
+        return;
+      }
 
       const dailyReminder =
         dailyReminders[
@@ -663,15 +742,31 @@ export default function DistributorPage() {
       /*
        * نحفظ حالة المشاركة قبل فتح واتساب.
        *
-       * هذا يمنع الضغط المزدوج أو فتح رابطين لنفس الكرت.
+       * نكتب المفتاح الجديد والمفتاح القديم.
+       * المفتاح الجديد هو الأساسي،
+       * والقديم يحافظ على التوافق مع النظام السابق.
        */
       localStorage.setItem(
-        storageKey,
+        newStorageKey,
         '1'
       );
 
+      localStorage.setItem(
+        oldStorageKey,
+        '1'
+      );
+
+      /*
+       * تحديث حالة الواجهة فورًا.
+       */
       setWhatsappShared(true);
 
+      /*
+       * فتح واتساب مرة واحدة فقط.
+       *
+       * لا يوجد أي استدعاء آخر لهذه الدالة
+       * من داخل هذا المسار.
+       */
       window.open(
         `https://wa.me/?text=${encodeURIComponent(
           text
@@ -685,12 +780,19 @@ export default function DistributorPage() {
       );
 
       /*
-       * إذا فشلت عملية فتح المشاركة،
-       * نعيد السماح بالمحاولة.
+       * إذا فشلت عملية إنشاء/فتح المشاركة،
+       * نزيل مفاتيح الحماية حتى يستطيع المستخدم
+       * المحاولة مرة أخرى.
+       *
+       * لا نلمس قاعدة البيانات ولا حالة البيع.
        */
       try {
         localStorage.removeItem(
-          storageKey
+          newStorageKey
+        );
+
+        localStorage.removeItem(
+          oldStorageKey
         );
       } catch (storageError) {
         console.error(
