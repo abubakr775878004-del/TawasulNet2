@@ -201,7 +201,7 @@ function StatusBadge({ status }) {
   const style = STATUS_STYLES[status] || {
     background: '#f8fafc',
     color: '#475569',
-    border: '#e2e8f0'
+    border: '#dbe3ee'
   };
 
   return (
@@ -238,11 +238,11 @@ function StatCard({ icon, title, value, accent }) {
     <div
       style={{
         background: '#ffffff',
-        border: '1px solid #e2e8f0',
+        border: '1px solid #dbe3ee',
         borderRadius: 14,
         padding: '16px 17px',
         minWidth: 0,
-        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.03)'
+        boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
       }}
     >
       <div
@@ -400,7 +400,6 @@ export default function PackagesPage() {
               .select('id', { count: 'exact', head: true })
               .eq('package_id', pkg.id),
 
-            // مخزون المدير الحقيقي = الكروت المتاحة فقط.
             supabase
               .from('cards')
               .select('id', { count: 'exact', head: true })
@@ -423,17 +422,9 @@ export default function PackagesPage() {
         return [
           pkg.id,
           {
-            // هذا يمثل كل الكروت الموجودة في النظام لهذه الباقة،
-            // ولا يستخدم كمخزون المدير.
             total: totalResult.count || 0,
-
-            // هذا هو المخزون الفعلي للمدير.
             available: availableResult.count || 0,
-
-            // هذه الكروت محفوظة في النظام لكنها ليست من مخزون المدير.
             withDistributor: distributorResult.count || 0,
-
-            // هذه الكروت مباعة وليست من مخزون المدير.
             sold: soldResult.count || 0
           }
         ];
@@ -738,8 +729,6 @@ export default function PackagesPage() {
     [packageStats]
   );
 
-  // الباقات التي مخزونها منخفض.
-  // available فقط هو الذي يدخل في هذا الحساب.
   const lowStockPackages = useMemo(
     () =>
       packages.filter((pkg) => {
@@ -766,7 +755,7 @@ export default function PackagesPage() {
     <div
       className="app"
       style={{
-        background: '#f5f7fb',
+        background: '#eef2f7',
         minHeight: '100vh'
       }}
     >
@@ -848,12 +837,13 @@ export default function PackagesPage() {
           <div
             style={{
               background: '#ffffff',
-              border: '1px solid #e2e8f0',
+              border: '1px solid #dbe3ee',
               borderRadius: 12,
               padding: '9px 13px',
               color: '#475569',
               fontSize: 13,
-              fontWeight: 700
+              fontWeight: 700,
+              boxShadow: '0 3px 10px rgba(15, 23, 42, 0.035)'
             }}
           >
             {packages.length} باقة
@@ -893,7 +883,7 @@ export default function PackagesPage() {
                 outOfStockPackages.length > 0
                   ? '1px solid #fed7aa'
                   : '1px solid #fde68a',
-              boxShadow: '0 3px 10px rgba(15, 23, 42, 0.025)'
+              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.035)'
             }}
           >
             <div
@@ -1007,7 +997,8 @@ export default function PackagesPage() {
                           padding: '7px 10px',
                           fontSize: 11.5,
                           fontWeight: 850,
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.025)'
                         }}
                       >
                         {pkg.name} —{' '}
@@ -1088,11 +1079,11 @@ export default function PackagesPage() {
         <div
           style={{
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #dbe3ee',
             borderRadius: 15,
             padding: 18,
             marginBottom: 18,
-            boxShadow: '0 2px 10px rgba(15, 23, 42, 0.025)'
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
           }}
         >
           <div
@@ -1385,7 +1376,7 @@ export default function PackagesPage() {
                     color: '#64748b',
                     background: '#ffffff',
                     borderRadius: 9,
-                    border: '1px solid #e2e8f0'
+                    border: '1px solid #dbe3ee'
                   }}
                 >
                   <div
@@ -1417,14 +1408,15 @@ export default function PackagesPage() {
                         key={card.id}
                         style={{
                           background: '#ffffff',
-                          border: '1px solid #e2e8f0',
+                          border: '1px solid #dbe3ee',
                           borderRadius: 10,
                           padding: '11px 12px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'space-between',
                           gap: 12,
-                          flexWrap: 'wrap'
+                          flexWrap: 'wrap',
+                          boxShadow: '0 2px 7px rgba(15, 23, 42, 0.025)'
                         }}
                       >
                         <div
@@ -1585,10 +1577,10 @@ export default function PackagesPage() {
         <div
           style={{
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #dbe3ee',
             borderRadius: 15,
             padding: 18,
-            boxShadow: '0 2px 10px rgba(15, 23, 42, 0.025)'
+            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
           }}
         >
           <div
@@ -1725,12 +1717,12 @@ export default function PackagesPage() {
                         ? '1px solid #fcd34d'
                         : isExpanded
                         ? '1px solid #93c5fd'
-                        : '1px solid #e2e8f0',
+                        : '1px solid #dbe3ee',
                       borderRadius: 13,
                       overflow: 'hidden',
                       boxShadow: isExpanded
                         ? '0 5px 18px rgba(37, 99, 235, 0.08)'
-                        : '0 2px 8px rgba(15, 23, 42, 0.025)',
+                        : '0 4px 12px rgba(15, 23, 42, 0.04)',
                       transition: 'all 0.2s ease'
                     }}
                   >
@@ -2050,7 +2042,7 @@ export default function PackagesPage() {
                     {isExpanded && (
                       <div
                         style={{
-                          borderTop: '1px solid #e2e8f0',
+                          borderTop: '1px solid #dbe3ee',
                           background: '#f8fafc',
                           padding: 13
                         }}
@@ -2149,7 +2141,7 @@ export default function PackagesPage() {
                           <div
                             style={{
                               background: '#ffffff',
-                              border: '1px solid #e2e8f0',
+                              border: '1px solid #dbe3ee',
                               borderRadius: 9,
                               padding: 25,
                               textAlign: 'center',
@@ -2189,7 +2181,7 @@ export default function PackagesPage() {
                                     key={card.id}
                                     style={{
                                       background: '#ffffff',
-                                      border: '1px solid #e2e8f0',
+                                      border: '1px solid #dbe3ee',
                                       borderRadius: 9,
                                       padding:
                                         '9px 10px',
@@ -2199,7 +2191,9 @@ export default function PackagesPage() {
                                       justifyContent:
                                         'space-between',
                                       gap: 9,
-                                      flexWrap: 'wrap'
+                                      flexWrap: 'wrap',
+                                      boxShadow:
+                                        '0 2px 7px rgba(15, 23, 42, 0.025)'
                                     }}
                                   >
                                     <div
