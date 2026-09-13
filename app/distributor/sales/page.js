@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
@@ -76,6 +76,61 @@ function getYearKey(dateString) {
   return String(d.getFullYear());
 }
 
+function getLocalDateValue(date) {
+  const d = date instanceof Date ? date : new Date(date);
+
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0')
+  ].join('-');
+}
+
+function getStartOfWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+
+  const day = d.getDay();
+
+  // الأحد = 0
+  // نعتبر الأسبوع من الأحد إلى السبت.
+  d.setDate(d.getDate() - day);
+
+  return d;
+}
+
+function getEndOfWeek(date) {
+  const start = getStartOfWeek(date);
+  const end = new Date(start);
+
+  end.setDate(end.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return end;
+}
+
+function getYesterdayValue() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+
+  return getLocalDateValue(d);
+}
+
+function getDynamicSaleValue(sale, keys) {
+  for (const key of keys) {
+    if (
+      sale &&
+      sale[key] !== undefined &&
+      sale[key] !== null &&
+      String(sale[key]).trim() !== ''
+    ) {
+      return sale[key];
+    }
+  }
+
+  return '';
+}
+
 export default function DistributorSalesPage() {
   const { profile, loading } = useProfile('distributor');
 
@@ -83,16 +138,13 @@ export default function DistributorSalesPage() {
   const [myCards, setMyCards] = useState([]);
   const [currentDebt, setCurrentDebt] = useState(0);
   const [commissionRate, setCommissionRate] = useState(10);
+
   const [dataLoading, setDataLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const today = new Date();
 
-  const currentDateValue = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, '0'),
-    String(today.getDate()).padStart(2, '0')
-  ].join('-');
+  const currentDateValue = getLocalDateValue(today);
 
   const currentMonthValue = [
     today.getFullYear(),
@@ -115,6 +167,20 @@ export default function DistributorSalesPage() {
     currentYearValue
   );
 
+  const [customFrom, setCustomFrom] = useState(
+    currentDateValue
+  );
+
+  const [customTo, setCustomTo] = useState(
+    currentDateValue
+  );
+
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const PAGE_SIZE = 20;
+
   async function loadData(showRefresh = false) {
     if (!profile) return;
 
@@ -126,9 +192,9 @@ export default function DistributorSalesPage() {
 
     try {
       /*
-       * جلب بيانات الموزع الحالية.
+       * بيانات الموزع الحالية.
        *
-       * الدين الحقيقي يؤخذ مباشرة من قاعدة البيانات.
+       * الدين الحالي مستقل عن الفترة المحددة.
        */
       const {
         data: distributorData,
@@ -166,28 +232,20 @@ export default function DistributorSalesPage() {
       }
 
       /*
-       * جلب سجل المبيعات التاريخي للموزع.
+       * سجل المبيعات التاريخي.
        *
-       * مهم:
-       * لا نقرأ سعر البيع من packages.price هنا،
-       * لأن packages.price يمثل السعر الحالي للباقة.
+       * نستخدم * هنا حتى نستطيع الاستفادة من أي معلومات
+       * محفوظة أصلًا في sales_log مثل كود الكرت أو اسم العميل
+       * أو قيمة العمولة التاريخية، إن كانت موجودة.
        *
-       * sales_log.price يحتوي على السعر الذي تم تسجيله
-       * وقت تنفيذ عملية البيع، لذلك هو المصدر الصحيح
-       * للتقارير التاريخية.
+       * لا يتم إنشاء أو تعديل أي عمود.
        */
       const {
         data: salesData,
         error: salesError
       } = await supabase
         .from('sales_log')
-        .select(`
-          id,
-          distributor_id,
-          package_name,
-          price,
-          sold_at
-        `)
+        .select('*')
         .eq('distributor_id', profile.id)
         .order('sold_at', {
           ascending: false
@@ -201,27 +259,82 @@ export default function DistributorSalesPage() {
       }
 
       const formattedSales =
-        (salesData || []).map((sale) => ({
-          id: sale.id,
-          package_name:
-            sale.package_name ||
-            'باقة غير معروفة',
-          price: Number(
-            sale.price || 0
-          ),
-          sold_at: sale.sold_at
-        }));
+        (salesData || []).map((sale) => {
+          const cardCode = getDynamicSaleValue(
+            sale,
+            [
+              'code',
+              'card_code',
+              'cardCode',
+              'card_number',
+              'cardNumber'
+            ]
+          );
+
+          const customerName =
+            getDynamicSaleValue(
+              sale,
+              [
+                'customer_name',
+                'customerName',
+                'customer',
+                'client_name',
+                'clientName'
+              ]
+            );
+
+          const historicalCommission =
+            getDynamicSaleValue(
+              sale,
+              [
+                'distributor_commission',
+                'commission',
+                'commission_amount',
+                'distributor_share',
+                'distributor_share_amount'
+              ]
+            );
+
+          return {
+            ...sale,
+
+            id: sale.id,
+
+            package_name:
+              sale.package_name ||
+              'باقة غير معروفة',
+
+            price: Number(
+              sale.price || 0
+            ),
+
+            sold_at: sale.sold_at,
+
+            card_code:
+              cardCode
+                ? String(cardCode)
+                : '',
+
+            customer_name:
+              customerName
+                ? String(customerName)
+                : '',
+
+            historical_commission:
+              historicalCommission !== ''
+                ? Number(
+                    historicalCommission
+                  )
+                : null
+          };
+        });
 
       setSoldCards(formattedSales);
 
       /*
-       * جلب المخزون الحالي.
+       * المخزون الحالي فقط.
        *
-       * هذه الكروت لم تبع بعد،
-       * لذلك لا تدخل في المبيعات أو الدين.
-       *
-       * هنا نستمر باستخدام سعر الباقة الحالي
-       * لأننا نتعامل مع مخزون لم يتم بيعه بعد.
+       * with_distributor لا يدخل في المبيعات.
        */
       const {
         data: inventoryData,
@@ -230,6 +343,7 @@ export default function DistributorSalesPage() {
         .from('cards')
         .select(`
           id,
+          code,
           packages (
             name,
             price
@@ -265,9 +379,9 @@ export default function DistributorSalesPage() {
   }, [profile]);
 
   /*
-   * فلترة المبيعات حسب نوع التقرير.
+   * فلترة الفترة.
    */
-  const filteredSales = useMemo(() => {
+  const periodFilteredSales = useMemo(() => {
     return soldCards.filter((sale) => {
       if (!sale.sold_at) return false;
 
@@ -275,6 +389,36 @@ export default function DistributorSalesPage() {
         return (
           getDateKey(sale.sold_at) ===
           selectedDay
+        );
+      }
+
+      if (reportType === 'yesterday') {
+        return (
+          getDateKey(sale.sold_at) ===
+          getYesterdayValue()
+        );
+      }
+
+      if (reportType === 'week') {
+        const saleDate = new Date(
+          sale.sold_at
+        );
+
+        if (isNaN(saleDate.getTime())) {
+          return false;
+        }
+
+        const start = getStartOfWeek(
+          new Date()
+        );
+
+        const end = getEndOfWeek(
+          new Date()
+        );
+
+        return (
+          saleDate >= start &&
+          saleDate <= end
         );
       }
 
@@ -292,6 +436,37 @@ export default function DistributorSalesPage() {
         );
       }
 
+      if (reportType === 'custom') {
+        if (!customFrom || !customTo) {
+          return true;
+        }
+
+        const fromDate = new Date(
+          `${customFrom}T00:00:00`
+        );
+
+        const toDate = new Date(
+          `${customTo}T23:59:59.999`
+        );
+
+        const saleDate = new Date(
+          sale.sold_at
+        );
+
+        if (
+          isNaN(fromDate.getTime()) ||
+          isNaN(toDate.getTime()) ||
+          isNaN(saleDate.getTime())
+        ) {
+          return false;
+        }
+
+        return (
+          saleDate >= fromDate &&
+          saleDate <= toDate
+        );
+      }
+
       return true;
     });
   }, [
@@ -299,13 +474,67 @@ export default function DistributorSalesPage() {
     reportType,
     selectedDay,
     selectedMonth,
-    selectedYear
+    selectedYear,
+    customFrom,
+    customTo
   ]);
 
   /*
-   * إجمالي قيمة المبيعات للفترة.
+   * البحث داخل نتائج الفترة.
    *
-   * السعر هنا هو السعر التاريخي المحفوظ في sales_log.
+   * يدعم:
+   * - كود الكرت إذا كان محفوظًا في sales_log
+   * - اسم العميل إذا كان محفوظًا
+   * - اسم الباقة
+   */
+  const filteredSales = useMemo(() => {
+    const term =
+      searchTerm.trim().toLowerCase();
+
+    if (!term) {
+      return periodFilteredSales;
+    }
+
+    return periodFilteredSales.filter(
+      (sale) => {
+        const values = [
+          sale.card_code,
+          sale.customer_name,
+          sale.package_name,
+          sale.code,
+          sale.card_code,
+          sale.card_number
+        ];
+
+        return values.some((value) =>
+          String(value || '')
+            .toLowerCase()
+            .includes(term)
+        );
+      }
+    );
+  }, [
+    periodFilteredSales,
+    searchTerm
+  ]);
+
+  /*
+   * عند تغيير البحث أو الفترة نعود للصفحة الأولى.
+   */
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    reportType,
+    selectedDay,
+    selectedMonth,
+    selectedYear,
+    customFrom,
+    customTo,
+    searchTerm
+  ]);
+
+  /*
+   * إجمالي المبيعات.
    */
   const salesTotal = useMemo(() => {
     return filteredSales.reduce(
@@ -322,18 +551,45 @@ export default function DistributorSalesPage() {
     filteredSales.length;
 
   /*
-   * عمولة الموزع.
+   * العمولة.
+   *
+   * إذا كان السجل التاريخي يحتوي على قيمة العمولة،
+   * نستخدمها.
+   *
+   * وإذا لم تكن محفوظة، نحافظ على طريقة الحساب الحالية
+   * باستخدام نسبة العمولة الحالية.
    */
   const distributorCommission =
-    salesTotal *
-    (commissionRate / 100);
+    useMemo(() => {
+      return filteredSales.reduce(
+        (sum, sale) => {
+          if (
+            sale.historical_commission !==
+              null &&
+            !Number.isNaN(
+              sale.historical_commission
+            )
+          ) {
+            return (
+              sum +
+              Number(
+                sale.historical_commission
+              )
+            );
+          }
 
-  /*
-   * حصة المدير.
-   */
-  const managerShare =
-    salesTotal -
-    distributorCommission;
+          return (
+            sum +
+            Number(sale.price || 0) *
+              (commissionRate / 100)
+          );
+        },
+        0
+      );
+    }, [
+      filteredSales,
+      commissionRate
+    ]);
 
   /*
    * متوسط قيمة الكرت.
@@ -385,11 +641,68 @@ export default function DistributorSalesPage() {
   }, [filteredSales]);
 
   /*
-   * عنوان الفترة الحالية.
+   * Pagination.
+   */
+  const totalPages = Math.max(
+    1,
+    Math.ceil(
+      filteredSales.length /
+        PAGE_SIZE
+    )
+  );
+
+  const paginatedSales = useMemo(() => {
+    const start =
+      (currentPage - 1) *
+      PAGE_SIZE;
+
+    return filteredSales.slice(
+      start,
+      start + PAGE_SIZE
+    );
+  }, [
+    filteredSales,
+    currentPage
+  ]);
+
+  const paginationStart =
+    filteredSales.length === 0
+      ? 0
+      : (currentPage - 1) *
+          PAGE_SIZE +
+        1;
+
+  const paginationEnd = Math.min(
+    currentPage * PAGE_SIZE,
+    filteredSales.length
+  );
+
+  /*
+   * عنوان الفترة.
    */
   const reportTitle = useMemo(() => {
     if (reportType === 'day') {
       return selectedDay || 'اليوم المحدد';
+    }
+
+    if (reportType === 'yesterday') {
+      return 'أمس';
+    }
+
+    if (reportType === 'week') {
+      const start = getStartOfWeek(
+        new Date()
+      );
+
+      const end = getEndOfWeek(
+        new Date()
+      );
+
+      return `${getLocalDateValue(
+        start
+      )} إلى ${getLocalDateValue(
+        end
+      )}`;
     }
 
     if (reportType === 'month') {
@@ -400,17 +713,38 @@ export default function DistributorSalesPage() {
       return selectedYear || 'السنة المحددة';
     }
 
+    if (reportType === 'custom') {
+      if (
+        customFrom &&
+        customTo
+      ) {
+        return `${customFrom} إلى ${customTo}`;
+      }
+
+      return 'فترة مخصصة';
+    }
+
     return '';
   }, [
     reportType,
     selectedDay,
     selectedMonth,
-    selectedYear
+    selectedYear,
+    customFrom,
+    customTo
   ]);
 
   function selectToday() {
     setReportType('day');
     setSelectedDay(currentDateValue);
+  }
+
+  function selectYesterday() {
+    setReportType('yesterday');
+  }
+
+  function selectCurrentWeek() {
+    setReportType('week');
   }
 
   function selectCurrentMonth() {
@@ -421,6 +755,19 @@ export default function DistributorSalesPage() {
   function selectCurrentYear() {
     setReportType('year');
     setSelectedYear(currentYearValue);
+  }
+
+  function selectCustom() {
+    setReportType('custom');
+  }
+
+  function goToPage(page) {
+    const safePage = Math.min(
+      Math.max(page, 1),
+      totalPages
+    );
+
+    setCurrentPage(safePage);
   }
 
   if (loading || !profile) {
@@ -462,7 +809,7 @@ export default function DistributorSalesPage() {
                 color: '#0F172A'
               }}
             >
-              تقارير المبيعات
+              تقارير مبيعاتي
             </h1>
 
             <div
@@ -555,9 +902,6 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
                 background: '#EFF6FF',
                 color: '#1D4ED8',
                 border: '1px solid #DBEAFE',
@@ -567,13 +911,12 @@ export default function DistributorSalesPage() {
                 fontWeight: 900
               }}
             >
-              <span>الفترة:</span>
-              <span>{reportTitle}</span>
+              الفترة: {reportTitle}
             </div>
 
           </div>
 
-          {/* أنواع التقرير */}
+          {/* أنواع التقارير */}
 
           <div
             style={{
@@ -581,22 +924,34 @@ export default function DistributorSalesPage() {
               gridTemplateColumns:
                 'repeat(3, minmax(0, 1fr))',
               gap: 8,
-              marginBottom: 11
+              marginBottom: 10
             }}
           >
 
             {[
               {
                 value: 'day',
-                label: 'يومي'
+                label: 'اليوم'
+              },
+              {
+                value: 'yesterday',
+                label: 'أمس'
+              },
+              {
+                value: 'week',
+                label: 'هذا الأسبوع'
               },
               {
                 value: 'month',
-                label: 'شهري'
+                label: 'هذا الشهر'
               },
               {
                 value: 'year',
-                label: 'سنوي'
+                label: 'هذا العام'
+              },
+              {
+                value: 'custom',
+                label: 'مخصص'
               }
             ].map((item) => {
 
@@ -666,6 +1021,40 @@ export default function DistributorSalesPage() {
 
             <button
               type="button"
+              onClick={selectYesterday}
+              style={{
+                border: '1px solid #DBEAFE',
+                background: '#F8FAFC',
+                color: '#1D4ED8',
+                padding: '7px 11px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              أمس
+            </button>
+
+            <button
+              type="button"
+              onClick={selectCurrentWeek}
+              style={{
+                border: '1px solid #DBEAFE',
+                background: '#F8FAFC',
+                color: '#1D4ED8',
+                padding: '7px 11px',
+                borderRadius: 8,
+                fontSize: 11,
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              هذا الأسبوع
+            </button>
+
+            <button
+              type="button"
               onClick={selectCurrentMonth}
               style={{
                 border: '1px solid #DBEAFE',
@@ -695,12 +1084,12 @@ export default function DistributorSalesPage() {
                 cursor: 'pointer'
               }}
             >
-              هذه السنة
+              هذا العام
             </button>
 
           </div>
 
-          {/* الحقل المناسب للفترة */}
+          {/* اختيار اليوم */}
 
           {reportType === 'day' && (
             <input
@@ -726,6 +1115,8 @@ export default function DistributorSalesPage() {
             />
           )}
 
+          {/* اختيار الشهر */}
+
           {reportType === 'month' && (
             <input
               type="month"
@@ -750,6 +1141,8 @@ export default function DistributorSalesPage() {
             />
           )}
 
+          {/* اختيار السنة */}
+
           {reportType === 'year' && (
             <select
               value={selectedYear}
@@ -771,22 +1164,114 @@ export default function DistributorSalesPage() {
                 outline: 'none'
               }}
             >
-              <option value="2025">
-                2025
-              </option>
-
-              <option value="2026">
-                2026
-              </option>
-
-              <option value="2027">
-                2027
-              </option>
-
-              <option value="2028">
-                2028
-              </option>
+              {[
+                currentYearValue,
+                String(
+                  Number(currentYearValue) - 1
+                ),
+                String(
+                  Number(currentYearValue) - 2
+                ),
+                String(
+                  Number(currentYearValue) - 3
+                ),
+                String(
+                  Number(currentYearValue) + 1
+                )
+              ].map((year) => (
+                <option
+                  key={year}
+                  value={year}
+                >
+                  {year}
+                </option>
+              ))}
             </select>
+          )}
+
+          {/* الفترة المخصصة */}
+
+          {reportType === 'custom' && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns:
+                  'repeat(2, minmax(0, 1fr))',
+                gap: 9
+              }}
+            >
+
+              <div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 900,
+                    color: '#475569',
+                    marginBottom: 5
+                  }}
+                >
+                  من تاريخ
+                </div>
+
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) =>
+                    setCustomFrom(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '11px 12px',
+                    borderRadius: 10,
+                    border:
+                      '1.5px solid #CBD5E1',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    background: '#F8FAFC',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 900,
+                    color: '#475569',
+                    marginBottom: 5
+                  }}
+                >
+                  إلى تاريخ
+                </div>
+
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) =>
+                    setCustomTo(
+                      e.target.value
+                    )
+                  }
+                  style={{
+                    width: '100%',
+                    padding: '11px 12px',
+                    borderRadius: 10,
+                    border:
+                      '1.5px solid #CBD5E1',
+                    fontSize: 13,
+                    fontWeight: 800,
+                    background: '#F8FAFC',
+                    boxSizing: 'border-box',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+
+            </div>
           )}
 
         </div>
@@ -847,8 +1332,6 @@ export default function DistributorSalesPage() {
           }}
         >
 
-          {/* الكروت */}
-
           <div
             style={{
               background:
@@ -890,8 +1373,6 @@ export default function DistributorSalesPage() {
               </span>
             </div>
           </div>
-
-          {/* المبيعات */}
 
           <div
             style={{
@@ -935,8 +1416,6 @@ export default function DistributorSalesPage() {
             </div>
           </div>
 
-          {/* العمولة */}
-
           <div
             style={{
               background:
@@ -953,7 +1432,7 @@ export default function DistributorSalesPage() {
                 fontWeight: 900
               }}
             >
-              عمولتك
+              عمولتي
             </div>
 
             <div
@@ -990,37 +1469,38 @@ export default function DistributorSalesPage() {
             </div>
           </div>
 
-          {/* حصة المدير */}
+          {/* الدين الحالي */}
 
           <div
             style={{
               background:
-                'linear-gradient(135deg, #FFF7ED, #FFEDD5)',
-              border: '1px solid #FED7AA',
+                currentDebt > 0
+                  ? 'linear-gradient(135deg, #991B1B, #DC2626)'
+                  : 'linear-gradient(135deg, #065F46, #059669)',
               borderRadius: 15,
-              padding: 15
+              padding: 15,
+              color: '#FFFFFF'
             }}
           >
             <div
               style={{
                 fontSize: 11,
-                color: '#C2410C',
-                fontWeight: 900
+                fontWeight: 900,
+                opacity: 0.9
               }}
             >
-              حصة المدير
+              المتبقي عليّ من الدين
             </div>
 
             <div
               style={{
                 fontSize: 22,
-                color: '#9A3412',
                 fontWeight: 900,
                 marginTop: 6
               }}
             >
               {formatNumber(
-                managerShare
+                currentDebt
               )}
 
               <span
@@ -1035,13 +1515,13 @@ export default function DistributorSalesPage() {
 
             <div
               style={{
-                fontSize: 10,
-                color: '#C2410C',
-                fontWeight: 700,
-                marginTop: 3
+                fontSize: 9,
+                marginTop: 3,
+                fontWeight: 800,
+                opacity: 0.9
               }}
             >
-              صافي حصة المدير للفترة
+              الدين الحالي وليس دين الفترة
             </div>
           </div>
 
@@ -1069,7 +1549,6 @@ export default function DistributorSalesPage() {
               padding: 13
             }}
           >
-
             <div
               style={{
                 fontSize: 10,
@@ -1101,7 +1580,6 @@ export default function DistributorSalesPage() {
                 ر.ي
               </span>
             </div>
-
           </div>
 
           <div
@@ -1112,7 +1590,6 @@ export default function DistributorSalesPage() {
               padding: 13
             }}
           >
-
             <div
               style={{
                 fontSize: 10,
@@ -1133,93 +1610,6 @@ export default function DistributorSalesPage() {
             >
               {commissionRate}%
             </div>
-
-          </div>
-
-        </div>
-
-        {/* =========================
-            الدين الحالي
-        ========================== */}
-
-        <div
-          style={{
-            background:
-              currentDebt > 0
-                ? 'linear-gradient(135deg, #991B1B, #DC2626)'
-                : 'linear-gradient(135deg, #065F46, #059669)',
-            borderRadius: 16,
-            padding: '17px 18px',
-            color: '#FFFFFF',
-            marginBottom: 16,
-            boxShadow:
-              '0 4px 12px rgba(0,0,0,0.08)'
-          }}
-        >
-
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              gap: 12,
-              flexWrap: 'wrap'
-            }}
-          >
-
-            <div>
-
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 800,
-                  opacity: 0.9
-                }}
-              >
-                الرصيد المستحق للمدير الآن
-              </div>
-
-              <div
-                style={{
-                  fontSize: 27,
-                  fontWeight: 900,
-                  marginTop: 4
-                }}
-              >
-                {formatNumber(
-                  currentDebt
-                )}
-
-                <span
-                  style={{
-                    fontSize: 12,
-                    marginRight: 5,
-                    fontWeight: 600
-                  }}
-                >
-                  ر.ي
-                </span>
-              </div>
-
-            </div>
-
-            <div
-              style={{
-                background:
-                  'rgba(255,255,255,0.14)',
-                border:
-                  '1px solid rgba(255,255,255,0.16)',
-                borderRadius: 10,
-                padding: '8px 11px',
-                fontSize: 11,
-                fontWeight: 900
-              }}
-            >
-              {currentDebt > 0
-                ? '⚠ مبلغ مستحق'
-                : '✓ لا يوجد دين حالي'}
-            </div>
-
           </div>
 
         </div>
@@ -1252,7 +1642,6 @@ export default function DistributorSalesPage() {
           >
 
             <div>
-
               <h3
                 style={{
                   margin: 0,
@@ -1273,7 +1662,6 @@ export default function DistributorSalesPage() {
               >
                 الكروت الموجودة لديك ولم يتم بيعها
               </div>
-
             </div>
 
             <div
@@ -1313,7 +1701,6 @@ export default function DistributorSalesPage() {
                 padding: 12
               }}
             >
-
               <div
                 style={{
                   fontSize: 10,
@@ -1336,7 +1723,6 @@ export default function DistributorSalesPage() {
                   myCards.length
                 )}
               </div>
-
             </div>
 
             <div
@@ -1348,7 +1734,6 @@ export default function DistributorSalesPage() {
                 padding: 12
               }}
             >
-
               <div
                 style={{
                   fontSize: 10,
@@ -1380,7 +1765,6 @@ export default function DistributorSalesPage() {
                   ر.ي
                 </span>
               </div>
-
             </div>
 
           </div>
@@ -1415,7 +1799,6 @@ export default function DistributorSalesPage() {
           >
 
             <div>
-
               <h3
                 style={{
                   margin: 0,
@@ -1436,7 +1819,6 @@ export default function DistributorSalesPage() {
               >
                 توزيع المبيعات داخل الفترة المحددة
               </div>
-
             </div>
 
             <div
@@ -1472,7 +1854,6 @@ export default function DistributorSalesPage() {
                 color: '#64748B'
               }}
             >
-
               <div
                 style={{
                   fontSize: 22,
@@ -1500,7 +1881,6 @@ export default function DistributorSalesPage() {
               >
                 لا توجد مبيعات لهذه الفترة
               </div>
-
             </div>
 
           ) : (
@@ -1539,7 +1919,6 @@ export default function DistributorSalesPage() {
                         minWidth: 0
                       }}
                     >
-
                       <div
                         style={{
                           fontSize: 13,
@@ -1568,7 +1947,6 @@ export default function DistributorSalesPage() {
                         )}{' '}
                         كرت
                       </div>
-
                     </div>
 
                     <div
@@ -1577,7 +1955,6 @@ export default function DistributorSalesPage() {
                         flexShrink: 0
                       }}
                     >
-
                       <div
                         style={{
                           fontSize: 13,
@@ -1601,7 +1978,6 @@ export default function DistributorSalesPage() {
                       >
                         إجمالي المبيعات
                       </div>
-
                     </div>
 
                   </div>
@@ -1643,7 +2019,6 @@ export default function DistributorSalesPage() {
           >
 
             <div>
-
               <h3
                 style={{
                   margin: 0,
@@ -1664,7 +2039,6 @@ export default function DistributorSalesPage() {
               >
                 تفاصيل عمليات البيع في الفترة المحددة
               </div>
-
             </div>
 
             <div
@@ -1687,6 +2061,38 @@ export default function DistributorSalesPage() {
 
           </div>
 
+          {/* البحث */}
+
+          <div
+            style={{
+              marginBottom: 13
+            }}
+          >
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) =>
+                setSearchTerm(
+                  e.target.value
+                )
+              }
+              placeholder="ابحث بالكرت أو اسم العميل أو الباقة..."
+              style={{
+                width: '100%',
+                padding: '12px 13px',
+                border:
+                  '1.5px solid #CBD5E1',
+                borderRadius: 11,
+                background: '#F8FAFC',
+                color: '#0F172A',
+                fontSize: 12,
+                fontWeight: 700,
+                boxSizing: 'border-box',
+                outline: 'none'
+              }}
+            />
+          </div>
+
           {dataLoading ? (
 
             <div
@@ -1698,7 +2104,6 @@ export default function DistributorSalesPage() {
                 color: '#64748B'
               }}
             >
-
               <div
                 style={{
                   fontSize: 22,
@@ -1716,7 +2121,6 @@ export default function DistributorSalesPage() {
               >
                 جاري تحميل التقرير...
               </div>
-
             </div>
 
           ) : filteredSales.length === 0 ? (
@@ -1731,7 +2135,6 @@ export default function DistributorSalesPage() {
                 borderRadius: 12
               }}
             >
-
               <div
                 style={{
                   fontSize: 25,
@@ -1748,7 +2151,9 @@ export default function DistributorSalesPage() {
                   color: '#334155'
                 }}
               >
-                لا توجد مبيعات في هذه الفترة
+                {searchTerm
+                  ? 'لا توجد نتائج للبحث'
+                  : 'لا توجد مبيعات في هذه الفترة'}
               </div>
 
               <div
@@ -1758,160 +2163,380 @@ export default function DistributorSalesPage() {
                   marginTop: 4
                 }}
               >
-                جرّب اختيار يوم أو شهر أو سنة أخرى
+                {searchTerm
+                  ? 'جرّب كلمة بحث أخرى'
+                  : 'جرّب اختيار فترة أخرى'}
               </div>
-
             </div>
 
           ) : (
 
-            <div
-              style={{
-                display: 'grid',
-                gap: 8
-              }}
-            >
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 8
+                }}
+              >
 
-              {filteredSales.map(
-                (item, index) => (
+                {paginatedSales.map(
+                  (item, index) => {
 
-                  <div
-                    key={item.id}
-                    style={{
-                      background: '#F8FAFC',
-                      border:
-                        '1px solid #E2E8F0',
-                      borderRadius: 12,
-                      padding: 12
-                    }}
-                  >
+                    const absoluteIndex =
+                      (currentPage - 1) *
+                        PAGE_SIZE +
+                      index +
+                      1;
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent:
-                          'space-between',
-                        alignItems:
-                          'center',
-                        gap: 12
-                      }}
-                    >
+                    const cardCode =
+                      item.card_code ||
+                      item.code ||
+                      '';
 
+                    const customerName =
+                      item.customer_name ||
+                      '';
+
+                    return (
                       <div
+                        key={item.id}
                         style={{
-                          minWidth: 0,
-                          flex: 1
+                          background: '#F8FAFC',
+                          border:
+                            '1px solid #E2E8F0',
+                          borderRadius: 12,
+                          padding: 12
                         }}
                       >
 
                         <div
                           style={{
                             display: 'flex',
+                            justifyContent:
+                              'space-between',
                             alignItems:
-                              'center',
-                            gap: 7,
-                            marginBottom: 5
+                              'flex-start',
+                            gap: 12
                           }}
                         >
 
                           <div
                             style={{
-                              width: 25,
-                              height: 25,
-                              borderRadius: 8,
-                              background:
-                                '#DBEAFE',
-                              color:
-                                '#1D4ED8',
-                              display: 'flex',
-                              alignItems:
-                                'center',
-                              justifyContent:
-                                'center',
-                              fontSize: 10,
-                              fontWeight: 900,
+                              minWidth: 0,
+                              flex: 1
+                            }}
+                          >
+
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems:
+                                  'center',
+                                gap: 7,
+                                marginBottom: 7
+                              }}
+                            >
+
+                              <div
+                                style={{
+                                  width: 27,
+                                  height: 27,
+                                  borderRadius: 8,
+                                  background:
+                                    '#DBEAFE',
+                                  color:
+                                    '#1D4ED8',
+                                  display:
+                                    'flex',
+                                  alignItems:
+                                    'center',
+                                  justifyContent:
+                                    'center',
+                                  fontSize: 10,
+                                  fontWeight: 900,
+                                  flexShrink: 0
+                                }}
+                              >
+                                {absoluteIndex}
+                              </div>
+
+                              <div
+                                style={{
+                                  minWidth: 0
+                                }}
+                              >
+
+                                <div
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 900,
+                                    color:
+                                      '#0F172A',
+                                    overflow:
+                                      'hidden',
+                                    textOverflow:
+                                      'ellipsis',
+                                    whiteSpace:
+                                      'nowrap'
+                                  }}
+                                >
+                                  {item.package_name}
+                                </div>
+
+                                {cardCode ? (
+                                  <div
+                                    style={{
+                                      fontSize: 10,
+                                      color:
+                                        '#2563EB',
+                                      fontWeight:
+                                        800,
+                                      marginTop: 2
+                                    }}
+                                  >
+                                    الكرت: {cardCode}
+                                  </div>
+                                ) : null}
+
+                              </div>
+
+                            </div>
+
+                            <div
+                              style={{
+                                display: 'grid',
+                                gap: 4,
+                                paddingRight: 34
+                              }}
+                            >
+
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color:
+                                    '#64748B'
+                                }}
+                              >
+                                التاريخ والوقت:{' '}
+                                <strong
+                                  style={{
+                                    color:
+                                      '#334155'
+                                  }}
+                                >
+                                  {formatDateTime(
+                                    item.sold_at
+                                  )}
+                                </strong>
+                              </div>
+
+                              {customerName ? (
+                                <div
+                                  style={{
+                                    fontSize: 10,
+                                    color:
+                                      '#64748B'
+                                  }}
+                                >
+                                  العميل:{' '}
+                                  <strong
+                                    style={{
+                                      color:
+                                        '#334155'
+                                    }}
+                                  >
+                                    {customerName}
+                                  </strong>
+                                </div>
+                              ) : null}
+
+                            </div>
+
+                          </div>
+
+                          <div
+                            style={{
+                              textAlign: 'left',
                               flexShrink: 0
                             }}
                           >
-                            {index + 1}
+
+                            <div
+                              style={{
+                                fontSize: 14,
+                                fontWeight: 900,
+                                color: '#059669'
+                              }}
+                            >
+                              {formatNumber(
+                                item.price
+                              )}{' '}
+                              ر.ي
+                            </div>
+
+                            <div
+                              style={{
+                                fontSize: 9,
+                                color:
+                                  '#64748B',
+                                marginTop: 3
+                              }}
+                            >
+                              {formatNumericDate(
+                                item.sold_at
+                              )}
+                            </div>
+
                           </div>
 
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 900,
-                              color:
-                                '#0F172A',
-                              overflow:
-                                'hidden',
-                              textOverflow:
-                                'ellipsis',
-                              whiteSpace:
-                                'nowrap'
-                            }}
-                          >
-                            {item.package_name}
-                          </div>
-
-                        </div>
-
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: '#64748B',
-                            paddingRight: 32
-                          }}
-                        >
-                          تاريخ البيع:{' '}
-                          {formatDateTime(
-                            item.sold_at
-                          )}
                         </div>
 
                       </div>
+                    );
+                  }
+                )}
 
-                      <div
-                        style={{
-                          textAlign: 'left',
-                          flexShrink: 0
-                        }}
-                      >
+              </div>
 
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 900,
-                            color: '#059669'
-                          }}
-                        >
-                          {formatNumber(
-                            item.price
-                          )}{' '}
-                          ر.ي
-                        </div>
+              {/* Pagination */}
 
-                        <div
-                          style={{
-                            fontSize: 9,
-                            color: '#64748B',
-                            marginTop: 3
-                          }}
-                        >
-                          {formatNumericDate(
-                            item.sold_at
-                          )}
-                        </div>
+              {totalPages > 1 && (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent:
+                      'space-between',
+                    alignItems:
+                      'center',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    marginTop: 14,
+                    paddingTop: 12,
+                    borderTop:
+                      '1px solid #E2E8F0'
+                  }}
+                >
 
-                      </div>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      color: '#64748B',
+                      fontWeight: 700
+                    }}
+                  >
+                    عرض {paginationStart} -{' '}
+                    {paginationEnd} من{' '}
+                    {filteredSales.length}
+                  </div>
 
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems:
+                        'center',
+                      gap: 6
+                    }}
+                  >
+
+                    <button
+                      type="button"
+                      disabled={
+                        currentPage === 1
+                      }
+                      onClick={() =>
+                        goToPage(
+                          currentPage - 1
+                        )
+                      }
+                      style={{
+                        border:
+                          '1px solid #CBD5E1',
+                        background:
+                          currentPage === 1
+                            ? '#F1F5F9'
+                            : '#FFFFFF',
+                        color:
+                          currentPage === 1
+                            ? '#94A3B8'
+                            : '#334155',
+                        borderRadius: 8,
+                        padding:
+                          '7px 10px',
+                        fontSize: 11,
+                        fontWeight: 900,
+                        cursor:
+                          currentPage === 1
+                            ? 'not-allowed'
+                            : 'pointer'
+                      }}
+                    >
+                      السابق
+                    </button>
+
+                    <div
+                      style={{
+                        background:
+                          '#EFF6FF',
+                        color:
+                          '#1D4ED8',
+                        border:
+                          '1px solid #DBEAFE',
+                        borderRadius: 8,
+                        padding:
+                          '7px 11px',
+                        fontSize: 11,
+                        fontWeight: 900
+                      }}
+                    >
+                      {currentPage} /{' '}
+                      {totalPages}
                     </div>
+
+                    <button
+                      type="button"
+                      disabled={
+                        currentPage ===
+                        totalPages
+                      }
+                      onClick={() =>
+                        goToPage(
+                          currentPage + 1
+                        )
+                      }
+                      style={{
+                        border:
+                          '1px solid #CBD5E1',
+                        background:
+                          currentPage ===
+                          totalPages
+                            ? '#F1F5F9'
+                            : '#FFFFFF',
+                        color:
+                          currentPage ===
+                          totalPages
+                            ? '#94A3B8'
+                            : '#334155',
+                        borderRadius: 8,
+                        padding:
+                          '7px 10px',
+                        fontSize: 11,
+                        fontWeight: 900,
+                        cursor:
+                          currentPage ===
+                          totalPages
+                            ? 'not-allowed'
+                            : 'pointer'
+                      }}
+                    >
+                      التالي
+                    </button>
 
                   </div>
 
-                )
+                </div>
               )}
 
-            </div>
+            </>
 
           )}
 
