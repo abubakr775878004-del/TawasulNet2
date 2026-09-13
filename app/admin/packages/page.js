@@ -303,6 +303,45 @@ function StatCard({ icon, title, value, accent }) {
   );
 }
 
+function formatDate(dateValue) {
+  if (!dateValue) return '';
+
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('ar-YE', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
+function getCardDateInfo(card) {
+  if (card.status === 'sold') {
+    return {
+      label: 'تاريخ البيع',
+      value: formatDate(card.sold_at)
+    };
+  }
+
+  if (card.status === 'with_distributor') {
+    return {
+      label: 'تاريخ إضافة الكرت للنظام',
+      value: formatDate(card.created_at)
+    };
+  }
+
+  return {
+    label: 'تاريخ إضافة الكرت للنظام',
+    value: formatDate(card.created_at)
+  };
+}
+
 export default function PackagesPage() {
   const { profile, loading } = useProfile('admin');
 
@@ -361,7 +400,7 @@ export default function PackagesPage() {
               .select('id', { count: 'exact', head: true })
               .eq('package_id', pkg.id),
 
-            // المخزون الحقيقي = الكروت المتاحة فقط
+            // مخزون المدير الحقيقي = الكروت المتاحة فقط.
             supabase
               .from('cards')
               .select('id', { count: 'exact', head: true })
@@ -384,9 +423,17 @@ export default function PackagesPage() {
         return [
           pkg.id,
           {
+            // هذا يمثل كل الكروت الموجودة في النظام لهذه الباقة،
+            // ولا يستخدم كمخزون المدير.
             total: totalResult.count || 0,
+
+            // هذا هو المخزون الفعلي للمدير.
             available: availableResult.count || 0,
+
+            // هذه الكروت محفوظة في النظام لكنها ليست من مخزون المدير.
             withDistributor: distributorResult.count || 0,
+
+            // هذه الكروت مباعة وليست من مخزون المدير.
             sold: soldResult.count || 0
           }
         ];
@@ -663,15 +710,6 @@ export default function PackagesPage() {
 
     await loadPackages();
   }
-
-  const totalCards = useMemo(
-    () =>
-      Object.values(packageStats).reduce(
-        (sum, stats) => sum + (stats.total || 0),
-        0
-      ),
-    [packageStats]
-  );
 
   const totalAvailable = useMemo(
     () =>
@@ -1006,12 +1044,12 @@ export default function PackagesPage() {
           />
 
           <StatCard
-            title="إجمالي الكروت"
-            value={totalCards}
+            title="مخزون المدير"
+            value={totalAvailable}
             icon={<CardIcon />}
             accent={{
-              background: '#f1f5f9',
-              color: '#334155'
+              background: '#ecfdf5',
+              color: '#059669'
             }}
           />
 
@@ -1020,8 +1058,8 @@ export default function PackagesPage() {
             value={totalAvailable}
             icon={<CardIcon />}
             accent={{
-              background: '#ecfdf5',
-              color: '#059669'
+              background: '#f1f5f9',
+              color: '#334155'
             }}
           />
 
@@ -1371,142 +1409,172 @@ export default function PackagesPage() {
                     gap: 8
                   }}
                 >
-                  {globalSearchResults.map((card) => (
-                    <div
-                      key={card.id}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: 10,
-                        padding: '11px 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 12,
-                        flexWrap: 'wrap'
-                      }}
-                    >
+                  {globalSearchResults.map((card) => {
+                    const dateInfo = getCardDateInfo(card);
+
+                    return (
                       <div
+                        key={card.id}
                         style={{
-                          minWidth: 0,
-                          flex: 1
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 9,
-                            flexWrap: 'wrap'
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 15,
-                              fontWeight: 900,
-                              color: '#0f172a',
-                              wordBreak: 'break-all'
-                            }}
-                          >
-                            {card.code}
-                          </span>
-
-                          <StatusBadge status={card.status} />
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 14,
-                            flexWrap: 'wrap',
-                            marginTop: 6,
-                            color: '#64748b',
-                            fontSize: 12
-                          }}
-                        >
-                          <span>
-                            الباقة:{' '}
-                            <strong style={{ color: '#334155' }}>
-                              {card.packages?.name || 'غير محددة'}
-                            </strong>
-                          </span>
-
-                          {card.packages?.price !== undefined && (
-                            <span>
-                              السعر:{' '}
-                              <strong style={{ color: '#334155' }}>
-                                {card.packages.price} ريال
-                              </strong>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          padding: '11px 12px',
                           display: 'flex',
-                          gap: 7,
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 12,
                           flexWrap: 'wrap'
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => copyCardCode(card.code)}
+                        <div
                           style={{
-                            height: 34,
-                            padding: '0 11px',
-                            borderRadius: 8,
-                            border: '1px solid #dbeafe',
-                            background: '#eff6ff',
-                            color: '#1d4ed8',
-                            fontWeight: 800,
-                            fontSize: 12,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            cursor: 'pointer'
+                            minWidth: 0,
+                            flex: 1
                           }}
                         >
-                          <CopyIcon />
-                          {copiedCode === String(card.code)
-                            ? 'تم النسخ'
-                            : 'نسخ'}
-                        </button>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 9,
+                              flexWrap: 'wrap'
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 15,
+                                fontWeight: 900,
+                                color: '#0f172a',
+                                wordBreak: 'break-all'
+                              }}
+                            >
+                              {card.code}
+                            </span>
 
-                        <button
-                          type="button"
-                          disabled={deletingCardId === card.id}
-                          onClick={() => deleteCard(card)}
+                            <StatusBadge status={card.status} />
+                          </div>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: 14,
+                              flexWrap: 'wrap',
+                              marginTop: 6,
+                              color: '#64748b',
+                              fontSize: 12
+                            }}
+                          >
+                            <span>
+                              الباقة:{' '}
+                              <strong style={{ color: '#334155' }}>
+                                {card.packages?.name || 'غير محددة'}
+                              </strong>
+                            </span>
+
+                            {card.packages?.price !== undefined && (
+                              <span>
+                                السعر:{' '}
+                                <strong style={{ color: '#334155' }}>
+                                  {card.packages.price} ريال
+                                </strong>
+                              </span>
+                            )}
+
+                            {dateInfo.value && (
+                              <span>
+                                {dateInfo.label}:{' '}
+                                <strong style={{ color: '#334155' }}>
+                                  {dateInfo.value}
+                                </strong>
+                              </span>
+                            )}
+                          </div>
+
+                          {card.status === 'with_distributor' && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                fontSize: 11,
+                                color: '#92400e',
+                                background: '#fffbeb',
+                                border: '1px solid #fde68a',
+                                borderRadius: 7,
+                                padding: '5px 8px',
+                                display: 'inline-block'
+                              }}
+                            >
+                              الكرت محفوظ في النظام لكنه ليس ضمن مخزون المدير الحالي.
+                            </div>
+                          )}
+                        </div>
+
+                        <div
                           style={{
-                            height: 34,
-                            padding: '0 11px',
-                            borderRadius: 8,
-                            border: '1px solid #fecaca',
-                            background: '#fef2f2',
-                            color: '#dc2626',
-                            fontWeight: 800,
-                            fontSize: 12,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 6,
-                            cursor:
-                              deletingCardId === card.id
-                                ? 'not-allowed'
-                                : 'pointer',
-                            opacity:
-                              deletingCardId === card.id
-                                ? 0.65
-                                : 1
+                            display: 'flex',
+                            gap: 7,
+                            flexWrap: 'wrap'
                           }}
                         >
-                          <TrashIcon />
-                          {deletingCardId === card.id
-                            ? 'حذف...'
-                            : 'حذف'}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => copyCardCode(card.code)}
+                            style={{
+                              height: 34,
+                              padding: '0 11px',
+                              borderRadius: 8,
+                              border: '1px solid #dbeafe',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              fontWeight: 800,
+                              fontSize: 12,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <CopyIcon />
+                            {copiedCode === String(card.code)
+                              ? 'تم النسخ'
+                              : 'نسخ'}
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={deletingCardId === card.id}
+                            onClick={() => deleteCard(card)}
+                            style={{
+                              height: 34,
+                              padding: '0 11px',
+                              borderRadius: 8,
+                              border: '1px solid #fecaca',
+                              background: '#fef2f2',
+                              color: '#dc2626',
+                              fontWeight: 800,
+                              fontSize: 12,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              cursor:
+                                deletingCardId === card.id
+                                  ? 'not-allowed'
+                                  : 'pointer',
+                              opacity:
+                                deletingCardId === card.id
+                                  ? 0.65
+                                  : 1
+                            }}
+                          >
+                            <TrashIcon />
+                            {deletingCardId === card.id
+                              ? 'حذف...'
+                              : 'حذف'}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1757,14 +1825,14 @@ export default function PackagesPage() {
                           style={{
                             padding: '5px 9px',
                             borderRadius: 8,
-                            background: '#f8fafc',
-                            color: '#475569',
+                            background: '#ecfdf5',
+                            color: '#047857',
                             fontSize: 11,
                             fontWeight: 850,
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          {stats.total} كرت
+                          {stats.available} متاح في مخزون المدير
                         </div>
                       </div>
 
@@ -2113,159 +2181,183 @@ export default function PackagesPage() {
                                 gap: 7
                               }}
                             >
-                              {cards.map((card) => (
-                                <div
-                                  key={card.id}
-                                  style={{
-                                    background: '#ffffff',
-                                    border: '1px solid #e2e8f0',
-                                    borderRadius: 9,
-                                    padding:
-                                      '9px 10px',
-                                    display: 'flex',
-                                    alignItems:
-                                      'center',
-                                    justifyContent:
-                                      'space-between',
-                                    gap: 9,
-                                    flexWrap: 'wrap'
-                                  }}
-                                >
+                              {cards.map((card) => {
+                                const dateInfo = getCardDateInfo(card);
+
+                                return (
                                   <div
+                                    key={card.id}
                                     style={{
-                                      minWidth: 0,
-                                      flex: 1
+                                      background: '#ffffff',
+                                      border: '1px solid #e2e8f0',
+                                      borderRadius: 9,
+                                      padding:
+                                        '9px 10px',
+                                      display: 'flex',
+                                      alignItems:
+                                        'center',
+                                      justifyContent:
+                                        'space-between',
+                                      gap: 9,
+                                      flexWrap: 'wrap'
                                     }}
                                   >
                                     <div
                                       style={{
-                                        display:
-                                          'flex',
-                                        alignItems:
-                                          'center',
-                                        gap: 8,
-                                        flexWrap:
-                                          'wrap'
+                                        minWidth: 0,
+                                        flex: 1
                                       }}
                                     >
-                                      <span
+                                      <div
                                         style={{
-                                          fontWeight:
-                                            900,
-                                          color:
-                                            '#0f172a',
-                                          fontSize: 14,
-                                          wordBreak:
-                                            'break-all'
+                                          display:
+                                            'flex',
+                                          alignItems:
+                                            'center',
+                                          gap: 8,
+                                          flexWrap:
+                                            'wrap'
                                         }}
                                       >
-                                        {card.code}
-                                      </span>
+                                        <span
+                                          style={{
+                                            fontWeight:
+                                              900,
+                                            color:
+                                              '#0f172a',
+                                            fontSize: 14,
+                                            wordBreak:
+                                              'break-all'
+                                          }}
+                                        >
+                                          {card.code}
+                                        </span>
 
-                                      <StatusBadge
-                                        status={
-                                          card.status
-                                        }
-                                      />
+                                        <StatusBadge
+                                          status={
+                                            card.status
+                                          }
+                                        />
+                                      </div>
+
+                                      {dateInfo.value && (
+                                        <div
+                                          style={{
+                                            marginTop: 6,
+                                            color: '#64748b',
+                                            fontSize: 11
+                                          }}
+                                        >
+                                          {dateInfo.label}:{' '}
+                                          <strong
+                                            style={{
+                                              color:
+                                                '#334155'
+                                            }}
+                                          >
+                                            {dateInfo.value}
+                                          </strong>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
 
-                                  <div
-                                    style={{
-                                      display: 'flex',
-                                      gap: 6
-                                    }}
-                                  >
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        copyCardCode(
+                                    <div
+                                      style={{
+                                        display: 'flex',
+                                        gap: 6
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          copyCardCode(
+                                            card.code
+                                          )
+                                        }
+                                        style={{
+                                          height: 32,
+                                          padding:
+                                            '0 9px',
+                                          borderRadius: 7,
+                                          border:
+                                            '1px solid #dbeafe',
+                                          background:
+                                            '#eff6ff',
+                                          color:
+                                            '#1d4ed8',
+                                          fontWeight:
+                                            800,
+                                          fontSize: 11,
+                                          display:
+                                            'inline-flex',
+                                          alignItems:
+                                            'center',
+                                          gap: 5,
+                                          cursor:
+                                            'pointer'
+                                        }}
+                                      >
+                                        <CopyIcon />
+                                        {copiedCode ===
+                                        String(
                                           card.code
                                         )
-                                      }
-                                      style={{
-                                        height: 32,
-                                        padding:
-                                          '0 9px',
-                                        borderRadius: 7,
-                                        border:
-                                          '1px solid #dbeafe',
-                                        background:
-                                          '#eff6ff',
-                                        color:
-                                          '#1d4ed8',
-                                        fontWeight:
-                                          800,
-                                        fontSize: 11,
-                                        display:
-                                          'inline-flex',
-                                        alignItems:
-                                          'center',
-                                        gap: 5,
-                                        cursor:
-                                          'pointer'
-                                      }}
-                                    >
-                                      <CopyIcon />
-                                      {copiedCode ===
-                                      String(
-                                        card.code
-                                      )
-                                        ? 'تم النسخ'
-                                        : 'نسخ'}
-                                    </button>
+                                          ? 'تم النسخ'
+                                          : 'نسخ'}
+                                      </button>
 
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        deletingCardId ===
+                                      <button
+                                        type="button"
+                                        disabled={
+                                          deletingCardId ===
+                                          card.id
+                                        }
+                                        onClick={() =>
+                                          deleteCard(
+                                            card
+                                          )
+                                        }
+                                        style={{
+                                          height: 32,
+                                          padding:
+                                            '0 9px',
+                                          borderRadius: 7,
+                                          border:
+                                            '1px solid #fecaca',
+                                          background:
+                                            '#fef2f2',
+                                          color:
+                                            '#dc2626',
+                                          fontWeight:
+                                            800,
+                                          fontSize: 11,
+                                          display:
+                                            'inline-flex',
+                                          alignItems:
+                                            'center',
+                                          gap: 5,
+                                          cursor:
+                                            deletingCardId ===
+                                            card.id
+                                              ? 'not-allowed'
+                                              : 'pointer',
+                                          opacity:
+                                            deletingCardId ===
+                                            card.id
+                                              ? 0.6
+                                              : 1
+                                        }}
+                                      >
+                                        <TrashIcon />
+                                        {deletingCardId ===
                                         card.id
-                                      }
-                                      onClick={() =>
-                                        deleteCard(
-                                          card
-                                        )
-                                      }
-                                      style={{
-                                        height: 32,
-                                        padding:
-                                          '0 9px',
-                                        borderRadius: 7,
-                                        border:
-                                          '1px solid #fecaca',
-                                        background:
-                                          '#fef2f2',
-                                        color:
-                                          '#dc2626',
-                                        fontWeight:
-                                          800,
-                                        fontSize: 11,
-                                        display:
-                                          'inline-flex',
-                                        alignItems:
-                                          'center',
-                                        gap: 5,
-                                        cursor:
-                                          deletingCardId ===
-                                          card.id
-                                            ? 'not-allowed'
-                                            : 'pointer',
-                                        opacity:
-                                          deletingCardId ===
-                                          card.id
-                                            ? 0.6
-                                            : 1
-                                      }}
-                                    >
-                                      <TrashIcon />
-                                      {deletingCardId ===
-                                      card.id
-                                        ? 'حذف...'
-                                        : 'حذف'}
-                                    </button>
+                                          ? 'حذف...'
+                                          : 'حذف'}
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
 
                             <div
