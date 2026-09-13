@@ -19,19 +19,19 @@ const STATUS_LABELS = {
 
 const STATUS_STYLES = {
   available: {
-    background: '#ecfdf5',
-    color: '#047857',
-    border: '#a7f3d0'
+    background: '#edf6f0',
+    color: '#5f8f70',
+    border: '#c9dfd0'
   },
   with_distributor: {
-    background: '#fffbeb',
-    color: '#b45309',
-    border: '#fde68a'
+    background: '#faf5e9',
+    color: '#9a7b45',
+    border: '#e5d6b5'
   },
   sold: {
-    background: '#fef2f2',
-    color: '#dc2626',
-    border: '#fecaca'
+    background: '#f9eeee',
+    color: '#ad6b6b',
+    border: '#e7caca'
   }
 };
 
@@ -199,9 +199,9 @@ function WarningIcon() {
 
 function StatusBadge({ status }) {
   const style = STATUS_STYLES[status] || {
-    background: '#f8fafc',
-    color: '#475569',
-    border: '#dbe3ee'
+    background: '#f4f6f8',
+    color: '#54636b',
+    border: '#dfe3e8'
   };
 
   return (
@@ -237,12 +237,12 @@ function StatCard({ icon, title, value, accent }) {
   return (
     <div
       style={{
-        background: '#ffffff',
-        border: '1px solid #dbe3ee',
+        background: '#fafbfc',
+        border: '1px solid #dfe3e8',
         borderRadius: 14,
         padding: '16px 17px',
         minWidth: 0,
-        boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
+        boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
       }}
     >
       <div
@@ -279,7 +279,7 @@ function StatCard({ icon, title, value, accent }) {
           <div
             style={{
               fontSize: 12,
-              color: '#64748b',
+              color: '#78909c',
               marginBottom: 5,
               fontWeight: 600
             }}
@@ -292,7 +292,7 @@ function StatCard({ icon, title, value, accent }) {
               fontSize: 23,
               lineHeight: 1,
               fontWeight: 900,
-              color: '#0f172a'
+              color: '#263238'
             }}
           >
             {value}
@@ -755,7 +755,7 @@ export default function PackagesPage() {
     <div
       className="app"
       style={{
-        background: '#eef2f7',
+        background: '#f1f3f5',
         minHeight: '100vh'
       }}
     >
@@ -797,12 +797,12 @@ export default function PackagesPage() {
                   height: 43,
                   borderRadius: 12,
                   background:
-                    'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                    'linear-gradient(135deg, #607f9e, #6f8faa)',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 7px 18px rgba(37, 99, 235, 0.20)'
+                  boxShadow: '0 5px 14px rgba(96, 127, 158, 0.14)'
                 }}
               >
                 <PackageIcon />
@@ -812,7 +812,7 @@ export default function PackagesPage() {
                 <h1
                   style={{
                     margin: 0,
-                    color: '#0f172a',
+                    color: '#263238',
                     fontSize: 25,
                     fontWeight: 900,
                     letterSpacing: '-0.3px'
@@ -824,7 +824,7 @@ export default function PackagesPage() {
                 <p
                   style={{
                     margin: '5px 0 0',
-                    color: '#64748b',
+                    color: '#78909c',
                     fontSize: 13.5
                   }}
                 >
@@ -836,14 +836,14 @@ export default function PackagesPage() {
 
           <div
             style={{
-              background: '#ffffff',
-              border: '1px solid #dbe3ee',
+              background: '#fafbfc',
+              border: '1px solid #dfe3e8',
               borderRadius: 12,
               padding: '9px 13px',
-              color: '#475569',
+              color: '#54636b',
               fontSize: 13,
               fontWeight: 700,
-              boxShadow: '0 3px 10px rgba(15, 23, 42, 0.035)'
+              boxShadow: '0 3px 10px rgba(38, 50, 56, 0.03)'
             }}
           >
             {packages.length} باقة
@@ -856,9 +856,9 @@ export default function PackagesPage() {
               marginBottom: 18,
               padding: '12px 14px',
               borderRadius: 11,
-              background: '#fef2f2',
-              color: '#b91c1c',
-              border: '1px solid #fecaca',
+              background: '#f9eeee',
+              color: '#a65f5f',
+              border: '1px solid #e7caca',
               fontSize: 13,
               fontWeight: 700,
               whiteSpace: 'pre-line'
@@ -877,13 +877,13 @@ export default function PackagesPage() {
               borderRadius: 13,
               background:
                 outOfStockPackages.length > 0
-                  ? '#fff7ed'
-                  : '#fffbeb',
+                  ? '#faf3ea'
+                  : '#faf5e9',
               border:
                 outOfStockPackages.length > 0
-                  ? '1px solid #fed7aa'
-                  : '1px solid #fde68a',
-              boxShadow: '0 4px 14px rgba(15, 23, 42, 0.035)'
+                  ? '1px solid #e5d1b6'
+                  : '1px solid #e5d6b5',
+              boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
             }}
           >
             <div
@@ -900,12 +900,12 @@ export default function PackagesPage() {
                   borderRadius: 10,
                   background:
                     outOfStockPackages.length > 0
-                      ? '#ffedd5'
-                      : '#fef3c7',
+                      ? '#f5e5d2'
+                      : '#f3ead6',
                   color:
                     outOfStockPackages.length > 0
-                      ? '#ea580c'
-                      : '#d97706',
+                      ? '#b07d48'
+                      : '#a5874f',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -925,8 +925,8 @@ export default function PackagesPage() {
                   style={{
                     color:
                       outOfStockPackages.length > 0
-                        ? '#9a3412'
-                        : '#92400e',
+                        ? '#98683d'
+                        : '#8d7445',
                     fontSize: 14,
                     fontWeight: 900,
                     marginBottom: 5
@@ -941,8 +941,8 @@ export default function PackagesPage() {
                   style={{
                     color:
                       outOfStockPackages.length > 0
-                        ? '#c2410c'
-                        : '#b45309',
+                        ? '#a87345'
+                        : '#9a7b45',
                     fontSize: 12.5,
                     lineHeight: 1.7
                   }}
@@ -988,17 +988,18 @@ export default function PackagesPage() {
                         style={{
                           borderRadius: 8,
                           border: isOutOfStock
-                            ? '1px solid #fdba74'
-                            : '1px solid #fcd34d',
-                          background: '#ffffff',
+                            ? '1px solid #d9b98e'
+                            : '1px solid #dfc98f',
+                          background: '#fafbfc',
                           color: isOutOfStock
-                            ? '#c2410c'
-                            : '#92400e',
+                            ? '#a87345'
+                            : '#8d7445',
                           padding: '7px 10px',
                           fontSize: 11.5,
                           fontWeight: 850,
                           cursor: 'pointer',
-                          boxShadow: '0 2px 6px rgba(15, 23, 42, 0.025)'
+                          boxShadow:
+                            '0 2px 6px rgba(38, 50, 56, 0.025)'
                         }}
                       >
                         {pkg.name} —{' '}
@@ -1029,8 +1030,8 @@ export default function PackagesPage() {
             value={packages.length}
             icon={<PackageIcon />}
             accent={{
-              background: '#eff6ff',
-              color: '#2563eb'
+              background: '#edf3f7',
+              color: '#607f9e'
             }}
           />
 
@@ -1039,8 +1040,8 @@ export default function PackagesPage() {
             value={totalAvailable}
             icon={<CardIcon />}
             accent={{
-              background: '#ecfdf5',
-              color: '#059669'
+              background: '#edf6f0',
+              color: '#6f9b7d'
             }}
           />
 
@@ -1049,8 +1050,8 @@ export default function PackagesPage() {
             value={totalAvailable}
             icon={<CardIcon />}
             accent={{
-              background: '#f1f5f9',
-              color: '#334155'
+              background: '#f0f3f5',
+              color: '#607078'
             }}
           />
 
@@ -1059,8 +1060,8 @@ export default function PackagesPage() {
             value={totalWithDistributor}
             icon={<CardIcon />}
             accent={{
-              background: '#fffbeb',
-              color: '#d97706'
+              background: '#faf5e9',
+              color: '#b79a62'
             }}
           />
 
@@ -1069,8 +1070,8 @@ export default function PackagesPage() {
             value={totalSold}
             icon={<CardIcon />}
             accent={{
-              background: '#fef2f2',
-              color: '#dc2626'
+              background: '#f9eeee',
+              color: '#b87878'
             }}
           />
         </div>
@@ -1078,12 +1079,12 @@ export default function PackagesPage() {
         {/* إضافة باقة */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #dbe3ee',
+            background: '#fafbfc',
+            border: '1px solid #dfe3e8',
             borderRadius: 15,
             padding: 18,
             marginBottom: 18,
-            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
+            boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
           }}
         >
           <div
@@ -1099,8 +1100,8 @@ export default function PackagesPage() {
                 width: 34,
                 height: 34,
                 borderRadius: 9,
-                background: '#eff6ff',
-                color: '#2563eb',
+                background: '#edf3f7',
+                color: '#607f9e',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center'
@@ -1113,7 +1114,7 @@ export default function PackagesPage() {
               <h3
                 style={{
                   margin: 0,
-                  color: '#0f172a',
+                  color: '#263238',
                   fontSize: 16,
                   fontWeight: 850
                 }}
@@ -1123,7 +1124,7 @@ export default function PackagesPage() {
 
               <div
                 style={{
-                  color: '#94a3b8',
+                  color: '#90a0a8',
                   fontSize: 12,
                   marginTop: 3
                 }}
@@ -1192,7 +1193,7 @@ export default function PackagesPage() {
                 border: 'none',
                 borderRadius: 9,
                 background:
-                  'linear-gradient(135deg, #1d4ed8, #2563eb)',
+                  'linear-gradient(135deg, #607f9e, #6f8faa)',
                 color: '#ffffff',
                 fontWeight: 800,
                 fontSize: 14,
@@ -1203,7 +1204,7 @@ export default function PackagesPage() {
                 justifyContent: 'center',
                 gap: 7,
                 boxShadow:
-                  '0 5px 12px rgba(37, 99, 235, 0.16)'
+                  '0 4px 10px rgba(96, 127, 158, 0.13)'
               }}
             >
               <PlusIcon />
@@ -1216,11 +1217,11 @@ export default function PackagesPage() {
         <div
           style={{
             background:
-              'linear-gradient(135deg, #172554 0%, #1e40af 100%)',
+              'linear-gradient(135deg, #536d82 0%, #607f9e 100%)',
             borderRadius: 16,
             padding: 20,
             marginBottom: 18,
-            boxShadow: '0 10px 25px rgba(30, 64, 175, 0.12)'
+            boxShadow: '0 6px 18px rgba(83, 109, 130, 0.10)'
           }}
         >
           <div
@@ -1261,7 +1262,7 @@ export default function PackagesPage() {
               <p
                 style={{
                   margin: '4px 0 0',
-                  color: '#bfdbfe',
+                  color: '#e2eaf0',
                   fontSize: 12.5
                 }}
               >
@@ -1291,7 +1292,7 @@ export default function PackagesPage() {
                   right: 13,
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  color: '#94a3b8',
+                  color: '#90a4ae',
                   pointerEvents: 'none'
                 }}
               >
@@ -1310,9 +1311,9 @@ export default function PackagesPage() {
                   boxSizing: 'border-box',
                   padding: '0 45px 0 14px',
                   borderRadius: 9,
-                  border: '1px solid #dbeafe',
-                  background: '#ffffff',
-                  color: '#0f172a',
+                  border: '1px solid #dce4e9',
+                  background: '#fafbfc',
+                  color: '#263238',
                   outline: 'none',
                   fontSize: 14
                 }}
@@ -1327,8 +1328,8 @@ export default function PackagesPage() {
                 minWidth: 105,
                 border: 'none',
                 borderRadius: 9,
-                background: '#ffffff',
-                color: '#1d4ed8',
+                background: '#fafbfc',
+                color: '#536d82',
                 fontWeight: 850,
                 cursor: globalSearchLoading
                   ? 'not-allowed'
@@ -1347,8 +1348,8 @@ export default function PackagesPage() {
                   height: 44,
                   minWidth: 80,
                   borderRadius: 9,
-                  border: '1px solid rgba(255,255,255,0.25)',
-                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.22)',
+                  background: 'rgba(255,255,255,0.09)',
                   color: '#ffffff',
                   fontWeight: 750,
                   cursor: 'pointer'
@@ -1363,7 +1364,7 @@ export default function PackagesPage() {
             <div
               style={{
                 marginTop: 14,
-                background: '#f8fafc',
+                background: '#f3f5f7',
                 borderRadius: 11,
                 padding: 10
               }}
@@ -1373,16 +1374,16 @@ export default function PackagesPage() {
                   style={{
                     textAlign: 'center',
                     padding: 25,
-                    color: '#64748b',
-                    background: '#ffffff',
+                    color: '#78909c',
+                    background: '#fafbfc',
                     borderRadius: 9,
-                    border: '1px solid #dbe3ee'
+                    border: '1px solid #dfe3e8'
                   }}
                 >
                   <div
                     style={{
                       fontWeight: 800,
-                      color: '#334155',
+                      color: '#455a64',
                       marginBottom: 5
                     }}
                   >
@@ -1407,8 +1408,8 @@ export default function PackagesPage() {
                       <div
                         key={card.id}
                         style={{
-                          background: '#ffffff',
-                          border: '1px solid #dbe3ee',
+                          background: '#fafbfc',
+                          border: '1px solid #dfe3e8',
                           borderRadius: 10,
                           padding: '11px 12px',
                           display: 'flex',
@@ -1416,7 +1417,8 @@ export default function PackagesPage() {
                           justifyContent: 'space-between',
                           gap: 12,
                           flexWrap: 'wrap',
-                          boxShadow: '0 2px 7px rgba(15, 23, 42, 0.025)'
+                          boxShadow:
+                            '0 2px 7px rgba(38, 50, 56, 0.025)'
                         }}
                       >
                         <div
@@ -1437,7 +1439,7 @@ export default function PackagesPage() {
                               style={{
                                 fontSize: 15,
                                 fontWeight: 900,
-                                color: '#0f172a',
+                                color: '#263238',
                                 wordBreak: 'break-all'
                               }}
                             >
@@ -1453,13 +1455,13 @@ export default function PackagesPage() {
                               gap: 14,
                               flexWrap: 'wrap',
                               marginTop: 6,
-                              color: '#64748b',
+                              color: '#78909c',
                               fontSize: 12
                             }}
                           >
                             <span>
                               الباقة:{' '}
-                              <strong style={{ color: '#334155' }}>
+                              <strong style={{ color: '#455a64' }}>
                                 {card.packages?.name || 'غير محددة'}
                               </strong>
                             </span>
@@ -1467,7 +1469,7 @@ export default function PackagesPage() {
                             {card.packages?.price !== undefined && (
                               <span>
                                 السعر:{' '}
-                                <strong style={{ color: '#334155' }}>
+                                <strong style={{ color: '#455a64' }}>
                                   {card.packages.price} ريال
                                 </strong>
                               </span>
@@ -1476,7 +1478,7 @@ export default function PackagesPage() {
                             {dateInfo.value && (
                               <span>
                                 {dateInfo.label}:{' '}
-                                <strong style={{ color: '#334155' }}>
+                                <strong style={{ color: '#455a64' }}>
                                   {dateInfo.value}
                                 </strong>
                               </span>
@@ -1488,9 +1490,9 @@ export default function PackagesPage() {
                               style={{
                                 marginTop: 6,
                                 fontSize: 11,
-                                color: '#92400e',
-                                background: '#fffbeb',
-                                border: '1px solid #fde68a',
+                                color: '#8d7445',
+                                background: '#faf5e9',
+                                border: '1px solid #e5d6b5',
                                 borderRadius: 7,
                                 padding: '5px 8px',
                                 display: 'inline-block'
@@ -1515,9 +1517,9 @@ export default function PackagesPage() {
                               height: 34,
                               padding: '0 11px',
                               borderRadius: 8,
-                              border: '1px solid #dbeafe',
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
+                              border: '1px solid #d3e0e8',
+                              background: '#edf3f7',
+                              color: '#607f9e',
                               fontWeight: 800,
                               fontSize: 12,
                               display: 'inline-flex',
@@ -1540,9 +1542,9 @@ export default function PackagesPage() {
                               height: 34,
                               padding: '0 11px',
                               borderRadius: 8,
-                              border: '1px solid #fecaca',
-                              background: '#fef2f2',
-                              color: '#dc2626',
+                              border: '1px solid #e7caca',
+                              background: '#f9eeee',
+                              color: '#b87878',
                               fontWeight: 800,
                               fontSize: 12,
                               display: 'inline-flex',
@@ -1576,11 +1578,11 @@ export default function PackagesPage() {
         {/* الباقات */}
         <div
           style={{
-            background: '#ffffff',
-            border: '1px solid #dbe3ee',
+            background: '#fafbfc',
+            border: '1px solid #dfe3e8',
             borderRadius: 15,
             padding: 18,
-            boxShadow: '0 4px 14px rgba(15, 23, 42, 0.045)'
+            boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
           }}
         >
           <div
@@ -1597,7 +1599,7 @@ export default function PackagesPage() {
               <h3
                 style={{
                   margin: 0,
-                  color: '#0f172a',
+                  color: '#263238',
                   fontSize: 17,
                   fontWeight: 850
                 }}
@@ -1608,7 +1610,7 @@ export default function PackagesPage() {
               <p
                 style={{
                   margin: '4px 0 0',
-                  color: '#94a3b8',
+                  color: '#90a0a8',
                   fontSize: 12
                 }}
               >
@@ -1622,8 +1624,8 @@ export default function PackagesPage() {
                 height: 30,
                 padding: '0 10px',
                 borderRadius: 8,
-                background: '#eff6ff',
-                color: '#1d4ed8',
+                background: '#edf3f7',
+                color: '#607f9e',
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1640,7 +1642,7 @@ export default function PackagesPage() {
               style={{
                 padding: 40,
                 textAlign: 'center',
-                color: '#64748b',
+                color: '#78909c',
                 fontSize: 13
               }}
             >
@@ -1651,14 +1653,14 @@ export default function PackagesPage() {
               style={{
                 textAlign: 'center',
                 padding: 40,
-                border: '1px dashed #cbd5e1',
+                border: '1px dashed #c9d1d6',
                 borderRadius: 12,
-                background: '#f8fafc'
+                background: '#f4f6f8'
               }}
             >
               <div
                 style={{
-                  color: '#334155',
+                  color: '#455a64',
                   fontWeight: 800,
                   marginBottom: 5
                 }}
@@ -1668,7 +1670,7 @@ export default function PackagesPage() {
 
               <div
                 style={{
-                  color: '#94a3b8',
+                  color: '#90a0a8',
                   fontSize: 12
                 }}
               >
@@ -1710,19 +1712,19 @@ export default function PackagesPage() {
                   <div
                     key={p.id}
                     style={{
-                      background: '#ffffff',
+                      background: '#fafbfc',
                       border: isOutOfStock
-                        ? '1px solid #fdba74'
+                        ? '1px solid #d9b98e'
                         : isLowStock
-                        ? '1px solid #fcd34d'
+                        ? '1px solid #dfc98f'
                         : isExpanded
-                        ? '1px solid #93c5fd'
-                        : '1px solid #dbe3ee',
+                        ? '1px solid #b9cad7'
+                        : '1px solid #dfe3e8',
                       borderRadius: 13,
                       overflow: 'hidden',
                       boxShadow: isExpanded
-                        ? '0 5px 18px rgba(37, 99, 235, 0.08)'
-                        : '0 4px 12px rgba(15, 23, 42, 0.04)',
+                        ? '0 4px 15px rgba(96, 127, 158, 0.07)'
+                        : '0 3px 10px rgba(38, 50, 56, 0.03)',
                       transition: 'all 0.2s ease'
                     }}
                   >
@@ -1760,15 +1762,15 @@ export default function PackagesPage() {
                                 height: 35,
                                 borderRadius: 9,
                                 background: isOutOfStock
-                                  ? '#fff7ed'
+                                  ? '#faf3ea'
                                   : isLowStock
-                                  ? '#fffbeb'
-                                  : '#eff6ff',
+                                  ? '#faf5e9'
+                                  : '#edf3f7',
                                 color: isOutOfStock
-                                  ? '#ea580c'
+                                  ? '#b07d48'
                                   : isLowStock
-                                  ? '#d97706'
-                                  : '#2563eb',
+                                  ? '#a5874f'
+                                  : '#607f9e',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
@@ -1789,7 +1791,7 @@ export default function PackagesPage() {
                             >
                               <div
                                 style={{
-                                  color: '#0f172a',
+                                  color: '#263238',
                                   fontSize: 15,
                                   fontWeight: 900,
                                   whiteSpace: 'nowrap',
@@ -1802,7 +1804,7 @@ export default function PackagesPage() {
 
                               <div
                                 style={{
-                                  color: '#64748b',
+                                  color: '#78909c',
                                   fontSize: 12,
                                   marginTop: 2
                                 }}
@@ -1817,8 +1819,8 @@ export default function PackagesPage() {
                           style={{
                             padding: '5px 9px',
                             borderRadius: 8,
-                            background: '#ecfdf5',
-                            color: '#047857',
+                            background: '#edf6f0',
+                            color: '#5f8f70',
                             fontSize: 11,
                             fontWeight: 850,
                             whiteSpace: 'nowrap'
@@ -1839,14 +1841,14 @@ export default function PackagesPage() {
                             padding: '8px 9px',
                             borderRadius: 8,
                             background: isOutOfStock
-                              ? '#fff7ed'
-                              : '#fffbeb',
+                              ? '#faf3ea'
+                              : '#faf5e9',
                             border: isOutOfStock
-                              ? '1px solid #fed7aa'
-                              : '1px solid #fde68a',
+                              ? '1px solid #e5d1b6'
+                              : '1px solid #e5d6b5',
                             color: isOutOfStock
-                              ? '#c2410c'
-                              : '#92400e',
+                              ? '#a87345'
+                              : '#8d7445',
                             fontSize: 11.5,
                             fontWeight: 850
                           }}
@@ -1876,16 +1878,16 @@ export default function PackagesPage() {
                             padding: '8px 7px',
                             borderRadius: 8,
                             background: isLowStock
-                              ? '#fffbeb'
-                              : '#ecfdf5',
+                              ? '#faf5e9'
+                              : '#edf6f0',
                             textAlign: 'center'
                           }}
                         >
                           <div
                             style={{
                               color: isLowStock
-                                ? '#b45309'
-                                : '#047857',
+                                ? '#9a7b45'
+                                : '#5f8f70',
                               fontSize: 11,
                               fontWeight: 700
                             }}
@@ -1896,8 +1898,8 @@ export default function PackagesPage() {
                           <div
                             style={{
                               color: isLowStock
-                                ? '#92400e'
-                                : '#065f46',
+                                ? '#8d7445'
+                                : '#557e64',
                               fontSize: 15,
                               fontWeight: 900,
                               marginTop: 2
@@ -1911,13 +1913,13 @@ export default function PackagesPage() {
                           style={{
                             padding: '8px 7px',
                             borderRadius: 8,
-                            background: '#fffbeb',
+                            background: '#faf5e9',
                             textAlign: 'center'
                           }}
                         >
                           <div
                             style={{
-                              color: '#b45309',
+                              color: '#9a7b45',
                               fontSize: 11,
                               fontWeight: 700
                             }}
@@ -1927,7 +1929,7 @@ export default function PackagesPage() {
 
                           <div
                             style={{
-                              color: '#92400e',
+                              color: '#8d7445',
                               fontSize: 15,
                               fontWeight: 900,
                               marginTop: 2
@@ -1941,13 +1943,13 @@ export default function PackagesPage() {
                           style={{
                             padding: '8px 7px',
                             borderRadius: 8,
-                            background: '#fef2f2',
+                            background: '#f9eeee',
                             textAlign: 'center'
                           }}
                         >
                           <div
                             style={{
-                              color: '#dc2626',
+                              color: '#b87878',
                               fontSize: 11,
                               fontWeight: 700
                             }}
@@ -1957,7 +1959,7 @@ export default function PackagesPage() {
 
                           <div
                             style={{
-                              color: '#b91c1c',
+                              color: '#ad6b6b',
                               fontSize: 15,
                               fontWeight: 900,
                               marginTop: 2
@@ -1983,11 +1985,11 @@ export default function PackagesPage() {
                             flex: 1,
                             height: 37,
                             borderRadius: 8,
-                            border: '1px solid #bfdbfe',
+                            border: '1px solid #c8d6df',
                             background: isExpanded
-                              ? '#dbeafe'
-                              : '#eff6ff',
-                            color: '#1d4ed8',
+                              ? '#e1eaf0'
+                              : '#edf3f7',
+                            color: '#607f9e',
                             fontWeight: 850,
                             fontSize: 12,
                             cursor: 'pointer',
@@ -2013,9 +2015,9 @@ export default function PackagesPage() {
                             height: 37,
                             padding: '0 12px',
                             borderRadius: 8,
-                            border: '1px solid #fecaca',
-                            background: '#fef2f2',
-                            color: '#dc2626',
+                            border: '1px solid #e7caca',
+                            background: '#f9eeee',
+                            color: '#b87878',
                             fontWeight: 850,
                             fontSize: 12,
                             cursor:
@@ -2042,8 +2044,8 @@ export default function PackagesPage() {
                     {isExpanded && (
                       <div
                         style={{
-                          borderTop: '1px solid #dbe3ee',
-                          background: '#f8fafc',
+                          borderTop: '1px solid #dfe3e8',
+                          background: '#f3f5f7',
                           padding: 13
                         }}
                       >
@@ -2126,7 +2128,7 @@ export default function PackagesPage() {
                               padding: '0 12px',
                               borderRadius: 8,
                               border: 'none',
-                              background: '#2563eb',
+                              background: '#607f9e',
                               color: '#ffffff',
                               fontWeight: 800,
                               fontSize: 12,
@@ -2140,12 +2142,12 @@ export default function PackagesPage() {
                         {packageCardLoading[p.id] ? (
                           <div
                             style={{
-                              background: '#ffffff',
-                              border: '1px solid #dbe3ee',
+                              background: '#fafbfc',
+                              border: '1px solid #dfe3e8',
                               borderRadius: 9,
                               padding: 25,
                               textAlign: 'center',
-                              color: '#64748b',
+                              color: '#78909c',
                               fontSize: 12
                             }}
                           >
@@ -2154,12 +2156,12 @@ export default function PackagesPage() {
                         ) : cards.length === 0 ? (
                           <div
                             style={{
-                              background: '#ffffff',
-                              border: '1px dashed #cbd5e1',
+                              background: '#fafbfc',
+                              border: '1px dashed #c9d1d6',
                               borderRadius: 9,
                               padding: 25,
                               textAlign: 'center',
-                              color: '#64748b',
+                              color: '#78909c',
                               fontSize: 12
                             }}
                           >
@@ -2180,8 +2182,8 @@ export default function PackagesPage() {
                                   <div
                                     key={card.id}
                                     style={{
-                                      background: '#ffffff',
-                                      border: '1px solid #dbe3ee',
+                                      background: '#fafbfc',
+                                      border: '1px solid #dfe3e8',
                                       borderRadius: 9,
                                       padding:
                                         '9px 10px',
@@ -2193,7 +2195,7 @@ export default function PackagesPage() {
                                       gap: 9,
                                       flexWrap: 'wrap',
                                       boxShadow:
-                                        '0 2px 7px rgba(15, 23, 42, 0.025)'
+                                        '0 2px 7px rgba(38, 50, 56, 0.025)'
                                     }}
                                   >
                                     <div
@@ -2218,7 +2220,7 @@ export default function PackagesPage() {
                                             fontWeight:
                                               900,
                                             color:
-                                              '#0f172a',
+                                              '#263238',
                                             fontSize: 14,
                                             wordBreak:
                                               'break-all'
@@ -2238,7 +2240,7 @@ export default function PackagesPage() {
                                         <div
                                           style={{
                                             marginTop: 6,
-                                            color: '#64748b',
+                                            color: '#78909c',
                                             fontSize: 11
                                           }}
                                         >
@@ -2246,7 +2248,7 @@ export default function PackagesPage() {
                                           <strong
                                             style={{
                                               color:
-                                                '#334155'
+                                                '#455a64'
                                             }}
                                           >
                                             {dateInfo.value}
@@ -2274,11 +2276,11 @@ export default function PackagesPage() {
                                             '0 9px',
                                           borderRadius: 7,
                                           border:
-                                            '1px solid #dbeafe',
+                                            '1px solid #d3e0e8',
                                           background:
-                                            '#eff6ff',
+                                            '#edf3f7',
                                           color:
-                                            '#1d4ed8',
+                                            '#607f9e',
                                           fontWeight:
                                             800,
                                           fontSize: 11,
@@ -2317,11 +2319,11 @@ export default function PackagesPage() {
                                             '0 9px',
                                           borderRadius: 7,
                                           border:
-                                            '1px solid #fecaca',
+                                            '1px solid #e7caca',
                                           background:
-                                            '#fef2f2',
+                                            '#f9eeee',
                                           color:
-                                            '#dc2626',
+                                            '#b87878',
                                           fontWeight:
                                             800,
                                           fontSize: 11,
@@ -2385,10 +2387,10 @@ export default function PackagesPage() {
                                   padding: '0 11px',
                                   borderRadius: 7,
                                   border:
-                                    '1px solid #cbd5e1',
+                                    '1px solid #c9d1d6',
                                   background:
-                                    '#ffffff',
-                                  color: '#475569',
+                                    '#fafbfc',
+                                  color: '#54636b',
                                   fontWeight: 750,
                                   fontSize: 11,
                                   cursor:
@@ -2406,7 +2408,7 @@ export default function PackagesPage() {
 
                               <span
                                 style={{
-                                  color: '#64748b',
+                                  color: '#78909c',
                                   fontSize: 11,
                                   fontWeight: 700
                                 }}
@@ -2434,10 +2436,10 @@ export default function PackagesPage() {
                                   padding: '0 11px',
                                   borderRadius: 7,
                                   border:
-                                    '1px solid #cbd5e1',
+                                    '1px solid #c9d1d6',
                                   background:
-                                    '#ffffff',
-                                  color: '#475569',
+                                    '#fafbfc',
+                                  color: '#54636b',
                                   fontWeight: 750,
                                   fontSize: 11,
                                   cursor:
