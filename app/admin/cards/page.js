@@ -11,6 +11,13 @@ const statusLabel = {
   sold: ['مباع', 'red'],
 };
 
+const statusOptions = [
+  { value: '', label: 'كل الحالات' },
+  { value: 'available', label: 'متاح' },
+  { value: 'with_distributor', label: 'مع موزع' },
+  { value: 'sold', label: 'مباع' },
+];
+
 export default function CardsPage() {
   const { profile, loading } = useProfile('admin');
 
@@ -18,8 +25,10 @@ export default function CardsPage() {
   const [cards, setCards] = useState([]);
   const [selected, setSelected] = useState(new Set());
 
+  const [searchCode, setSearchCode] = useState('');
   const [previewDate, setPreviewDate] = useState('');
   const [previewPackageId, setPreviewPackageId] = useState('');
+  const [previewStatus, setPreviewStatus] = useState('');
 
   const [code, setCode] = useState('');
   const [packageId, setPackageId] = useState('');
@@ -35,7 +44,6 @@ export default function CardsPage() {
   const [addingCard, setAddingCard] = useState(false);
   const [addingBulk, setAddingBulk] = useState(false);
 
-  // تحميل الباقات والكروت
   async function loadAll() {
     setLoadingData(true);
 
@@ -79,12 +87,19 @@ export default function CardsPage() {
     }
   }, [profile]);
 
-  // التصفية حسب الباقة والتاريخ معًا
   const filteredCards = useMemo(() => {
+    const normalizedSearch = searchCode.trim().toLowerCase();
+
     return cards.filter((c) => {
       const cardDate = c.created_at
         ? c.created_at.split('T')[0]
         : '';
+
+      const cardCode = String(c.code || '').toLowerCase();
+
+      const matchSearch =
+        !normalizedSearch ||
+        cardCode.includes(normalizedSearch);
 
       const matchDate =
         !previewDate || cardDate === previewDate;
@@ -93,11 +108,25 @@ export default function CardsPage() {
         !previewPackageId ||
         c.package_id === previewPackageId;
 
-      return matchDate && matchPackage;
-    });
-  }, [cards, previewDate, previewPackageId]);
+      const matchStatus =
+        !previewStatus ||
+        c.status === previewStatus;
 
-  // إحصائيات الكروت الظاهرة
+      return (
+        matchSearch &&
+        matchDate &&
+        matchPackage &&
+        matchStatus
+      );
+    });
+  }, [
+    cards,
+    searchCode,
+    previewDate,
+    previewPackageId,
+    previewStatus,
+  ]);
+
   const statistics = useMemo(() => {
     return {
       total: cards.length,
@@ -138,7 +167,6 @@ export default function CardsPage() {
     setSelected(next);
   }
 
-  // إضافة كرت واحد
   async function addCard(e) {
     e.preventDefault();
 
@@ -179,7 +207,6 @@ export default function CardsPage() {
     }
   }
 
-  // إضافة مجموعة كروت
   async function addBulkCards(e) {
     e.preventDefault();
 
@@ -255,7 +282,6 @@ export default function CardsPage() {
     }
   }
 
-  // حذف كرت واحد
   async function deleteSingleCard(id) {
     if (
       !confirm(
@@ -294,7 +320,6 @@ export default function CardsPage() {
     }
   }
 
-  // حذف الكروت المحددة
   async function deleteSelected() {
     if (selected.size === 0) {
       return;
@@ -330,8 +355,10 @@ export default function CardsPage() {
   }
 
   function clearFilters() {
+    setSearchCode('');
     setPreviewDate('');
     setPreviewPackageId('');
+    setPreviewStatus('');
     setSelected(new Set());
   }
 
@@ -349,6 +376,12 @@ export default function CardsPage() {
     });
   }
 
+  const hasFilters =
+    searchCode ||
+    previewDate ||
+    previewPackageId ||
+    previewStatus;
+
   if (loading || !profile) {
     return null;
   }
@@ -356,97 +389,60 @@ export default function CardsPage() {
   return (
     <div className="cards-page">
       <style jsx global>{`
-        /*
-         * =========================================================
-         * الهيكل الرئيسي للوحة المدير
-         * =========================================================
-         *
-         * Sidebar:
-         * - ثابت على يمين الشاشة في الكمبيوتر
-         * - لا يتحرك مع المحتوى
-         * - يأخذ كامل ارتفاع الشاشة
-         *
-         * Main:
-         * - يبدأ إلى يسار القائمة
-         * - لا يصعد فوق القائمة
-         * - لا يدخل خلفها
-         */
-
         .cards-page {
           min-height: 100vh;
           width: 100%;
-          background: #f4f7f6;
+          background:
+            linear-gradient(
+              180deg,
+              #f0fdf9 0%,
+              #f4f7f6 220px,
+              #f4f7f6 100%
+            );
           color: #111827;
           direction: rtl;
           overflow-x: hidden;
           box-sizing: border-box;
         }
 
-        /*
-         * القائمة الجانبية على الكمبيوتر
-         */
         .cards-page .sidebar {
           position: fixed !important;
           top: 0 !important;
           right: 0 !important;
           left: auto !important;
           bottom: 0 !important;
-
           width: 270px !important;
           height: 100vh !important;
-
           z-index: 1000 !important;
-
           display: flex !important;
           flex-direction: column !important;
-
           box-sizing: border-box !important;
           overflow-y: auto !important;
           overflow-x: hidden !important;
         }
 
-        /*
-         * المحتوى الرئيسي
-         *
-         * 270px هي المساحة المحجوزة للقائمة الجانبية.
-         */
         .cards-page .main {
           min-height: 100vh;
           width: calc(100% - 270px);
           margin-right: 270px;
-
           padding: 28px;
           box-sizing: border-box;
-
           overflow-x: hidden;
         }
 
-        /*
-         * الحاوية الداخلية للمحتوى
-         * حتى لا تتمدد العناصر بشكل غير مريح على الشاشات الكبيرة.
-         */
-        .cards-page .main > * {
-          max-width: 100%;
-        }
-
-        /* =========================================================
-           رأس الصفحة
-           ========================================================= */
-
         .page-header {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
           gap: 20px;
-
           margin-bottom: 22px;
         }
 
         .page-header h1 {
           margin: 0 0 7px;
-          font-size: 27px;
-          font-weight: 900;
-          color: #111827;
+          font-size: 28px;
+          font-weight: 950;
+          color: #0f172a;
           line-height: 1.3;
         }
 
@@ -454,12 +450,22 @@ export default function CardsPage() {
           margin: 0;
           color: #64748b;
           font-size: 14px;
-          line-height: 1.7;
+          line-height: 1.8;
         }
 
-        /* =========================================================
-           الإحصائيات
-           ========================================================= */
+        .header-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          padding: 9px 13px;
+          border-radius: 999px;
+          background: #ecfdf5;
+          border: 1px solid #a7f3d0;
+          color: #047857;
+          font-size: 12px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
 
         .stats-grid {
           display: grid;
@@ -472,14 +478,42 @@ export default function CardsPage() {
         }
 
         .stat-card {
+          position: relative;
           min-width: 0;
+          overflow: hidden;
           background: #fff;
           border: 1px solid #e5e7eb;
-          border-radius: 16px;
-          padding: 17px;
+          border-radius: 17px;
+          padding: 18px;
           box-shadow:
-            0 5px 18px rgba(15, 23, 42, 0.04);
+            0 7px 22px rgba(15, 23, 42, 0.05);
           box-sizing: border-box;
+        }
+
+        .stat-card::before {
+          content: '';
+          position: absolute;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          width: 4px;
+          background: #2563eb;
+        }
+
+        .stat-card.total::before {
+          background: #2563eb;
+        }
+
+        .stat-card.available::before {
+          background: #16a34a;
+        }
+
+        .stat-card.distributor::before {
+          background: #f59e0b;
+        }
+
+        .stat-card.sold::before {
+          background: #dc2626;
         }
 
         .stat-top {
@@ -492,54 +526,76 @@ export default function CardsPage() {
         .stat-title {
           color: #64748b;
           font-size: 12px;
-          font-weight: 700;
+          font-weight: 800;
         }
 
         .stat-value {
           margin-top: 8px;
-          font-size: 25px;
-          font-weight: 900;
+          font-size: 27px;
+          font-weight: 950;
           line-height: 1.1;
+          color: #0f172a;
+        }
+
+        .stat-card.total .stat-value {
+          color: #2563eb;
+        }
+
+        .stat-card.available .stat-value {
+          color: #15803d;
+        }
+
+        .stat-card.distributor .stat-value {
+          color: #c2410c;
+        }
+
+        .stat-card.sold .stat-value {
+          color: #dc2626;
         }
 
         .stat-icon {
-          width: 38px;
-          height: 38px;
+          width: 42px;
+          height: 42px;
           flex-shrink: 0;
-
           display: flex;
           align-items: center;
           justify-content: center;
-
-          background: #f1f5f9;
-          border-radius: 11px;
-          font-size: 17px;
+          border-radius: 12px;
+          font-size: 18px;
         }
 
-        /* =========================================================
-           البطاقات العامة
-           ========================================================= */
+        .stat-card.total .stat-icon {
+          background: #dbeafe;
+        }
+
+        .stat-card.available .stat-icon {
+          background: #dcfce7;
+        }
+
+        .stat-card.distributor .stat-icon {
+          background: #ffedd5;
+        }
+
+        .stat-card.sold .stat-icon {
+          background: #fee2e2;
+        }
 
         .panel {
           width: 100%;
           box-sizing: border-box;
-
           background: #fff;
           border: 1px solid #e5e7eb;
           border-radius: 17px;
-
           padding: 20px;
           margin-bottom: 18px;
-
           box-shadow:
-            0 5px 18px rgba(15, 23, 42, 0.035);
+            0 6px 20px rgba(15, 23, 42, 0.035);
         }
 
         .panel-head {
           display: flex;
           align-items: center;
           justify-content: space-between;
-
           gap: 12px;
           margin-bottom: 16px;
         }
@@ -547,7 +603,8 @@ export default function CardsPage() {
         .panel-head h3 {
           margin: 0;
           font-size: 16px;
-          font-weight: 900;
+          font-weight: 950;
+          color: #0f172a;
         }
 
         .muted {
@@ -555,9 +612,18 @@ export default function CardsPage() {
           font-size: 12px;
         }
 
-        /* =========================================================
-           النماذج
-           ========================================================= */
+        .section-marker {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .section-marker-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 50%;
+          background: #2563eb;
+        }
 
         .form-grid {
           display: grid;
@@ -565,7 +631,6 @@ export default function CardsPage() {
             minmax(0, 1fr)
             190px
             auto;
-
           gap: 12px;
           align-items: end;
         }
@@ -577,10 +642,9 @@ export default function CardsPage() {
         .field label {
           display: block;
           margin-bottom: 7px;
-
           color: #475569;
           font-size: 12px;
-          font-weight: 800;
+          font-weight: 850;
         }
 
         .input,
@@ -588,14 +652,11 @@ export default function CardsPage() {
         .textarea {
           width: 100%;
           box-sizing: border-box;
-
           border: 1px solid #dbe2ea;
           background: #fff;
           color: #111827;
-
           border-radius: 11px;
           outline: none;
-
           font-size: 14px;
           transition: 0.2s;
         }
@@ -609,7 +670,6 @@ export default function CardsPage() {
         .textarea {
           min-height: 125px;
           padding: 12px;
-
           resize: vertical;
           line-height: 1.8;
         }
@@ -631,47 +691,51 @@ export default function CardsPage() {
             Monaco,
             Consolas,
             monospace;
-
           direction: ltr;
           text-align: left;
         }
 
         .btn-primary {
           height: 44px;
-
           border: 0;
           border-radius: 11px;
-
           padding: 0 22px;
-
-          background: #2563eb;
+          background:
+            linear-gradient(
+              135deg,
+              #2563eb,
+              #1d4ed8
+            );
           color: white;
-
           font-weight: 900;
           cursor: pointer;
-
           white-space: nowrap;
-          transition: 0.2s;
+          transition:
+            transform 0.15s,
+            box-shadow 0.15s,
+            background 0.15s;
+          box-shadow:
+            0 5px 13px
+              rgba(37, 99, 235, 0.18);
         }
 
         .btn-primary:hover {
-          background: #1d4ed8;
+          transform: translateY(-1px);
+          box-shadow:
+            0 7px 17px
+              rgba(37, 99, 235, 0.23);
         }
 
         .btn-primary:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+          transform: none;
         }
-
-        /* =========================================================
-           الرسائل
-           ========================================================= */
 
         .note {
           border-radius: 11px;
           padding: 11px 13px;
           margin-bottom: 14px;
-
           font-size: 13px;
           font-weight: 800;
         }
@@ -688,14 +752,14 @@ export default function CardsPage() {
           color: #047857;
         }
 
-        /* =========================================================
-           الفلاتر
-           ========================================================= */
-
         .filter-box {
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-
+          background:
+            linear-gradient(
+              135deg,
+              #f8fafc,
+              #f0fdf9
+            );
+          border: 1px solid #dbeafe;
           border-radius: 14px;
           padding: 14px;
         }
@@ -703,10 +767,10 @@ export default function CardsPage() {
         .filters {
           display: grid;
           grid-template-columns:
-            minmax(0, 1fr)
-            190px
+            minmax(0, 1.5fr)
+            minmax(150px, 1fr)
+            minmax(150px, 1fr)
             auto;
-
           gap: 10px;
           align-items: end;
         }
@@ -718,44 +782,76 @@ export default function CardsPage() {
         .filter-control label {
           display: block;
           margin-bottom: 6px;
-
           color: #64748b;
           font-size: 11px;
           font-weight: 900;
         }
 
-        .filter-control select,
-        .filter-control input {
+        .filter-control input,
+        .filter-control select {
           width: 100%;
           height: 40px;
-
           box-sizing: border-box;
-
           border: 1px solid #dbe2ea;
           border-radius: 9px;
-
           background: white;
           padding: 0 10px;
+          color: #334155;
+          outline: none;
+        }
+
+        .filter-control input:focus,
+        .filter-control select:focus {
+          border-color: #2563eb;
+          box-shadow:
+            0 0 0 3px
+              rgba(37, 99, 235, 0.08);
         }
 
         .clear-btn {
           height: 40px;
           padding: 0 16px;
-
           border: 0;
           border-radius: 9px;
-
           background: #e2e8f0;
           color: #334155;
-
           font-weight: 800;
           cursor: pointer;
           white-space: nowrap;
         }
 
-        /* =========================================================
-           الجدول
-           ========================================================= */
+        .clear-btn:hover {
+          background: #cbd5e1;
+        }
+
+        .results-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          margin-bottom: 14px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+        }
+
+        .results-count {
+          color: #334155;
+          font-size: 12px;
+          font-weight: 900;
+        }
+
+        .results-count strong {
+          color: #2563eb;
+          font-size: 14px;
+        }
+
+        .active-filters {
+          color: #64748b;
+          font-size: 11px;
+          font-weight: 700;
+        }
 
         .table-wrap {
           width: 100%;
@@ -765,36 +861,39 @@ export default function CardsPage() {
 
         table {
           width: 100%;
-          border-collapse: collapse;
-          min-width: 720px;
+          border-collapse: separate;
+          border-spacing: 0;
+          min-width: 780px;
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          border-radius: 13px;
         }
 
         th {
-          background: #f8fafc;
-          color: #64748b;
-
+          background: #f1f5f9;
+          color: #475569;
           font-size: 11px;
-          font-weight: 900;
-
+          font-weight: 950;
           padding: 13px 10px;
-
           border-bottom: 1px solid #e2e8f0;
-
           text-align: right;
           white-space: nowrap;
         }
 
         td {
           padding: 13px 10px;
-
           border-bottom: 1px solid #f1f5f9;
-
           font-size: 13px;
           vertical-align: middle;
+          background: #fff;
         }
 
-        tbody tr:hover {
-          background: #fafafa;
+        tbody tr:last-child td {
+          border-bottom: 0;
+        }
+
+        tbody tr:hover td {
+          background: #f8fafc;
         }
 
         .code-cell {
@@ -805,65 +904,57 @@ export default function CardsPage() {
             Monaco,
             Consolas,
             monospace;
-
-          font-weight: 800;
+          font-weight: 900;
+          color: #1d4ed8;
           direction: ltr;
           text-align: right;
-
           white-space: nowrap;
         }
 
-        /* =========================================================
-           الحالات
-           ========================================================= */
+        .package-cell {
+          color: #334155;
+          font-weight: 800;
+        }
 
         .status-pill {
           display: inline-flex;
           align-items: center;
-
+          justify-content: center;
           gap: 5px;
-
           border-radius: 999px;
-          padding: 5px 9px;
-
+          padding: 6px 11px;
           font-size: 11px;
-          font-weight: 900;
-
+          font-weight: 950;
           white-space: nowrap;
         }
 
         .status-pill.green {
           background: #dcfce7;
           color: #15803d;
+          border: 1px solid #bbf7d0;
         }
 
         .status-pill.amber {
-          background: #fef3c7;
-          color: #b45309;
+          background: #ffedd5;
+          color: #c2410c;
+          border: 1px solid #fed7aa;
         }
 
         .status-pill.red {
           background: #fee2e2;
           color: #b91c1c;
+          border: 1px solid #fecaca;
         }
-
-        /* =========================================================
-           الحذف
-           ========================================================= */
 
         .delete-btn {
           height: 34px;
           padding: 0 12px;
-
           border: 0;
           border-radius: 9px;
-
           background: #fee2e2;
           color: #dc2626;
-
           font-size: 12px;
           font-weight: 900;
-
           cursor: pointer;
           white-space: nowrap;
         }
@@ -881,13 +972,10 @@ export default function CardsPage() {
           display: flex;
           justify-content: space-between;
           align-items: center;
-
           gap: 12px;
           margin-top: 15px;
           padding: 13px;
-
           border-radius: 12px;
-
           background: #fff1f2;
           border: 1px solid #fecdd3;
         }
@@ -901,22 +989,18 @@ export default function CardsPage() {
         .bulk-delete-btn {
           border: 0;
           border-radius: 9px;
-
           background: #dc2626;
           color: white;
-
           padding: 9px 15px;
-
           font-size: 12px;
           font-weight: 900;
-
           cursor: pointer;
           white-space: nowrap;
         }
 
-        /* =========================================================
-           نسخة الهاتف
-           ========================================================= */
+        .bulk-delete-btn:hover {
+          background: #b91c1c;
+        }
 
         .mobile-list {
           display: none;
@@ -925,18 +1009,30 @@ export default function CardsPage() {
         .mobile-card {
           border: 1px solid #e5e7eb;
           border-radius: 14px;
-
           padding: 14px;
           margin-bottom: 10px;
-
           background: #fff;
+          box-shadow:
+            0 3px 10px
+              rgba(15, 23, 42, 0.035);
+        }
+
+        .mobile-card.available {
+          border-right: 4px solid #16a34a;
+        }
+
+        .mobile-card.with-distributor {
+          border-right: 4px solid #f59e0b;
+        }
+
+        .mobile-card.sold {
+          border-right: 4px solid #dc2626;
         }
 
         .mobile-card-top {
           display: flex;
           justify-content: space-between;
           align-items: center;
-
           gap: 10px;
           margin-bottom: 12px;
         }
@@ -949,20 +1045,17 @@ export default function CardsPage() {
             Monaco,
             Consolas,
             monospace;
-
           direction: ltr;
           text-align: left;
-
+          color: #1d4ed8;
           font-size: 14px;
-          font-weight: 900;
-
+          font-weight: 950;
           overflow-wrap: anywhere;
         }
 
         .mobile-info {
           display: grid;
           grid-template-columns: 1fr 1fr;
-
           gap: 9px;
           margin-bottom: 13px;
         }
@@ -970,53 +1063,54 @@ export default function CardsPage() {
         .mobile-info-item {
           background: #f8fafc;
           border-radius: 9px;
-
           padding: 9px;
           min-width: 0;
         }
 
         .mobile-info-label {
           display: block;
-
           color: #94a3b8;
           font-size: 10px;
-
           margin-bottom: 3px;
         }
 
         .mobile-info-value {
           font-size: 12px;
           font-weight: 900;
-
+          color: #334155;
           overflow-wrap: anywhere;
         }
 
         .mobile-delete {
           width: 100%;
           height: 38px;
-
           border: 0;
           border-radius: 9px;
-
           background: #fee2e2;
           color: #dc2626;
-
           font-weight: 900;
           cursor: pointer;
         }
 
-        .empty-state {
-          padding: 40px 15px;
-
-          text-align: center;
-          color: #94a3b8;
-
-          font-size: 13px;
+        .mobile-delete:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
         }
 
-        /* =========================================================
-           الشاشات المتوسطة
-           ========================================================= */
+        .empty-state {
+          padding: 45px 15px;
+          text-align: center;
+          color: #94a3b8;
+          font-size: 13px;
+          background: #f8fafc;
+          border: 1px dashed #cbd5e1;
+          border-radius: 13px;
+        }
+
+        .empty-icon {
+          font-size: 28px;
+          margin-bottom: 7px;
+        }
 
         @media (max-width: 1100px) {
           .cards-page .main {
@@ -1024,6 +1118,11 @@ export default function CardsPage() {
           }
 
           .stats-grid {
+            grid-template-columns:
+              repeat(2, minmax(0, 1fr));
+          }
+
+          .filters {
             grid-template-columns:
               repeat(2, minmax(0, 1fr));
           }
@@ -1036,34 +1135,19 @@ export default function CardsPage() {
           }
         }
 
-        /* =========================================================
-           الهاتف
-           ========================================================= */
-
         @media (max-width: 768px) {
-          /*
-           * Sidebar هنا تتم إدارته بواسطة
-           * components/Sidebar.js
-           *
-           * لا نضع له margin أو مساحة ثابتة.
-           */
-
           .cards-page .sidebar {
             width: 270px !important;
             height: 100vh !important;
-
             right: 0 !important;
             left: auto !important;
-
             top: 0 !important;
             bottom: 0 !important;
-
             transform: translateX(100%);
             transition:
               transform
               0.3s
               cubic-bezier(0.4, 0, 0.2, 1);
-
             z-index: 999 !important;
           }
 
@@ -1071,13 +1155,9 @@ export default function CardsPage() {
             transform: translateX(0) !important;
           }
 
-          /*
-           * المحتوى على الهاتف يأخذ العرض كاملًا.
-           */
           .cards-page .main {
             width: 100%;
             margin-right: 0;
-
             padding: 15px;
             box-sizing: border-box;
           }
@@ -1087,7 +1167,7 @@ export default function CardsPage() {
           }
 
           .page-header h1 {
-            font-size: 22px;
+            font-size: 23px;
           }
 
           .page-header p {
@@ -1095,10 +1175,13 @@ export default function CardsPage() {
             line-height: 1.7;
           }
 
+          .header-badge {
+            display: none;
+          }
+
           .stats-grid {
             grid-template-columns:
               repeat(2, minmax(0, 1fr));
-
             gap: 9px;
           }
 
@@ -1114,7 +1197,7 @@ export default function CardsPage() {
           }
 
           .stat-value {
-            font-size: 20px;
+            font-size: 21px;
           }
 
           .stat-title {
@@ -1153,16 +1236,15 @@ export default function CardsPage() {
             width: 100%;
           }
 
-          /*
-           * الجدول مخفي على الهاتف
-           */
+          .results-bar {
+            align-items: flex-start;
+            flex-direction: column;
+          }
+
           .table-wrap {
             display: none;
           }
 
-          /*
-           * عرض الكروت كقائمة مناسبة للهاتف
-           */
           .mobile-list {
             display: block;
           }
@@ -1204,7 +1286,6 @@ export default function CardsPage() {
         }
       `}</style>
 
-      {/* القائمة الجانبية الرسمية للمدير */}
       <Sidebar
         role="admin"
         active="/admin/cards"
@@ -1217,15 +1298,20 @@ export default function CardsPage() {
             <h1>المخزون والكروت</h1>
 
             <p>
-              إدارة الكروت وإضافة الكروت ومراجعة المخزون
-              وحذف الكروت غير الصحيحة.
+              إدارة الكروت والمخزون ومتابعة حالة كل كرت
+              بسهولة.
             </p>
+          </div>
+
+          <div className="header-badge">
+            <span>●</span>
+            إدارة المخزون
           </div>
         </header>
 
         {/* الإحصائيات */}
         <section className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card total">
             <div className="stat-top">
               <div>
                 <div className="stat-title">
@@ -1243,11 +1329,11 @@ export default function CardsPage() {
             </div>
           </div>
 
-          <div className="stat-card">
+          <div className="stat-card available">
             <div className="stat-top">
               <div>
                 <div className="stat-title">
-                  متاح
+                  الكروت المتاحة
                 </div>
 
                 <div className="stat-value">
@@ -1261,7 +1347,7 @@ export default function CardsPage() {
             </div>
           </div>
 
-          <div className="stat-card">
+          <div className="stat-card distributor">
             <div className="stat-top">
               <div>
                 <div className="stat-title">
@@ -1279,11 +1365,11 @@ export default function CardsPage() {
             </div>
           </div>
 
-          <div className="stat-card">
+          <div className="stat-card sold">
             <div className="stat-top">
               <div>
                 <div className="stat-title">
-                  مباع
+                  الكروت المباعة
                 </div>
 
                 <div className="stat-value">
@@ -1301,10 +1387,13 @@ export default function CardsPage() {
         {/* إضافة كرت واحد */}
         <section className="panel">
           <div className="panel-head">
-            <h3>إضافة كرت يدويًا</h3>
+            <div className="section-marker">
+              <span className="section-marker-dot" />
+              <h3>إضافة كرت إلى المخزون</h3>
+            </div>
 
             <span className="muted">
-              إضافة كرت واحد إلى المخزون
+              إضافة كرت واحد
             </span>
           </div>
 
@@ -1336,7 +1425,7 @@ export default function CardsPage() {
               </div>
 
               <div className="field">
-                <label>الباقة</label>
+                <label>الباقة المرتبطة بالكرت</label>
 
                 <select
                   className="select"
@@ -1369,7 +1458,7 @@ export default function CardsPage() {
               >
                 {addingCard
                   ? 'جارٍ الإضافة...'
-                  : 'إضافة الكرت'}
+                  : '➕ إضافة الكرت'}
               </button>
             </div>
           </form>
@@ -1378,10 +1467,13 @@ export default function CardsPage() {
         {/* إضافة جماعية */}
         <section className="panel">
           <div className="panel-head">
-            <h3>إضافة مجموعة كروت</h3>
+            <div className="section-marker">
+              <span className="section-marker-dot" />
+              <h3>إضافة مجموعة كروت</h3>
+            </div>
 
             <span className="muted">
-              ضع رقم كرت واحد في كل سطر
+              رقم كرت واحد في كل سطر
             </span>
           </div>
 
@@ -1418,7 +1510,9 @@ export default function CardsPage() {
               }}
             >
               <div className="field">
-                <label>الباقة</label>
+                <label>
+                  الباقة المرتبطة بالكروت
+                </label>
 
                 <select
                   className="select"
@@ -1451,24 +1545,77 @@ export default function CardsPage() {
               >
                 {addingBulk
                   ? 'جارٍ إضافة الكروت...'
-                  : 'إضافة الكل'}
+                  : '➕ إضافة الكل'}
               </button>
             </div>
           </form>
         </section>
 
-        {/* التصفية */}
+        {/* البحث والتصفية */}
         <section className="panel">
           <div className="panel-head">
-            <h3>البحث والتصفية</h3>
+            <div className="section-marker">
+              <span
+                className="section-marker-dot"
+                style={{
+                  background: '#16a34a',
+                }}
+              />
+
+              <h3>البحث والتصفية</h3>
+            </div>
 
             <span className="muted">
-              حسب الباقة والتاريخ
+              البحث داخل المخزون المعروض
             </span>
           </div>
 
           <div className="filter-box">
             <div className="filters">
+              <div className="filter-control">
+                <label>
+                  🔎 البحث برقم الكرت
+                </label>
+
+                <input
+                  type="text"
+                  value={searchCode}
+                  onChange={(e) => {
+                    setSearchCode(
+                      e.target.value
+                    );
+                    setSelected(new Set());
+                  }}
+                  placeholder="اكتب رقم الكرت..."
+                  inputMode="numeric"
+                />
+              </div>
+
+              <div className="filter-control">
+                <label>الحالة</label>
+
+                <select
+                  value={previewStatus}
+                  onChange={(e) => {
+                    setPreviewStatus(
+                      e.target.value
+                    );
+                    setSelected(new Set());
+                  }}
+                >
+                  {statusOptions.map(
+                    (option) => (
+                      <option
+                        key={option.value}
+                        value={option.value}
+                      >
+                        {option.label}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
               <div className="filter-control">
                 <label>الباقة</label>
 
@@ -1510,30 +1657,59 @@ export default function CardsPage() {
                   }}
                 />
               </div>
+            </div>
 
+            {hasFilters && (
               <button
                 className="clear-btn"
                 type="button"
                 onClick={clearFilters}
+                style={{
+                  marginTop: 10,
+                  width: '100%',
+                }}
               >
-                إلغاء التصفية
+                إلغاء جميع التصفية
               </button>
-            </div>
+            )}
           </div>
         </section>
 
         {/* قائمة الكروت */}
         <section className="panel">
           <div className="panel-head">
-            <h3>
-              الكروت ({filteredCards.length})
-            </h3>
+            <div className="section-marker">
+              <span
+                className="section-marker-dot"
+                style={{
+                  background: '#f59e0b',
+                }}
+              />
+
+              <h3>مخزون الكروت</h3>
+            </div>
 
             {loadingData && (
               <span className="muted">
-                جارٍ تحديث الكروت...
+                جارٍ تحديث المخزون...
               </span>
             )}
+          </div>
+
+          <div className="results-bar">
+            <div className="results-count">
+              عدد النتائج:
+              {' '}
+              <strong>
+                {filteredCards.length}
+              </strong>
+            </div>
+
+            <div className="active-filters">
+              {hasFilters
+                ? 'يتم عرض النتائج حسب التصفية المحددة'
+                : 'جميع الكروت الظاهرة'}
+            </div>
           </div>
 
           {/* الكمبيوتر */}
@@ -1554,11 +1730,11 @@ export default function CardsPage() {
                       />
                     </th>
 
-                    <th>الكود</th>
+                    <th>رقم الكرت</th>
                     <th>الباقة</th>
-                    <th>التاريخ</th>
+                    <th>تاريخ الإضافة</th>
                     <th>الحالة</th>
-                    <th>الإجراءات</th>
+                    <th>الإجراء</th>
                   </tr>
                 </thead>
 
@@ -1589,7 +1765,7 @@ export default function CardsPage() {
                           {c.code}
                         </td>
 
-                        <td>
+                        <td className="package-cell">
                           {c.packages?.name ||
                             '—'}
                         </td>
@@ -1634,6 +1810,10 @@ export default function CardsPage() {
               </table>
             ) : (
               <div className="empty-state">
+                <div className="empty-icon">
+                  🎫
+                </div>
+
                 لا توجد كروت مطابقة
                 للتصفية الحالية.
               </div>
@@ -1681,9 +1861,19 @@ export default function CardsPage() {
                       'amber',
                     ];
 
+                  const cardTypeClass =
+                    c.status === 'available'
+                      ? 'available'
+                      : c.status ===
+                        'with_distributor'
+                      ? 'with-distributor'
+                      : c.status === 'sold'
+                      ? 'sold'
+                      : '';
+
                   return (
                     <div
-                      className="mobile-card"
+                      className={`mobile-card ${cardTypeClass}`}
                       key={c.id}
                     >
                       <div className="mobile-card-top">
@@ -1764,6 +1954,10 @@ export default function CardsPage() {
               </>
             ) : (
               <div className="empty-state">
+                <div className="empty-icon">
+                  🎫
+                </div>
+
                 لا توجد كروت مطابقة
                 للتصفية الحالية.
               </div>
