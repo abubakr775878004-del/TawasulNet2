@@ -1098,7 +1098,7 @@ export default function AdminPage() {
         </div>
 
         {/* =========================
-            تحليل المبيعات حسب الباقات
+            ملخص المبيعات
         ========================== */}
         <div
           className="panel"
@@ -1108,131 +1108,229 @@ export default function AdminPage() {
         >
           <div className="panel-head">
             <h3>
-              تحليل المبيعات حسب الباقات
+              ملخص المبيعات
             </h3>
           </div>
 
-          {Object.keys(salesByPackage).length ===
-          0 ? (
-            <div
-              style={{
-                color: 'var(--ink-soft)',
-                fontSize: 13,
-                padding: '10px 0',
-              }}
-            >
-              لا توجد مبيعات مسجلة بعد
-            </div>
-          ) : (
-            Object.entries(
-              salesByPackage
-            ).map(([name, data]) => (
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fit, minmax(300px, 1fr))',
+              gap: 24,
+            }}
+          >
+            {/* تحليل المبيعات حسب الباقات */}
+            <div>
               <div
-                key={name}
                 style={{
                   display: 'flex',
-                  justifyContent:
-                    'space-between',
                   alignItems: 'center',
-                  padding: '11px 0',
+                  gap: 8,
+                  marginBottom: 10,
+                  paddingBottom: 9,
                   borderBottom:
                     '1px solid #F3F0FB',
-                  fontSize: 13.5,
-                  gap: 10,
-                  flexWrap: 'wrap',
                 }}
               >
                 <span
                   style={{
-                    fontWeight: 800,
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#7C3AED',
+                  }}
+                />
+
+                <h4
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    fontWeight: 900,
                     color: '#3A1D66',
                   }}
                 >
-                  {name}
-                </span>
+                  المبيعات حسب الباقات
+                </h4>
+              </div>
 
-                <span
+              {Object.keys(salesByPackage).length ===
+              0 ? (
+                <div
                   style={{
-                    color: '#5B21B6',
-                    fontWeight: 700,
-                    textAlign: 'left',
+                    color: 'var(--ink-soft)',
+                    fontSize: 13,
+                    padding: '10px 0',
                   }}
                 >
-                  {data.count} كروت —{' '}
-                  <b
+                  لا توجد مبيعات مسجلة بعد
+                </div>
+              ) : (
+                Object.entries(
+                  salesByPackage
+                ).map(([name, data]) => (
+                  <div
+                    key={name}
                     style={{
-                      color: '#10B981',
+                      display: 'flex',
+                      justifyContent:
+                        'space-between',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '10px 0',
+                      borderBottom:
+                        '1px solid #F7F4FB',
                     }}
                   >
-                    {formatNum(
-                      data.total
-                    )}{' '}
-                    ريال
-                  </b>
-                </span>
-              </div>
-            ))
-          )}
-        </div>
+                    <span
+                      style={{
+                        fontWeight: 800,
+                        color: '#3A1D66',
+                        fontSize: 13,
+                      }}
+                    >
+                      {name}
+                    </span>
 
-        {/* =========================
-            آخر المبيعات
-        ========================== */}
-        <div
-          className="panel"
-          style={{
-            marginBottom: 20,
-          }}
-        >
-          <div className="panel-head">
-            <h3>
-              آخر المبيعات في النظام
-            </h3>
-          </div>
+                    <div
+                      style={{
+                        textAlign: 'left',
+                        fontSize: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: '#5B21B6',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {data.count} كرت
+                      </div>
 
-          {recentSales.length === 0 ? (
-            <div
-              style={{
-                color: 'var(--ink-soft)',
-                fontSize: 13,
-                padding: '10px 0',
-              }}
-            >
-              لا توجد عمليات بيع حديثة
+                      <div
+                        style={{
+                          color: '#10B981',
+                          fontWeight: 700,
+                          marginTop: 2,
+                        }}
+                      >
+                        {formatNum(
+                          data.total
+                        )}{' '}
+                        ريال
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ) : (
-            recentSales.map((c) => (
+
+            {/* آخر المبيعات */}
+            <div>
               <div
-                className="timer-row"
-                key={c.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                  paddingBottom: 9,
+                  borderBottom:
+                    '1px solid #F3F0FB',
+                }}
               >
-                <div>
-                  <div className="tcode mono">
-                    {c.code}
-                  </div>
-
-                  <div className="tpkg">
-                    {c.packages?.name ||
-                      'غير محدد'}{' '}
-                    —{' '}
-                    {formatNum(
-                      c.packages?.price || 0
-                    )}{' '}
-                    ريال
-                  </div>
-                </div>
-
-                <div
-                  className="tleft"
+                <span
                   style={{
-                    fontSize: 11.5,
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: '#10B981',
+                  }}
+                />
+
+                <h4
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    fontWeight: 900,
+                    color: '#3A1D66',
                   }}
                 >
-                  {formatDate(c.sold_at)}
-                </div>
+                  آخر المبيعات
+                </h4>
               </div>
-            ))
-          )}
+
+              {recentSales.length === 0 ? (
+                <div
+                  style={{
+                    color: 'var(--ink-soft)',
+                    fontSize: 13,
+                    padding: '10px 0',
+                  }}
+                >
+                  لا توجد عمليات بيع حديثة
+                </div>
+              ) : (
+                recentSales.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent:
+                        'space-between',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '10px 0',
+                      borderBottom:
+                        '1px solid #F7F4FB',
+                    }}
+                  >
+                    <div
+                      style={{
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
+                        className="tcode mono"
+                        style={{
+                          fontSize: 13,
+                        }}
+                      >
+                        {c.code}
+                      </div>
+
+                      <div
+                        className="tpkg"
+                        style={{
+                          marginTop: 3,
+                          fontSize: 11.5,
+                        }}
+                      >
+                        {c.packages?.name ||
+                          'غير محدد'}{' '}
+                        —{' '}
+                        {formatNum(
+                          c.packages?.price || 0
+                        )}{' '}
+                        ريال
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        fontSize: 10.5,
+                        color:
+                          'var(--ink-soft)',
+                        textAlign: 'left',
+                      }}
+                    >
+                      {formatDate(c.sold_at)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
         <AdSlotAdmin />
