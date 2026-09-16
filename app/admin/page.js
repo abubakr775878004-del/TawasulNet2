@@ -38,8 +38,9 @@ export default function AdminPage() {
 
     try {
       return new Date(date).toLocaleDateString('ar-YE', {
+        weekday: 'long',
         year: 'numeric',
-        month: 'numeric',
+        month: 'long',
         day: 'numeric',
       });
     } catch {
@@ -409,50 +410,206 @@ export default function AdminPage() {
       />
 
       <div className="main">
+
         {/* =====================================================
             رأس الصفحة
         ====================================================== */}
 
         <div
-          className="topbar"
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 15,
-            flexWrap: 'wrap',
-            marginBottom: 20,
+            marginBottom: 24,
           }}
         >
-          <div>
-            <h1>لوحة التحكم</h1>
+          <div
+            style={{
+              padding: '20px 18px',
+              borderRadius: 18,
+              background:
+                'linear-gradient(135deg, #F5F0FF 0%, #FFFFFF 55%, #EEFDF7 100%)',
+              border: '1px solid #E8DDF7',
+              boxShadow:
+                '0 8px 24px rgba(91, 33, 182, 0.07)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                gap: 15,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    color: '#7C3AED',
+                    marginBottom: 5,
+                  }}
+                >
+                  شبكة تواصل
+                </div>
 
-            <div className="greet">
-              مرحبًا بعودتك يا {profile.full_name}
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: 27,
+                    fontWeight: 900,
+                    color: '#32165A',
+                    lineHeight: 1.25,
+                  }}
+                >
+                  لوحة التحكم
+                </h1>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: '#5B4675',
+                  }}
+                >
+                  مرحبًا بعودتك يا{' '}
+                  <span
+                    style={{
+                      color: '#7C3AED',
+                      fontWeight: 900,
+                    }}
+                  >
+                    {profile.full_name}
+                  </span>
+                </div>
+              </div>
+
+              {/* =================================================
+                  التاريخ
+              ================================================== */}
+
+              <div
+                style={{
+                  minWidth: 190,
+                  padding: '12px 15px',
+                  borderRadius: 14,
+                  background: '#FFFFFF',
+                  border: '1px solid #E9DFF7',
+                  textAlign: 'center',
+                  boxShadow:
+                    '0 5px 15px rgba(91, 33, 182, 0.06)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: '#8B7A9F',
+                    fontWeight: 800,
+                    marginBottom: 5,
+                  }}
+                >
+                  اليوم
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 17,
+                    fontWeight: 900,
+                    color: '#5B21B6',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {new Date().toLocaleDateString(
+                    'ar-YE',
+                    {
+                      weekday: 'long',
+                    }
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 2,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: '#6B5A7D',
+                  }}
+                >
+                  {new Date().toLocaleDateString(
+                    'ar-YE',
+                    {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    }
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* =================================================
+                الفائزون الأسبوعيون
+            ================================================== */}
 
             <div
               style={{
-                marginTop: 5,
-                color: 'var(--ink-soft)',
-                fontSize: 12,
+                marginTop: 18,
+                paddingTop: 16,
+                borderTop:
+                  '1px solid rgba(124, 58, 237, 0.12)',
               }}
             >
-              نظرة سريعة على المخزون والمبيعات والموزعين
-            </div>
-          </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background:
+                      'linear-gradient(135deg, #FDE68A, #F59E0B)',
+                    fontSize: 18,
+                    boxShadow:
+                      '0 5px 12px rgba(245, 158, 11, 0.20)',
+                  }}
+                >
+                  🏆
+                </div>
 
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--ink-soft)',
-              background: '#F8F5FC',
-              padding: '8px 12px',
-              borderRadius: 10,
-              fontWeight: 700,
-            }}
-          >
-            {formatDate(new Date())}
+                <div>
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 900,
+                      color: '#3A1D66',
+                    }}
+                  >
+                    الفائزون الأسبوعيون
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#8B7A9F',
+                      marginTop: 2,
+                    }}
+                  >
+                    نتائج المسابقة الأسبوعية
+                  </div>
+                </div>
+              </div>
+
+              <WeeklyWinnerPanel />
+            </div>
           </div>
         </div>
 
@@ -470,6 +627,7 @@ export default function AdminPage() {
               color: '#B91C1C',
               fontSize: 13,
               fontWeight: 700,
+              border: '1px solid #FECACA',
             }}
           >
             {error}
@@ -486,12 +644,24 @@ export default function AdminPage() {
             marginBottom: 20,
           }}
         >
-          <div className="stat">
+          <div
+            className="stat"
+            style={{
+              borderTop: '4px solid #7C3AED',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #FAF7FF)',
+            }}
+          >
             <div className="label">
               إجمالي الكروت
             </div>
 
-            <div className="value">
+            <div
+              className="value"
+              style={{
+                color: '#6D28D9',
+              }}
+            >
               {stats?.totalCards ?? '—'}
             </div>
 
@@ -506,7 +676,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="stat">
+          <div
+            className="stat"
+            style={{
+              borderTop: '4px solid #2563EB',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #F5F9FF)',
+            }}
+          >
             <div className="label">
               مخزون المدير
             </div>
@@ -531,7 +708,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="stat">
+          <div
+            className="stat"
+            style={{
+              borderTop: '4px solid #F59E0B',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #FFF9ED)',
+            }}
+          >
             <div className="label">
               مع الموزعين
             </div>
@@ -556,7 +740,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="stat">
+          <div
+            className="stat"
+            style={{
+              borderTop: '4px solid #10B981',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #F1FFF9)',
+            }}
+          >
             <div className="label">
               الكروت المباعة
             </div>
@@ -600,6 +791,9 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
+              borderTop: '4px solid #10B981',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
           >
             <div
@@ -639,6 +833,9 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
+              borderTop: '4px solid #8B5CF6',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #FAF7FF)',
             }}
           >
             <div
@@ -679,6 +876,9 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
+              borderTop: '4px solid #6366F1',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #F6F7FF)',
             }}
           >
             <div
@@ -695,7 +895,7 @@ export default function AdminPage() {
               style={{
                 fontSize: 22,
                 fontWeight: 900,
-                color: '#7C3AED',
+                color: '#6366F1',
                 marginTop: 5,
               }}
             >
@@ -719,6 +919,14 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
+              borderTop:
+                totalDebt > 0
+                  ? '4px solid #EF4444'
+                  : '4px solid #10B981',
+              background:
+                totalDebt > 0
+                  ? 'linear-gradient(180deg, #FFFFFF, #FFF5F5)'
+                  : 'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
           >
             <div
@@ -775,6 +983,8 @@ export default function AdminPage() {
               margin: 0,
               padding: 18,
               borderRight: '4px solid #2563EB',
+              background:
+                'linear-gradient(180deg, #FFFFFF, #F5F9FF)',
             }}
           >
             <div
@@ -808,6 +1018,10 @@ export default function AdminPage() {
                 stats?.pendingReq > 0
                   ? '4px solid #D97706'
                   : '4px solid #10B981',
+              background:
+                stats?.pendingReq > 0
+                  ? 'linear-gradient(180deg, #FFFFFF, #FFF9ED)'
+                  : 'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
           >
             <div
@@ -844,6 +1058,10 @@ export default function AdminPage() {
                 lowStockPackages.length > 0
                   ? '4px solid #DC2626'
                   : '4px solid #10B981',
+              background:
+                lowStockPackages.length > 0
+                  ? 'linear-gradient(180deg, #FFFFFF, #FFF5F5)'
+                  : 'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
           >
             <div
@@ -890,6 +1108,10 @@ export default function AdminPage() {
                 outOfStockPackages.length > 0
                   ? '4px solid #DC2626'
                   : '4px solid #10B981',
+              background:
+                outOfStockPackages.length > 0
+                  ? 'linear-gradient(180deg, #FFFFFF, #FFF5F5)'
+                  : 'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
           >
             <div
@@ -973,11 +1195,12 @@ export default function AdminPage() {
                     style={{
                       padding: 12,
                       borderRadius: 12,
-                      background: '#FAF9FC',
-                      border:
-                        lowStock
-                          ? '1px solid #FECACA'
-                          : '1px solid #F0ECF7',
+                      background: lowStock
+                        ? '#FFF8F8'
+                        : '#FAF9FC',
+                      border: lowStock
+                        ? '1px solid #FECACA'
+                        : '1px solid #F0ECF7',
                     }}
                   >
                     <div
@@ -1270,12 +1493,6 @@ export default function AdminPage() {
             ))
           )}
         </div>
-
-        {/* =====================================================
-            المسابقة الأسبوعية
-        ====================================================== */}
-
-        <WeeklyWinnerPanel />
 
         {/* =====================================================
             الإعلان
