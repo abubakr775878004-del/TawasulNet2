@@ -52,12 +52,6 @@ export default function AdminPage() {
     try {
       setError('');
 
-      /*
-       * =========================================================
-       * 1. الإحصائيات الأساسية
-       * =========================================================
-       */
-
       const [
         { count: totalCards, error: totalCardsError },
         { count: availableCards, error: availableCardsError },
@@ -157,12 +151,6 @@ export default function AdminPage() {
         pendingReq: pendingReq ?? 0,
       });
 
-      /*
-       * =========================================================
-       * 2. المبيعات والإيرادات
-       * =========================================================
-       */
-
       const {
         data: soldList,
         error: soldError,
@@ -177,10 +165,7 @@ export default function AdminPage() {
         });
 
       if (soldError) {
-        console.error(
-          'Sold cards error:',
-          soldError
-        );
+        console.error('Sold cards error:', soldError);
       }
 
       let revenue = 0;
@@ -191,7 +176,6 @@ export default function AdminPage() {
       const pkgStats = {};
 
       const today = new Date();
-
       const todayYear = today.getFullYear();
       const todayMonth = today.getMonth();
       const todayDate = today.getDate();
@@ -199,9 +183,7 @@ export default function AdminPage() {
       (soldList || []).forEach((item) => {
         soldCount += 1;
 
-        const price =
-          Number(item.packages?.price) || 0;
-
+        const price = Number(item.packages?.price) || 0;
         revenue += price;
 
         const soldDate = item.sold_at
@@ -241,17 +223,17 @@ export default function AdminPage() {
       });
 
       setSalesByPackage(pkgStats);
-
       setRecentSales(
         (soldList || []).slice(0, 7)
       );
 
       /*
-       * =========================================================
-       * 3. المخزون حسب الباقات
-       * =========================================================
+       * نحتفظ بجلب مخزون الباقات هنا فقط من أجل
+       * التنبيه المختصر في الصفحة الرئيسية.
+       *
+       * التفاصيل الكاملة للمخزون ستنتقل لاحقًا
+       * إلى صفحة "المخزون والكروت".
        */
-
       const {
         data: packagesList,
         error: packagesError,
@@ -272,56 +254,25 @@ export default function AdminPage() {
       const stockRows = [];
 
       for (const pkg of packagesList || []) {
-        const [
-          { count: availableCount },
-          { count: distributorCount },
-          { count: soldCountForPackage },
-        ] = await Promise.all([
-          supabase
+        const { count: availableCount } =
+          await supabase
             .from('cards')
             .select('*', {
               count: 'exact',
               head: true,
             })
             .eq('package_id', pkg.id)
-            .eq('status', 'available'),
-
-          supabase
-            .from('cards')
-            .select('*', {
-              count: 'exact',
-              head: true,
-            })
-            .eq('package_id', pkg.id)
-            .eq('status', 'with_distributor'),
-
-          supabase
-            .from('cards')
-            .select('*', {
-              count: 'exact',
-              head: true,
-            })
-            .eq('package_id', pkg.id)
-            .eq('status', 'sold'),
-        ]);
+            .eq('status', 'available');
 
         stockRows.push({
           id: pkg.id,
           name: pkg.name,
           price: Number(pkg.price) || 0,
           available: availableCount ?? 0,
-          withDistributor: distributorCount ?? 0,
-          sold: soldCountForPackage ?? 0,
         });
       }
 
       setPackageStock(stockRows);
-
-      /*
-       * =========================================================
-       * 4. إجمالي ديون الموزعين
-       * =========================================================
-       */
 
       const {
         data: distributors,
@@ -339,19 +290,18 @@ export default function AdminPage() {
         );
       }
 
-      const debtTotal = (distributors || []).reduce(
-        (sum, distributor) => {
-          const debt =
-            Number(
-              distributor.debt_balance ??
-                distributor.debt ??
-                0
-            ) || 0;
+      const debtTotal = (
+        distributors || []
+      ).reduce((sum, distributor) => {
+        const debt =
+          Number(
+            distributor.debt_balance ??
+              distributor.debt ??
+              0
+          ) || 0;
 
-          return sum + debt;
-        },
-        0
-      );
+        return sum + debt;
+      }, 0);
 
       setTotalDebt(debtTotal);
     } catch (loadError) {
@@ -372,13 +322,6 @@ export default function AdminPage() {
     }
   }, [profile]);
 
-  const stockTotal = useMemo(() => {
-    return packageStock.reduce(
-      (sum, pkg) => sum + pkg.available,
-      0
-    );
-  }, [packageStock]);
-
   const lowStockPackages = useMemo(() => {
     return packageStock.filter(
       (pkg) =>
@@ -393,13 +336,8 @@ export default function AdminPage() {
     );
   }, [packageStock]);
 
-  if (loading) {
-    return null;
-  }
-
-  if (!profile) {
-    return null;
-  }
+  if (loading) return null;
+  if (!profile) return null;
 
   return (
     <div className="app">
@@ -410,16 +348,10 @@ export default function AdminPage() {
       />
 
       <div className="main">
-
-        {/* =====================================================
+        {/* =========================
             رأس الصفحة
-        ====================================================== */}
-
-        <div
-          style={{
-            marginBottom: 24,
-          }}
-        >
+        ========================== */}
+        <div style={{ marginBottom: 24 }}>
           <div
             style={{
               padding: '20px 18px',
@@ -434,7 +366,8 @@ export default function AdminPage() {
             <div
               style={{
                 display: 'flex',
-                justifyContent: 'space-between',
+                justifyContent:
+                  'space-between',
                 alignItems: 'flex-start',
                 gap: 15,
                 flexWrap: 'wrap',
@@ -483,10 +416,6 @@ export default function AdminPage() {
                   </span>
                 </div>
               </div>
-
-              {/* =================================================
-                  التاريخ
-              ================================================== */}
 
               <div
                 style={{
@@ -547,10 +476,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* =================================================
-                الفائزون الأسبوعيون
-            ================================================== */}
-
+            {/* الفائزون الأسبوعيون */}
             <div
               style={{
                 marginTop: 18,
@@ -613,10 +539,6 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* =====================================================
-            رسالة الخطأ
-        ====================================================== */}
-
         {error && (
           <div
             style={{
@@ -634,10 +556,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* =====================================================
-            ملخص الكروت
-        ====================================================== */}
-
+        {/* =========================
+            نظرة عامة على الكروت
+        ========================== */}
         <div
           className="grid-stats"
           style={{
@@ -647,7 +568,8 @@ export default function AdminPage() {
           <div
             className="stat"
             style={{
-              borderTop: '4px solid #7C3AED',
+              borderTop:
+                '4px solid #7C3AED',
               background:
                 'linear-gradient(180deg, #FFFFFF, #FAF7FF)',
             }}
@@ -672,20 +594,21 @@ export default function AdminPage() {
                 fontSize: 11,
               }}
             >
-              جميع الحالات
+              جميع الكروت في النظام
             </div>
           </div>
 
           <div
             className="stat"
             style={{
-              borderTop: '4px solid #2563EB',
+              borderTop:
+                '4px solid #2563EB',
               background:
                 'linear-gradient(180deg, #FFFFFF, #F5F9FF)',
             }}
           >
             <div className="label">
-              مخزون المدير
+              الكروت المتاحة
             </div>
 
             <div
@@ -704,14 +627,15 @@ export default function AdminPage() {
                 fontSize: 11,
               }}
             >
-              كروت متاحة للبيع
+              متاحة للبيع حاليًا
             </div>
           </div>
 
           <div
             className="stat"
             style={{
-              borderTop: '4px solid #F59E0B',
+              borderTop:
+                '4px solid #F59E0B',
               background:
                 'linear-gradient(180deg, #FFFFFF, #FFF9ED)',
             }}
@@ -736,14 +660,15 @@ export default function AdminPage() {
                 fontSize: 11,
               }}
             >
-              كروت موزعة حاليًا
+              كروت موجودة حاليًا مع الموزعين
             </div>
           </div>
 
           <div
             className="stat"
             style={{
-              borderTop: '4px solid #10B981',
+              borderTop:
+                '4px solid #10B981',
               background:
                 'linear-gradient(180deg, #FFFFFF, #F1FFF9)',
             }}
@@ -768,15 +693,14 @@ export default function AdminPage() {
                 fontSize: 11,
               }}
             >
-              الحالة الحالية
+              المبيعات الموجودة حاليًا في النظام
             </div>
           </div>
         </div>
 
-        {/* =====================================================
-            الملخص المالي والموزعين
-        ====================================================== */}
-
+        {/* =========================
+            المؤشرات المالية
+        ========================== */}
         <div
           style={{
             display: 'grid',
@@ -791,7 +715,8 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
-              borderTop: '4px solid #10B981',
+              borderTop:
+                '4px solid #10B981',
               background:
                 'linear-gradient(180deg, #FFFFFF, #F4FFFA)',
             }}
@@ -824,7 +749,7 @@ export default function AdminPage() {
                 color: 'var(--ink-soft)',
               }}
             >
-              كرت مباع
+              كرت مباع اليوم
             </div>
           </div>
 
@@ -833,7 +758,8 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
-              borderTop: '4px solid #8B5CF6',
+              borderTop:
+                '4px solid #8B5CF6',
               background:
                 'linear-gradient(180deg, #FFFFFF, #FAF7FF)',
             }}
@@ -876,7 +802,8 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
-              borderTop: '4px solid #6366F1',
+              borderTop:
+                '4px solid #6366F1',
               background:
                 'linear-gradient(180deg, #FFFFFF, #F6F7FF)',
             }}
@@ -964,10 +891,9 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* =====================================================
-            حالة النظام والتنبيهات
-        ====================================================== */}
-
+        {/* =========================
+            حالة النظام
+        ========================== */}
         <div
           style={{
             display: 'grid',
@@ -982,7 +908,8 @@ export default function AdminPage() {
             style={{
               margin: 0,
               padding: 18,
-              borderRight: '4px solid #2563EB',
+              borderRight:
+                '4px solid #2563EB',
               background:
                 'linear-gradient(180deg, #FFFFFF, #F5F9FF)',
             }}
@@ -1006,6 +933,16 @@ export default function AdminPage() {
               }}
             >
               {stats?.activeDist ?? '—'}
+            </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 11,
+                color: 'var(--ink-soft)',
+              }}
+            >
+              موزعون بحالة معتمدة
             </div>
           </div>
 
@@ -1047,6 +984,16 @@ export default function AdminPage() {
             >
               {stats?.pendingReq ?? '—'}
             </div>
+
+            <div
+              style={{
+                marginTop: 4,
+                fontSize: 11,
+                color: 'var(--ink-soft)',
+              }}
+            >
+              طلبات تحتاج متابعة
+            </div>
           </div>
 
           <div
@@ -1071,7 +1018,7 @@ export default function AdminPage() {
                 fontWeight: 700,
               }}
             >
-              تنبيه المخزون المنخفض
+              تنبيه المخزون
             </div>
 
             <div
@@ -1095,7 +1042,7 @@ export default function AdminPage() {
                 color: 'var(--ink-soft)',
               }}
             >
-              باقات ≤ 10 كروت
+              باقات مخزونها 10 كروت أو أقل
             </div>
           </div>
 
@@ -1121,7 +1068,7 @@ export default function AdminPage() {
                 fontWeight: 700,
               }}
             >
-              باقات نفد مخزونها
+              الباقات المنتهية
             </div>
 
             <div
@@ -1137,229 +1084,22 @@ export default function AdminPage() {
             >
               {outOfStockPackages.length}
             </div>
-          </div>
-        </div>
 
-        {/* =====================================================
-            حالة المخزون حسب الباقات
-        ====================================================== */}
-
-        <div
-          className="panel"
-          style={{
-            marginBottom: 20,
-          }}
-        >
-          <div className="panel-head">
-            <div>
-              <h3>
-                حالة المخزون حسب الباقات
-              </h3>
-
-              <div
-                style={{
-                  marginTop: 3,
-                  color: 'var(--ink-soft)',
-                  fontSize: 11.5,
-                }}
-              >
-                إجمالي مخزون المدير المتاح: {stockTotal}
-              </div>
-            </div>
-          </div>
-
-          {packageStock.length === 0 ? (
             <div
               style={{
+                marginTop: 4,
+                fontSize: 11,
                 color: 'var(--ink-soft)',
-                fontSize: 13,
-                padding: '10px 0',
               }}
             >
-              لا توجد باقات مسجلة
+              باقات لا يوجد منها كرت متاح
             </div>
-          ) : (
-            <div
-              style={{
-                display: 'grid',
-                gap: 10,
-              }}
-            >
-              {packageStock.map((pkg) => {
-                const lowStock =
-                  pkg.available <= 10;
-
-                return (
-                  <div
-                    key={pkg.id}
-                    style={{
-                      padding: 12,
-                      borderRadius: 12,
-                      background: lowStock
-                        ? '#FFF8F8'
-                        : '#FAF9FC',
-                      border: lowStock
-                        ? '1px solid #FECACA'
-                        : '1px solid #F0ECF7',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent:
-                          'space-between',
-                        alignItems: 'center',
-                        gap: 10,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <div>
-                        <div
-                          style={{
-                            fontWeight: 900,
-                            color: '#3A1D66',
-                            fontSize: 13.5,
-                          }}
-                        >
-                          {pkg.name}
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 3,
-                            color:
-                              'var(--ink-soft)',
-                            fontSize: 11,
-                          }}
-                        >
-                          {formatNum(pkg.price)} ريال
-                        </div>
-                      </div>
-
-                      {lowStock && (
-                        <div
-                          style={{
-                            background: '#FEE2E2',
-                            color: '#B91C1C',
-                            padding:
-                              '5px 8px',
-                            borderRadius: 8,
-                            fontSize: 10.5,
-                            fontWeight: 800,
-                          }}
-                        >
-                          مخزون منخفض
-                        </div>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns:
-                          'repeat(3, 1fr)',
-                        gap: 8,
-                        marginTop: 10,
-                      }}
-                    >
-                      <div
-                        style={{
-                          background: '#EFF6FF',
-                          borderRadius: 9,
-                          padding: 8,
-                          textAlign: 'center',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: '#2563EB',
-                            fontWeight: 700,
-                          }}
-                        >
-                          متاح
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 2,
-                            fontWeight: 900,
-                            color: '#1D4ED8',
-                          }}
-                        >
-                          {pkg.available}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          background: '#FFF7ED',
-                          borderRadius: 9,
-                          padding: 8,
-                          textAlign: 'center',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: '#D97706',
-                            fontWeight: 700,
-                          }}
-                        >
-                          مع موزع
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 2,
-                            fontWeight: 900,
-                            color: '#B45309',
-                          }}
-                        >
-                          {pkg.withDistributor}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          background: '#ECFDF5',
-                          borderRadius: 9,
-                          padding: 8,
-                          textAlign: 'center',
-                        }}
-                      >
-                        <div
-                          style={{
-                            fontSize: 10,
-                            color: '#059669',
-                            fontWeight: 700,
-                          }}
-                        >
-                          مباع
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 2,
-                            fontWeight: 900,
-                            color: '#047857',
-                          }}
-                        >
-                          {pkg.sold}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
 
-        {/* =====================================================
+        {/* =========================
             تحليل المبيعات حسب الباقات
-        ====================================================== */}
-
+        ========================== */}
         <div
           className="panel"
           style={{
@@ -1419,13 +1159,15 @@ export default function AdminPage() {
                   }}
                 >
                   {data.count} كروت —{' '}
-
                   <b
                     style={{
                       color: '#10B981',
                     }}
                   >
-                    {formatNum(data.total)} ريال
+                    {formatNum(
+                      data.total
+                    )}{' '}
+                    ريال
                   </b>
                 </span>
               </div>
@@ -1433,10 +1175,9 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* =====================================================
+        {/* =========================
             آخر المبيعات
-        ====================================================== */}
-
+        ========================== */}
         <div
           className="panel"
           style={{
@@ -1493,10 +1234,6 @@ export default function AdminPage() {
             ))
           )}
         </div>
-
-        {/* =====================================================
-            الإعلان
-        ====================================================== */}
 
         <AdSlotAdmin />
       </div>
