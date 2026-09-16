@@ -5,95 +5,7 @@ import Sidebar from '../../../components/Sidebar';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
-const PAGE_SIZE = 50;
-
-// الحد الذي عنده يظهر تنبيه المخزون المنخفض.
-// المخزون يعتمد على الكروت التي حالتها available فقط.
 const LOW_STOCK_THRESHOLD = 10;
-
-const STATUS_LABELS = {
-  available: 'متاح',
-  with_distributor: 'مع موزع',
-  sold: 'مباع'
-};
-
-const STATUS_STYLES = {
-  available: {
-    background: '#edf6f0',
-    color: '#5f8f70',
-    border: '#c9dfd0'
-  },
-  with_distributor: {
-    background: '#faf5e9',
-    color: '#9a7b45',
-    border: '#e5d6b5'
-  },
-  sold: {
-    background: '#f9eeee',
-    color: '#ad6b6b',
-    border: '#e7caca'
-  }
-};
-
-function SearchIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="9" y="9" width="11" height="11" rx="2" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M3 6h18" />
-      <path d="M8 6V4h8v2" />
-      <path d="M19 6l-1 14H6L5 6" />
-      <path d="M10 11v5" />
-      <path d="M14 11v5" />
-    </svg>
-  );
-}
 
 function PackageIcon() {
   return (
@@ -155,24 +67,24 @@ function PlusIcon() {
   );
 }
 
-function ChevronIcon({ open }) {
+function TrashIcon() {
   return (
     <svg
-      width="17"
-      height="17"
+      width="16"
+      height="16"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={{
-        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-        transition: 'transform 0.2s ease'
-      }}
       aria-hidden="true"
     >
-      <path d="m6 9 6 6 6-6" />
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+      <path d="M10 11v5" />
+      <path d="M14 11v5" />
     </svg>
   );
 }
@@ -194,42 +106,6 @@ function WarningIcon() {
       <path d="M12 9v4" />
       <path d="M12 17h.01" />
     </svg>
-  );
-}
-
-function StatusBadge({ status }) {
-  const style = STATUS_STYLES[status] || {
-    background: '#f4f6f8',
-    color: '#54636b',
-    border: '#dfe3e8'
-  };
-
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '5px 10px',
-        borderRadius: 999,
-        background: style.background,
-        color: style.color,
-        border: `1px solid ${style.border}`,
-        fontSize: 12,
-        fontWeight: 800,
-        whiteSpace: 'nowrap'
-      }}
-    >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: style.color
-        }}
-      />
-      {STATUS_LABELS[status] || status || 'غير معروف'}
-    </span>
   );
 }
 
@@ -303,45 +179,6 @@ function StatCard({ icon, title, value, accent }) {
   );
 }
 
-function formatDate(dateValue) {
-  if (!dateValue) return '';
-
-  const date = new Date(dateValue);
-
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  return new Intl.DateTimeFormat('ar-YE', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date);
-}
-
-function getCardDateInfo(card) {
-  if (card.status === 'sold') {
-    return {
-      label: 'تاريخ البيع',
-      value: formatDate(card.sold_at)
-    };
-  }
-
-  if (card.status === 'with_distributor') {
-    return {
-      label: 'تاريخ إضافة الكرت للنظام',
-      value: formatDate(card.created_at)
-    };
-  }
-
-  return {
-    label: 'تاريخ إضافة الكرت للنظام',
-    value: formatDate(card.created_at)
-  };
-}
-
 export default function PackagesPage() {
   const { profile, loading } = useProfile('admin');
 
@@ -354,27 +191,12 @@ export default function PackagesPage() {
   const [busyId, setBusyId] = useState(null);
   const [addingPackage, setAddingPackage] = useState(false);
 
-  const [expandedPackageId, setExpandedPackageId] = useState(null);
-
-  const [packageCards, setPackageCards] = useState({});
-  const [packageCardLoading, setPackageCardLoading] = useState({});
-  const [packageCardSearch, setPackageCardSearch] = useState({});
-  const [packageCardStatus, setPackageCardStatus] = useState({});
-  const [packageCardPage, setPackageCardPage] = useState({});
-
-  const [globalCardSearch, setGlobalCardSearch] = useState('');
-  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
-  const [globalSearchResults, setGlobalSearchResults] = useState([]);
-  const [globalSearchDone, setGlobalSearchDone] = useState(false);
-
-  const [copiedCode, setCopiedCode] = useState('');
-  const [deletingCardId, setDeletingCardId] = useState(null);
-
   const [packageStats, setPackageStats] = useState({});
   const [packagesLoading, setPackagesLoading] = useState(true);
 
   async function loadPackages() {
     setPackagesLoading(true);
+    setError('');
 
     const { data, error: fetchError } = await supabase
       .from('packages')
@@ -393,31 +215,35 @@ export default function PackagesPage() {
 
     const statsEntries = await Promise.all(
       data.map(async (pkg) => {
-        const [totalResult, availableResult, distributorResult, soldResult] =
-          await Promise.all([
-            supabase
-              .from('cards')
-              .select('id', { count: 'exact', head: true })
-              .eq('package_id', pkg.id),
+        const [
+          totalResult,
+          availableResult,
+          distributorResult,
+          soldResult
+        ] = await Promise.all([
+          supabase
+            .from('cards')
+            .select('id', { count: 'exact', head: true })
+            .eq('package_id', pkg.id),
 
-            supabase
-              .from('cards')
-              .select('id', { count: 'exact', head: true })
-              .eq('package_id', pkg.id)
-              .eq('status', 'available'),
+          supabase
+            .from('cards')
+            .select('id', { count: 'exact', head: true })
+            .eq('package_id', pkg.id)
+            .eq('status', 'available'),
 
-            supabase
-              .from('cards')
-              .select('id', { count: 'exact', head: true })
-              .eq('package_id', pkg.id)
-              .eq('status', 'with_distributor'),
+          supabase
+            .from('cards')
+            .select('id', { count: 'exact', head: true })
+            .eq('package_id', pkg.id)
+            .eq('status', 'with_distributor'),
 
-            supabase
-              .from('cards')
-              .select('id', { count: 'exact', head: true })
-              .eq('package_id', pkg.id)
-              .eq('status', 'sold')
-          ]);
+          supabase
+            .from('cards')
+            .select('id', { count: 'exact', head: true })
+            .eq('package_id', pkg.id)
+            .eq('status', 'sold')
+        ]);
 
         return [
           pkg.id,
@@ -506,199 +332,6 @@ export default function PackagesPage() {
       return;
     }
 
-    if (expandedPackageId === id) {
-      setExpandedPackageId(null);
-    }
-
-    await loadPackages();
-  }
-
-  async function loadPackageCards(
-    packageId,
-    page = 0,
-    search = '',
-    status = 'all'
-  ) {
-    setPackageCardLoading((prev) => ({
-      ...prev,
-      [packageId]: true
-    }));
-
-    setError('');
-
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    let query = supabase
-      .from('cards')
-      .select(
-        'id, code, package_id, status, assigned_to, sold_at, created_at'
-      )
-      .eq('package_id', packageId)
-      .order('created_at', { ascending: false })
-      .range(from, to);
-
-    if (search.trim()) {
-      query = query.ilike('code', `%${search.trim()}%`);
-    }
-
-    if (status !== 'all') {
-      query = query.eq('status', status);
-    }
-
-    const { data, error: cardsError } = await query;
-
-    setPackageCardLoading((prev) => ({
-      ...prev,
-      [packageId]: false
-    }));
-
-    if (cardsError) {
-      setError('تعذّر تحميل كروت الباقة');
-      return;
-    }
-
-    setPackageCards((prev) => ({
-      ...prev,
-      [packageId]: data || []
-    }));
-
-    setPackageCardPage((prev) => ({
-      ...prev,
-      [packageId]: page
-    }));
-  }
-
-  async function togglePackage(packageId) {
-    setError('');
-
-    if (expandedPackageId === packageId) {
-      setExpandedPackageId(null);
-      return;
-    }
-
-    setExpandedPackageId(packageId);
-
-    const search = packageCardSearch[packageId] || '';
-    const status = packageCardStatus[packageId] || 'all';
-
-    await loadPackageCards(packageId, 0, search, status);
-  }
-
-  async function applyPackageCardFilter(packageId) {
-    const search = packageCardSearch[packageId] || '';
-    const status = packageCardStatus[packageId] || 'all';
-
-    await loadPackageCards(packageId, 0, search, status);
-  }
-
-  async function changePackageCardPage(packageId, newPage) {
-    const search = packageCardSearch[packageId] || '';
-    const status = packageCardStatus[packageId] || 'all';
-
-    await loadPackageCards(packageId, newPage, search, status);
-  }
-
-  async function searchAllCards(e) {
-    e.preventDefault();
-
-    const search = globalCardSearch.trim();
-
-    if (!search) {
-      setGlobalSearchResults([]);
-      setGlobalSearchDone(false);
-      return;
-    }
-
-    setGlobalSearchLoading(true);
-    setGlobalSearchDone(false);
-    setError('');
-
-    const { data, error: searchError } = await supabase
-      .from('cards')
-      .select(
-        'id, code, package_id, status, assigned_to, sold_at, created_at, packages(name, price)'
-      )
-      .ilike('code', `%${search}%`)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    setGlobalSearchLoading(false);
-    setGlobalSearchDone(true);
-
-    if (searchError) {
-      setGlobalSearchResults([]);
-      setError('تعذّر البحث عن الكرت');
-      return;
-    }
-
-    setGlobalSearchResults(data || []);
-  }
-
-  function clearGlobalSearch() {
-    setGlobalCardSearch('');
-    setGlobalSearchResults([]);
-    setGlobalSearchDone(false);
-  }
-
-  async function copyCardCode(code) {
-    try {
-      await navigator.clipboard.writeText(String(code));
-      setCopiedCode(String(code));
-
-      setTimeout(() => {
-        setCopiedCode('');
-      }, 1500);
-    } catch {
-      setError('تعذّر نسخ الكود');
-    }
-  }
-
-  async function deleteCard(card) {
-    const code = String(card.code || '');
-
-    if (
-      !window.confirm(
-        `هل أنت متأكد من حذف الكرت "${code}" نهائيًا؟\n\nسيتم حذف الكرت من جدول الكروت فقط.`
-      )
-    ) {
-      return;
-    }
-
-    setDeletingCardId(card.id);
-    setError('');
-
-    const { error: deleteError } = await supabase
-      .from('cards')
-      .delete()
-      .eq('id', card.id);
-
-    setDeletingCardId(null);
-
-    if (deleteError) {
-      setError(
-        'تعذّر حذف الكرت. قد يكون الكرت مرتبطًا ببيانات أخرى تمنع حذفه، أو قد تكون هناك حماية في قاعدة البيانات.'
-      );
-      return;
-    }
-
-    setGlobalSearchResults((prev) =>
-      prev.filter((item) => item.id !== card.id)
-    );
-
-    if (card.package_id && expandedPackageId === card.package_id) {
-      const page = packageCardPage[card.package_id] || 0;
-      const search = packageCardSearch[card.package_id] || '';
-      const status = packageCardStatus[card.package_id] || 'all';
-
-      await loadPackageCards(
-        card.package_id,
-        page,
-        search,
-        status
-      );
-    }
-
     await loadPackages();
   }
 
@@ -729,6 +362,15 @@ export default function PackagesPage() {
     [packageStats]
   );
 
+  const totalCards = useMemo(
+    () =>
+      Object.values(packageStats).reduce(
+        (sum, stats) => sum + (stats.total || 0),
+        0
+      ),
+    [packageStats]
+  );
+
   const lowStockPackages = useMemo(
     () =>
       packages.filter((pkg) => {
@@ -744,6 +386,7 @@ export default function PackagesPage() {
     () =>
       lowStockPackages.filter((pkg) => {
         const stats = packageStats[pkg.id];
+
         return (stats?.available || 0) === 0;
       }),
     [lowStockPackages, packageStats]
@@ -802,7 +445,8 @@ export default function PackagesPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: '0 5px 14px rgba(96, 127, 158, 0.14)'
+                  boxShadow:
+                    '0 5px 14px rgba(96, 127, 158, 0.14)'
                 }}
               >
                 <PackageIcon />
@@ -818,7 +462,7 @@ export default function PackagesPage() {
                     letterSpacing: '-0.3px'
                   }}
                 >
-                  إدارة الباقات والكروت
+                  إدارة الباقات
                 </h1>
 
                 <p
@@ -828,7 +472,7 @@ export default function PackagesPage() {
                     fontSize: 13.5
                   }}
                 >
-                  إدارة الباقات والكروت التابعة لها والبحث عنها بسهولة
+                  إدارة أسماء الباقات وأسعارها ومتابعة حالة مخزون كل باقة
                 </p>
               </div>
             </div>
@@ -843,7 +487,8 @@ export default function PackagesPage() {
               color: '#54636b',
               fontSize: 13,
               fontWeight: 700,
-              boxShadow: '0 3px 10px rgba(38, 50, 56, 0.03)'
+              boxShadow:
+                '0 3px 10px rgba(38, 50, 56, 0.03)'
             }}
           >
             {packages.length} باقة
@@ -883,7 +528,8 @@ export default function PackagesPage() {
                 outOfStockPackages.length > 0
                   ? '1px solid #e5d1b6'
                   : '1px solid #e5d6b5',
-              boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
+              boxShadow:
+                '0 3px 12px rgba(38, 50, 56, 0.035)'
             }}
           >
             <div
@@ -967,24 +613,8 @@ export default function PackagesPage() {
                     const isOutOfStock = available === 0;
 
                     return (
-                      <button
+                      <div
                         key={pkg.id}
-                        type="button"
-                        onClick={() => {
-                          setExpandedPackageId(pkg.id);
-
-                          const search =
-                            packageCardSearch[pkg.id] || '';
-                          const status =
-                            packageCardStatus[pkg.id] || 'all';
-
-                          loadPackageCards(
-                            pkg.id,
-                            0,
-                            search,
-                            status
-                          );
-                        }}
                         style={{
                           borderRadius: 8,
                           border: isOutOfStock
@@ -997,7 +627,6 @@ export default function PackagesPage() {
                           padding: '7px 10px',
                           fontSize: 11.5,
                           fontWeight: 850,
-                          cursor: 'pointer',
                           boxShadow:
                             '0 2px 6px rgba(38, 50, 56, 0.025)'
                         }}
@@ -1006,7 +635,7 @@ export default function PackagesPage() {
                         {isOutOfStock
                           ? 'نفد المخزون'
                           : `${available} متاح`}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -1036,12 +665,12 @@ export default function PackagesPage() {
           />
 
           <StatCard
-            title="مخزون المدير"
-            value={totalAvailable}
+            title="إجمالي الكروت"
+            value={totalCards}
             icon={<CardIcon />}
             accent={{
-              background: '#edf6f0',
-              color: '#6f9b7d'
+              background: '#f0f3f5',
+              color: '#607078'
             }}
           />
 
@@ -1050,8 +679,8 @@ export default function PackagesPage() {
             value={totalAvailable}
             icon={<CardIcon />}
             accent={{
-              background: '#f0f3f5',
-              color: '#607078'
+              background: '#edf6f0',
+              color: '#6f9b7d'
             }}
           />
 
@@ -1084,7 +713,8 @@ export default function PackagesPage() {
             borderRadius: 15,
             padding: 18,
             marginBottom: 18,
-            boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
+            boxShadow:
+              '0 3px 12px rgba(38, 50, 56, 0.035)'
           }}
         >
           <div
@@ -1197,7 +827,9 @@ export default function PackagesPage() {
                 color: '#ffffff',
                 fontWeight: 800,
                 fontSize: 14,
-                cursor: addingPackage ? 'not-allowed' : 'pointer',
+                cursor: addingPackage
+                  ? 'not-allowed'
+                  : 'pointer',
                 opacity: addingPackage ? 0.7 : 1,
                 display: 'flex',
                 alignItems: 'center',
@@ -1208,371 +840,11 @@ export default function PackagesPage() {
               }}
             >
               <PlusIcon />
-              {addingPackage ? 'جاري الإضافة...' : 'إضافة الباقة'}
+              {addingPackage
+                ? 'جاري الإضافة...'
+                : 'إضافة الباقة'}
             </button>
           </form>
-        </div>
-
-        {/* البحث المركزي */}
-        <div
-          style={{
-            background:
-              'linear-gradient(135deg, #536d82 0%, #607f9e 100%)',
-            borderRadius: 16,
-            padding: 20,
-            marginBottom: 18,
-            boxShadow: '0 6px 18px rgba(83, 109, 130, 0.10)'
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 11,
-              marginBottom: 13
-            }}
-          >
-            <div
-              style={{
-                width: 38,
-                height: 38,
-                borderRadius: 10,
-                background: 'rgba(255,255,255,0.12)',
-                color: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <SearchIcon />
-            </div>
-
-            <div>
-              <h3
-                style={{
-                  margin: 0,
-                  color: '#ffffff',
-                  fontSize: 17,
-                  fontWeight: 850
-                }}
-              >
-                البحث عن كرت
-              </h3>
-
-              <p
-                style={{
-                  margin: '4px 0 0',
-                  color: '#e2eaf0',
-                  fontSize: 12.5
-                }}
-              >
-                ابحث عن أي كرت في النظام باستخدام رقم الكرت
-              </p>
-            </div>
-          </div>
-
-          <form
-            onSubmit={searchAllCards}
-            style={{
-              display: 'flex',
-              gap: 9,
-              flexWrap: 'wrap'
-            }}
-          >
-            <div
-              style={{
-                position: 'relative',
-                flex: 1,
-                minWidth: 190
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 13,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: '#90a4ae',
-                  pointerEvents: 'none'
-                }}
-              >
-                <SearchIcon />
-              </div>
-
-              <input
-                value={globalCardSearch}
-                onChange={(e) =>
-                  setGlobalCardSearch(e.target.value)
-                }
-                placeholder="اكتب رقم الكرت للبحث..."
-                style={{
-                  width: '100%',
-                  height: 44,
-                  boxSizing: 'border-box',
-                  padding: '0 45px 0 14px',
-                  borderRadius: 9,
-                  border: '1px solid #dce4e9',
-                  background: '#fafbfc',
-                  color: '#263238',
-                  outline: 'none',
-                  fontSize: 14
-                }}
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={globalSearchLoading}
-              style={{
-                height: 44,
-                minWidth: 105,
-                border: 'none',
-                borderRadius: 9,
-                background: '#fafbfc',
-                color: '#536d82',
-                fontWeight: 850,
-                cursor: globalSearchLoading
-                  ? 'not-allowed'
-                  : 'pointer',
-                opacity: globalSearchLoading ? 0.75 : 1
-              }}
-            >
-              {globalSearchLoading ? 'جاري البحث...' : 'بحث'}
-            </button>
-
-            {globalSearchDone && (
-              <button
-                type="button"
-                onClick={clearGlobalSearch}
-                style={{
-                  height: 44,
-                  minWidth: 80,
-                  borderRadius: 9,
-                  border: '1px solid rgba(255,255,255,0.22)',
-                  background: 'rgba(255,255,255,0.09)',
-                  color: '#ffffff',
-                  fontWeight: 750,
-                  cursor: 'pointer'
-                }}
-              >
-                مسح
-              </button>
-            )}
-          </form>
-
-          {globalSearchDone && (
-            <div
-              style={{
-                marginTop: 14,
-                background: '#f3f5f7',
-                borderRadius: 11,
-                padding: 10
-              }}
-            >
-              {globalSearchResults.length === 0 ? (
-                <div
-                  style={{
-                    textAlign: 'center',
-                    padding: 25,
-                    color: '#78909c',
-                    background: '#fafbfc',
-                    borderRadius: 9,
-                    border: '1px solid #dfe3e8'
-                  }}
-                >
-                  <div
-                    style={{
-                      fontWeight: 800,
-                      color: '#455a64',
-                      marginBottom: 5
-                    }}
-                  >
-                    لم يتم العثور على الكرت
-                  </div>
-
-                  <div style={{ fontSize: 12 }}>
-                    تأكد من رقم الكرت وحاول مرة أخرى.
-                  </div>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: 'grid',
-                    gap: 8
-                  }}
-                >
-                  {globalSearchResults.map((card) => {
-                    const dateInfo = getCardDateInfo(card);
-
-                    return (
-                      <div
-                        key={card.id}
-                        style={{
-                          background: '#fafbfc',
-                          border: '1px solid #dfe3e8',
-                          borderRadius: 10,
-                          padding: '11px 12px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: 12,
-                          flexWrap: 'wrap',
-                          boxShadow:
-                            '0 2px 7px rgba(38, 50, 56, 0.025)'
-                        }}
-                      >
-                        <div
-                          style={{
-                            minWidth: 0,
-                            flex: 1
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 9,
-                              flexWrap: 'wrap'
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 15,
-                                fontWeight: 900,
-                                color: '#263238',
-                                wordBreak: 'break-all'
-                              }}
-                            >
-                              {card.code}
-                            </span>
-
-                            <StatusBadge status={card.status} />
-                          </div>
-
-                          <div
-                            style={{
-                              display: 'flex',
-                              gap: 14,
-                              flexWrap: 'wrap',
-                              marginTop: 6,
-                              color: '#78909c',
-                              fontSize: 12
-                            }}
-                          >
-                            <span>
-                              الباقة:{' '}
-                              <strong style={{ color: '#455a64' }}>
-                                {card.packages?.name || 'غير محددة'}
-                              </strong>
-                            </span>
-
-                            {card.packages?.price !== undefined && (
-                              <span>
-                                السعر:{' '}
-                                <strong style={{ color: '#455a64' }}>
-                                  {card.packages.price} ريال
-                                </strong>
-                              </span>
-                            )}
-
-                            {dateInfo.value && (
-                              <span>
-                                {dateInfo.label}:{' '}
-                                <strong style={{ color: '#455a64' }}>
-                                  {dateInfo.value}
-                                </strong>
-                              </span>
-                            )}
-                          </div>
-
-                          {card.status === 'with_distributor' && (
-                            <div
-                              style={{
-                                marginTop: 6,
-                                fontSize: 11,
-                                color: '#8d7445',
-                                background: '#faf5e9',
-                                border: '1px solid #e5d6b5',
-                                borderRadius: 7,
-                                padding: '5px 8px',
-                                display: 'inline-block'
-                              }}
-                            >
-                              الكرت محفوظ في النظام لكنه ليس ضمن مخزون المدير الحالي.
-                            </div>
-                          )}
-                        </div>
-
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 7,
-                            flexWrap: 'wrap'
-                          }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => copyCardCode(card.code)}
-                            style={{
-                              height: 34,
-                              padding: '0 11px',
-                              borderRadius: 8,
-                              border: '1px solid #d3e0e8',
-                              background: '#edf3f7',
-                              color: '#607f9e',
-                              fontWeight: 800,
-                              fontSize: 12,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            <CopyIcon />
-                            {copiedCode === String(card.code)
-                              ? 'تم النسخ'
-                              : 'نسخ'}
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={deletingCardId === card.id}
-                            onClick={() => deleteCard(card)}
-                            style={{
-                              height: 34,
-                              padding: '0 11px',
-                              borderRadius: 8,
-                              border: '1px solid #e7caca',
-                              background: '#f9eeee',
-                              color: '#b87878',
-                              fontWeight: 800,
-                              fontSize: 12,
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              cursor:
-                                deletingCardId === card.id
-                                  ? 'not-allowed'
-                                  : 'pointer',
-                              opacity:
-                                deletingCardId === card.id
-                                  ? 0.65
-                                  : 1
-                            }}
-                          >
-                            <TrashIcon />
-                            {deletingCardId === card.id
-                              ? 'حذف...'
-                              : 'حذف'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* الباقات */}
@@ -1582,7 +854,8 @@ export default function PackagesPage() {
             border: '1px solid #dfe3e8',
             borderRadius: 15,
             padding: 18,
-            boxShadow: '0 3px 12px rgba(38, 50, 56, 0.035)'
+            boxShadow:
+              '0 3px 12px rgba(38, 50, 56, 0.035)'
           }}
         >
           <div
@@ -1614,7 +887,7 @@ export default function PackagesPage() {
                   fontSize: 12
                 }}
               >
-                اختر أي باقة لعرض وإدارة الكروت التابعة لها
+                إدارة الباقات ومتابعة أعداد الكروت التابعة لكل باقة
               </p>
             </div>
 
@@ -1682,7 +955,7 @@ export default function PackagesPage() {
               style={{
                 display: 'grid',
                 gridTemplateColumns:
-                  'repeat(auto-fit, minmax(330px, 1fr))',
+                  'repeat(auto-fit, minmax(300px, 1fr))',
                 gap: 13
               }}
             >
@@ -1693,14 +966,6 @@ export default function PackagesPage() {
                   withDistributor: 0,
                   sold: 0
                 };
-
-                const isExpanded = expandedPackageId === p.id;
-                const cards = packageCards[p.id] || [];
-                const currentPage = packageCardPage[p.id] || 0;
-                const currentSearch =
-                  packageCardSearch[p.id] || '';
-                const currentStatus =
-                  packageCardStatus[p.id] || 'all';
 
                 const isLowStock =
                   stats.available <= LOW_STOCK_THRESHOLD;
@@ -1717,15 +982,11 @@ export default function PackagesPage() {
                         ? '1px solid #d9b98e'
                         : isLowStock
                         ? '1px solid #dfc98f'
-                        : isExpanded
-                        ? '1px solid #b9cad7'
                         : '1px solid #dfe3e8',
                       borderRadius: 13,
                       overflow: 'hidden',
-                      boxShadow: isExpanded
-                        ? '0 4px 15px rgba(96, 127, 158, 0.07)'
-                        : '0 3px 10px rgba(38, 50, 56, 0.03)',
-                      transition: 'all 0.2s ease'
+                      boxShadow:
+                        '0 3px 10px rgba(38, 50, 56, 0.03)'
                     }}
                   >
                     {/* رأس الباقة */}
@@ -1752,15 +1013,14 @@ export default function PackagesPage() {
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: 9,
-                              marginBottom: 8
+                              gap: 9
                             }}
                           >
                             <div
                               style={{
-                                width: 35,
-                                height: 35,
-                                borderRadius: 9,
+                                width: 38,
+                                height: 38,
+                                borderRadius: 10,
                                 background: isOutOfStock
                                   ? '#faf3ea'
                                   : isLowStock
@@ -1794,9 +1054,7 @@ export default function PackagesPage() {
                                   color: '#263238',
                                   fontSize: 15,
                                   fontWeight: 900,
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis'
+                                  wordBreak: 'break-word'
                                 }}
                               >
                                 {p.name}
@@ -1806,7 +1064,7 @@ export default function PackagesPage() {
                                 style={{
                                   color: '#78909c',
                                   fontSize: 12,
-                                  marginTop: 2
+                                  marginTop: 3
                                 }}
                               >
                                 {p.price} ريال للكرت
@@ -1819,25 +1077,35 @@ export default function PackagesPage() {
                           style={{
                             padding: '5px 9px',
                             borderRadius: 8,
-                            background: '#edf6f0',
-                            color: '#5f8f70',
+                            background: isOutOfStock
+                              ? '#faf3ea'
+                              : isLowStock
+                              ? '#faf5e9'
+                              : '#edf6f0',
+                            color: isOutOfStock
+                              ? '#a87345'
+                              : isLowStock
+                              ? '#8d7445'
+                              : '#5f8f70',
                             fontSize: 11,
                             fontWeight: 850,
                             whiteSpace: 'nowrap'
                           }}
                         >
-                          {stats.available} متاح في مخزون المدير
+                          {isOutOfStock
+                            ? 'نفد المخزون'
+                            : `${stats.available} متاح`}
                         </div>
                       </div>
 
-                      {/* تنبيه الباقة نفسها */}
+                      {/* تنبيه المخزون */}
                       {isLowStock && (
                         <div
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: 8,
-                            marginTop: 10,
+                            marginTop: 11,
                             padding: '8px 9px',
                             borderRadius: 8,
                             background: isOutOfStock
@@ -1863,19 +1131,51 @@ export default function PackagesPage() {
                         </div>
                       )}
 
-                      {/* أرقام الحالة */}
+                      {/* إحصائيات الباقة */}
                       <div
                         style={{
                           display: 'grid',
                           gridTemplateColumns:
-                            'repeat(3, minmax(0, 1fr))',
+                            'repeat(4, minmax(0, 1fr))',
                           gap: 7,
                           marginTop: 13
                         }}
                       >
                         <div
                           style={{
-                            padding: '8px 7px',
+                            padding: '9px 6px',
+                            borderRadius: 8,
+                            background: '#f0f3f5',
+                            textAlign: 'center',
+                            border:
+                              '1px solid #e1e5e8'
+                          }}
+                        >
+                          <div
+                            style={{
+                              color: '#607078',
+                              fontSize: 10.5,
+                              fontWeight: 700
+                            }}
+                          >
+                            الإجمالي
+                          </div>
+
+                          <div
+                            style={{
+                              color: '#455a64',
+                              fontSize: 15,
+                              fontWeight: 900,
+                              marginTop: 2
+                            }}
+                          >
+                            {stats.total}
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            padding: '9px 6px',
                             borderRadius: 8,
                             background: isLowStock
                               ? '#faf5e9'
@@ -1888,7 +1188,7 @@ export default function PackagesPage() {
                               color: isLowStock
                                 ? '#9a7b45'
                                 : '#5f8f70',
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: 700
                             }}
                           >
@@ -1911,7 +1211,7 @@ export default function PackagesPage() {
 
                         <div
                           style={{
-                            padding: '8px 7px',
+                            padding: '9px 6px',
                             borderRadius: 8,
                             background: '#faf5e9',
                             textAlign: 'center'
@@ -1920,7 +1220,7 @@ export default function PackagesPage() {
                           <div
                             style={{
                               color: '#9a7b45',
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: 700
                             }}
                           >
@@ -1941,7 +1241,7 @@ export default function PackagesPage() {
 
                         <div
                           style={{
-                            padding: '8px 7px',
+                            padding: '9px 6px',
                             borderRadius: 8,
                             background: '#f9eeee',
                             textAlign: 'center'
@@ -1950,7 +1250,7 @@ export default function PackagesPage() {
                           <div
                             style={{
                               color: '#b87878',
-                              fontSize: 11,
+                              fontSize: 10.5,
                               fontWeight: 700
                             }}
                           >
@@ -1970,41 +1270,14 @@ export default function PackagesPage() {
                         </div>
                       </div>
 
-                      {/* أزرار الباقة */}
+                      {/* زر حذف الباقة */}
                       <div
                         style={{
                           display: 'flex',
-                          gap: 7,
+                          justifyContent: 'flex-end',
                           marginTop: 12
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => togglePackage(p.id)}
-                          style={{
-                            flex: 1,
-                            height: 37,
-                            borderRadius: 8,
-                            border: '1px solid #c8d6df',
-                            background: isExpanded
-                              ? '#e1eaf0'
-                              : '#edf3f7',
-                            color: '#607f9e',
-                            fontWeight: 850,
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: 6
-                          }}
-                        >
-                          {isExpanded
-                            ? 'إخفاء الكروت'
-                            : 'عرض الكروت'}
-                          <ChevronIcon open={isExpanded} />
-                        </button>
-
                         <button
                           type="button"
                           disabled={busyId === p.id}
@@ -2013,9 +1286,10 @@ export default function PackagesPage() {
                           }
                           style={{
                             height: 37,
-                            padding: '0 12px',
+                            padding: '0 13px',
                             borderRadius: 8,
-                            border: '1px solid #e7caca',
+                            border:
+                              '1px solid #e7caca',
                             background: '#f9eeee',
                             color: '#b87878',
                             fontWeight: 850,
@@ -2033,434 +1307,13 @@ export default function PackagesPage() {
                           }}
                         >
                           <TrashIcon />
+
                           {busyId === p.id
                             ? 'حذف...'
-                            : 'حذف'}
+                            : 'حذف الباقة'}
                         </button>
                       </div>
                     </div>
-
-                    {/* كروت الباقة */}
-                    {isExpanded && (
-                      <div
-                        style={{
-                          borderTop: '1px solid #dfe3e8',
-                          background: '#f3f5f7',
-                          padding: 13
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateColumns:
-                              'minmax(150px, 1fr) 125px auto',
-                            gap: 7,
-                            marginBottom: 11
-                          }}
-                        >
-                          <input
-                            value={currentSearch}
-                            onChange={(e) =>
-                              setPackageCardSearch(
-                                (prev) => ({
-                                  ...prev,
-                                  [p.id]: e.target.value
-                                })
-                              )
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                applyPackageCardFilter(p.id);
-                              }
-                            }}
-                            placeholder="بحث برقم الكرت..."
-                            style={{
-                              width: '100%',
-                              boxSizing: 'border-box'
-                            }}
-                          />
-
-                          <select
-                            value={currentStatus}
-                            onChange={(e) => {
-                              const value = e.target.value;
-
-                              setPackageCardStatus(
-                                (prev) => ({
-                                  ...prev,
-                                  [p.id]: value
-                                })
-                              );
-
-                              loadPackageCards(
-                                p.id,
-                                0,
-                                currentSearch,
-                                value
-                              );
-                            }}
-                            style={{
-                              width: '100%',
-                              boxSizing: 'border-box'
-                            }}
-                          >
-                            <option value="all">
-                              كل الحالات
-                            </option>
-                            <option value="available">
-                              متاح
-                            </option>
-                            <option value="with_distributor">
-                              مع موزع
-                            </option>
-                            <option value="sold">
-                              مباع
-                            </option>
-                          </select>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              applyPackageCardFilter(p.id)
-                            }
-                            style={{
-                              height: 40,
-                              padding: '0 12px',
-                              borderRadius: 8,
-                              border: 'none',
-                              background: '#607f9e',
-                              color: '#ffffff',
-                              fontWeight: 800,
-                              fontSize: 12,
-                              cursor: 'pointer'
-                            }}
-                          >
-                            بحث
-                          </button>
-                        </div>
-
-                        {packageCardLoading[p.id] ? (
-                          <div
-                            style={{
-                              background: '#fafbfc',
-                              border: '1px solid #dfe3e8',
-                              borderRadius: 9,
-                              padding: 25,
-                              textAlign: 'center',
-                              color: '#78909c',
-                              fontSize: 12
-                            }}
-                          >
-                            جاري تحميل الكروت...
-                          </div>
-                        ) : cards.length === 0 ? (
-                          <div
-                            style={{
-                              background: '#fafbfc',
-                              border: '1px dashed #c9d1d6',
-                              borderRadius: 9,
-                              padding: 25,
-                              textAlign: 'center',
-                              color: '#78909c',
-                              fontSize: 12
-                            }}
-                          >
-                            لا توجد كروت مطابقة.
-                          </div>
-                        ) : (
-                          <>
-                            <div
-                              style={{
-                                display: 'grid',
-                                gap: 7
-                              }}
-                            >
-                              {cards.map((card) => {
-                                const dateInfo = getCardDateInfo(card);
-
-                                return (
-                                  <div
-                                    key={card.id}
-                                    style={{
-                                      background: '#fafbfc',
-                                      border: '1px solid #dfe3e8',
-                                      borderRadius: 9,
-                                      padding:
-                                        '9px 10px',
-                                      display: 'flex',
-                                      alignItems:
-                                        'center',
-                                      justifyContent:
-                                        'space-between',
-                                      gap: 9,
-                                      flexWrap: 'wrap',
-                                      boxShadow:
-                                        '0 2px 7px rgba(38, 50, 56, 0.025)'
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        minWidth: 0,
-                                        flex: 1
-                                      }}
-                                    >
-                                      <div
-                                        style={{
-                                          display:
-                                            'flex',
-                                          alignItems:
-                                            'center',
-                                          gap: 8,
-                                          flexWrap:
-                                            'wrap'
-                                        }}
-                                      >
-                                        <span
-                                          style={{
-                                            fontWeight:
-                                              900,
-                                            color:
-                                              '#263238',
-                                            fontSize: 14,
-                                            wordBreak:
-                                              'break-all'
-                                          }}
-                                        >
-                                          {card.code}
-                                        </span>
-
-                                        <StatusBadge
-                                          status={
-                                            card.status
-                                          }
-                                        />
-                                      </div>
-
-                                      {dateInfo.value && (
-                                        <div
-                                          style={{
-                                            marginTop: 6,
-                                            color: '#78909c',
-                                            fontSize: 11
-                                          }}
-                                        >
-                                          {dateInfo.label}:{' '}
-                                          <strong
-                                            style={{
-                                              color:
-                                                '#455a64'
-                                            }}
-                                          >
-                                            {dateInfo.value}
-                                          </strong>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div
-                                      style={{
-                                        display: 'flex',
-                                        gap: 6
-                                      }}
-                                    >
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          copyCardCode(
-                                            card.code
-                                          )
-                                        }
-                                        style={{
-                                          height: 32,
-                                          padding:
-                                            '0 9px',
-                                          borderRadius: 7,
-                                          border:
-                                            '1px solid #d3e0e8',
-                                          background:
-                                            '#edf3f7',
-                                          color:
-                                            '#607f9e',
-                                          fontWeight:
-                                            800,
-                                          fontSize: 11,
-                                          display:
-                                            'inline-flex',
-                                          alignItems:
-                                            'center',
-                                          gap: 5,
-                                          cursor:
-                                            'pointer'
-                                        }}
-                                      >
-                                        <CopyIcon />
-                                        {copiedCode ===
-                                        String(
-                                          card.code
-                                        )
-                                          ? 'تم النسخ'
-                                          : 'نسخ'}
-                                      </button>
-
-                                      <button
-                                        type="button"
-                                        disabled={
-                                          deletingCardId ===
-                                          card.id
-                                        }
-                                        onClick={() =>
-                                          deleteCard(
-                                            card
-                                          )
-                                        }
-                                        style={{
-                                          height: 32,
-                                          padding:
-                                            '0 9px',
-                                          borderRadius: 7,
-                                          border:
-                                            '1px solid #e7caca',
-                                          background:
-                                            '#f9eeee',
-                                          color:
-                                            '#b87878',
-                                          fontWeight:
-                                            800,
-                                          fontSize: 11,
-                                          display:
-                                            'inline-flex',
-                                          alignItems:
-                                            'center',
-                                          gap: 5,
-                                          cursor:
-                                            deletingCardId ===
-                                            card.id
-                                              ? 'not-allowed'
-                                              : 'pointer',
-                                          opacity:
-                                            deletingCardId ===
-                                            card.id
-                                              ? 0.6
-                                              : 1
-                                        }}
-                                      >
-                                        <TrashIcon />
-                                        {deletingCardId ===
-                                        card.id
-                                          ? 'حذف...'
-                                          : 'حذف'}
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems:
-                                  'center',
-                                justifyContent:
-                                  'space-between',
-                                gap: 8,
-                                marginTop: 10,
-                                flexWrap: 'wrap'
-                              }}
-                            >
-                              <button
-                                type="button"
-                                disabled={
-                                  currentPage === 0 ||
-                                  packageCardLoading[
-                                    p.id
-                                  ]
-                                }
-                                onClick={() =>
-                                  changePackageCardPage(
-                                    p.id,
-                                    currentPage - 1
-                                  )
-                                }
-                                style={{
-                                  height: 32,
-                                  padding: '0 11px',
-                                  borderRadius: 7,
-                                  border:
-                                    '1px solid #c9d1d6',
-                                  background:
-                                    '#fafbfc',
-                                  color: '#54636b',
-                                  fontWeight: 750,
-                                  fontSize: 11,
-                                  cursor:
-                                    currentPage === 0
-                                      ? 'not-allowed'
-                                      : 'pointer',
-                                  opacity:
-                                    currentPage === 0
-                                      ? 0.5
-                                      : 1
-                                }}
-                              >
-                                السابق
-                              </button>
-
-                              <span
-                                style={{
-                                  color: '#78909c',
-                                  fontSize: 11,
-                                  fontWeight: 700
-                                }}
-                              >
-                                الصفحة {currentPage + 1}
-                              </span>
-
-                              <button
-                                type="button"
-                                disabled={
-                                  cards.length <
-                                    PAGE_SIZE ||
-                                  packageCardLoading[
-                                    p.id
-                                  ]
-                                }
-                                onClick={() =>
-                                  changePackageCardPage(
-                                    p.id,
-                                    currentPage + 1
-                                  )
-                                }
-                                style={{
-                                  height: 32,
-                                  padding: '0 11px',
-                                  borderRadius: 7,
-                                  border:
-                                    '1px solid #c9d1d6',
-                                  background:
-                                    '#fafbfc',
-                                  color: '#54636b',
-                                  fontWeight: 750,
-                                  fontSize: 11,
-                                  cursor:
-                                    cards.length <
-                                    PAGE_SIZE
-                                      ? 'not-allowed'
-                                      : 'pointer',
-                                  opacity:
-                                    cards.length <
-                                    PAGE_SIZE
-                                      ? 0.5
-                                      : 1
-                                }}
-                              >
-                                التالي
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -2481,9 +1334,16 @@ export default function PackagesPage() {
           }
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 520px) {
           h1 {
             font-size: 21px !important;
+          }
+        }
+
+        @media (max-width: 390px) {
+          .main {
+            padding-left: 9px !important;
+            padding-right: 9px !important;
           }
         }
       `}</style>
