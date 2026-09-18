@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotBar } from '../../components/AdSlot';
 import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
+import NotificationBell from '../../components/NotificationBell';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -797,41 +798,52 @@ export default function DistributorPage() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 7,
-              background: isOnline
-                ? '#ECFDF5'
-                : '#FEF2F2',
-              color: isOnline
-                ? '#059669'
-                : '#DC2626',
-              padding: '8px 13px',
-              borderRadius: 30,
-              fontSize: 11.5,
-              fontWeight: '900',
-              border: `1px solid ${
-                isOnline
-                  ? '#A7F3D0'
-                  : '#FECACA'
-              }`,
-              boxShadow:
-                '0 4px 12px rgba(15,23,42,0.05)',
+              gap: 9,
+              flexWrap: 'wrap',
             }}
           >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: isOnline
-                  ? '#10B981'
-                  : '#EF4444',
-                display: 'inline-block',
-              }}
-            />
+            <NotificationBell userId={profile.id} />
 
-            {isOnline
-              ? 'متصل ونشط'
-              : 'غير متصل'}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                background: isOnline
+                  ? '#ECFDF5'
+                  : '#FEF2F2',
+                color: isOnline
+                  ? '#059669'
+                  : '#DC2626',
+                padding: '8px 13px',
+                borderRadius: 30,
+                fontSize: 11.5,
+                fontWeight: '900',
+                border: `1px solid ${
+                  isOnline
+                    ? '#A7F3D0'
+                    : '#FECACA'
+                }`,
+                boxShadow:
+                  '0 4px 12px rgba(15,23,42,0.05)',
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: isOnline
+                    ? '#10B981'
+                    : '#EF4444',
+                  display: 'inline-block',
+                }}
+              />
+
+              {isOnline
+                ? 'متصل ونشط'
+                : 'غير متصل'}
+            </div>
           </div>
         </div>
 
