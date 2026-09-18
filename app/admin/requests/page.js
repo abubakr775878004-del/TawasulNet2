@@ -24,28 +24,23 @@ export default function RequestsPage() {
     if (profile) loadRequests();
   }, [profile]);
 
-  // تسجيل إشعار للموزع
-  // هذا لا يؤثر على تنفيذ الطلب أو الرصيد أو الكروت.
+  // تسجيل إشعار للموزع عبر RPC الآمن.
+  // فشل الإشعار لا يؤثر على تنفيذ الطلب أو الرصيد أو الكروت.
   async function createDistributorNotification({
-    distributorId,
-    title,
-    message,
-    type,
     requestId,
+    type,
   }) {
-    if (!distributorId) return;
+    if (!requestId || !type) return;
 
     try {
-      const { error: notificationError } = await supabase
-        .from('notifications')
-        .insert({
-          user_id: distributorId,
-          title,
-          message,
-          type,
-          reference_id: requestId,
-          is_read: false,
-        });
+      const { error: notificationError } =
+        await supabase.rpc(
+          'create_card_request_notification',
+          {
+            p_request_id: requestId,
+            p_type: type,
+          }
+        );
 
       // فشل الإشعار لا يفشل العملية الأساسية
       if (notificationError) {
@@ -66,8 +61,6 @@ export default function RequestsPage() {
     setError('');
     setBusyId(id);
 
-    const request = requests.find((r) => r.id === id);
-
     const { error: rpcError } = await supabase.rpc(
       'fulfill_request',
       {
@@ -82,16 +75,12 @@ export default function RequestsPage() {
       return;
     }
 
-    // بعد نجاح تنفيذ الطلب فقط يتم إرسال إشعار للموزع
-    if (request) {
-      await createDistributorNotification({
-        distributorId: request.distributor_id,
-        title: 'تم قبول طلب الكروت',
-        message: `تم تنفيذ طلبك وإضافة ${request.quantity} كرت إلى مخزونك.`,
-        type: 'card_request_approved',
-        requestId: request.id,
-      });
-    }
+    // بعد نجاح تنفيذ الطلب فقط يتم إرسال إشعار للموزع.
+    // إذا فشل الإشعار يبقى تنفيذ الطلب ناجحًا.
+    await createDistributorNotification({
+      requestId: id,
+      type: 'card_request_approved',
+    });
 
     loadRequests();
   }
@@ -99,8 +88,6 @@ export default function RequestsPage() {
   async function reject(id) {
     setError('');
     setBusyId(id);
-
-    const request = requests.find((r) => r.id === id);
 
     const { error: rpcError } = await supabase.rpc(
       'reject_request',
@@ -116,16 +103,12 @@ export default function RequestsPage() {
       return;
     }
 
-    // بعد نجاح الرفض فقط يتم إرسال إشعار للموزع
-    if (request) {
-      await createDistributorNotification({
-        distributorId: request.distributor_id,
-        title: 'تم رفض طلب الكروت',
-        message: `تم رفض طلب الكروت الخاص بك من الإدارة.`,
-        type: 'card_request_rejected',
-        requestId: request.id,
-      });
-    }
+    // بعد نجاح الرفض فقط يتم إرسال إشعار للموزع.
+    // إذا فشل الإشعار يبقى الرفض ناجحًا.
+    await createDistributorNotification({
+      requestId: id,
+      type: 'card_request_rejected',
+    });
 
     loadRequests();
   }
