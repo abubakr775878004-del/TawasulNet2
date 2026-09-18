@@ -131,22 +131,52 @@ export default function RequestCardsPage() {
 
     try {
       // 1) حفظ طلب الكروت في قاعدة البيانات أولاً
-      const { error: insertError } = await supabase
-        .from('card_requests')
-        .insert({
-          distributor_id: profile.id,
-          package_id: packageId,
-          quantity: parsedQty,
-        });
+      // نطلب id الطلب بعد الإنشاء لاستخدامه في إشعار المدير.
+      const { data: insertedRequest, error: insertError } =
+        await supabase
+          .from('card_requests')
+          .insert({
+            distributor_id: profile.id,
+            package_id: packageId,
+            quantity: parsedQty,
+          })
+          .select('id')
+          .single();
 
       if (insertError) {
         setError(insertError.message);
         return;
       }
 
+      // 2) إنشاء إشعار للمدير عبر RPC الآمن.
+      // فشل الإشعار لا يفشل طلب الكروت نفسه.
+      try {
+        const { error: notificationError } =
+          await supabase.rpc(
+            'create_card_request_notification',
+            {
+              p_request_id: insertedRequest.id,
+              p_type: 'card_request_created',
+            }
+          );
+
+        if (notificationError) {
+          console.error(
+            'Database notification error for card request:',
+            notificationError
+          );
+        }
+      } catch (notificationError) {
+        console.error(
+          'Database notification error for card request:',
+          notificationError
+        );
+      }
+
       setDone(true);
 
-      // 2) إرسال إشعار إلى تليجرام تلقائياً
+      // 3) إرسال إشعار إلى تليجرام تلقائياً
+      // يبقى كما هو ولا يعتمد نجاح طلب الكروت على نجاح Telegram.
       try {
         const packageName = selectedPkg
           ? selectedPkg.name
@@ -706,7 +736,7 @@ export default function RequestCardsPage() {
                           marginBottom: 5,
                         }}
                       >
-                        💳 الرصيد الحالي
+                        💳 رصيدك الحالي
                       </div>
 
                       <strong
@@ -877,7 +907,8 @@ export default function RequestCardsPage() {
                             : 1,
                         padding:
                           '7px 14px',
-                        borderRadius: '6px',
+                        borderRadius:
+                          '6px',
                         border: 'none',
                         cursor:
                           busyId === r.id
