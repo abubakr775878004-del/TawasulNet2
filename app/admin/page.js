@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../../components/Sidebar';
 import { AdSlotAdmin } from '../../components/AdSlot';
 import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
+import NotificationBell from '../../components/NotificationBell';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -417,61 +418,75 @@ export default function AdminPage() {
                 </div>
               </div>
 
+              {/* الجرس + اليوم والتاريخ */}
               <div
                 style={{
-                  minWidth: 190,
-                  padding: '12px 15px',
-                  borderRadius: 14,
-                  background: '#FFFFFF',
-                  border: '1px solid #E9DFF7',
-                  textAlign: 'center',
-                  boxShadow:
-                    '0 5px 15px rgba(91, 33, 182, 0.06)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  flexWrap: 'wrap',
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: '#8B7A9F',
-                    fontWeight: 800,
-                    marginBottom: 5,
-                  }}
-                >
-                  اليوم
-                </div>
+                <NotificationBell
+                  userId={profile.id}
+                />
 
                 <div
                   style={{
-                    fontSize: 17,
-                    fontWeight: 900,
-                    color: '#5B21B6',
-                    lineHeight: 1.5,
+                    minWidth: 190,
+                    padding: '12px 15px',
+                    borderRadius: 14,
+                    background: '#FFFFFF',
+                    border: '1px solid #E9DFF7',
+                    textAlign: 'center',
+                    boxShadow:
+                      '0 5px 15px rgba(91, 33, 182, 0.06)',
                   }}
                 >
-                  {new Date().toLocaleDateString(
-                    'ar-YE',
-                    {
-                      weekday: 'long',
-                    }
-                  )}
-                </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: '#8B7A9F',
+                      fontWeight: 800,
+                      marginBottom: 5,
+                    }}
+                  >
+                    اليوم
+                  </div>
 
-                <div
-                  style={{
-                    marginTop: 2,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: '#6B5A7D',
-                  }}
-                >
-                  {new Date().toLocaleDateString(
-                    'ar-YE',
-                    {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    }
-                  )}
+                  <div
+                    style={{
+                      fontSize: 17,
+                      fontWeight: 900,
+                      color: '#5B21B6',
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {new Date().toLocaleDateString(
+                      'ar-YE',
+                      {
+                        weekday: 'long',
+                      }
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: '#6B5A7D',
+                    }}
+                  >
+                    {new Date().toLocaleDateString(
+                      'ar-YE',
+                      {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      }
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
