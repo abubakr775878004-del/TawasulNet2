@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Sidebar from '../../../components/Sidebar';
+import NotificationBell from '../../../components/NotificationBell';
 import { useProfile } from '../../../lib/useProfile';
 import { supabase } from '../../../lib/supabase';
 
@@ -63,6 +64,28 @@ function PlusIcon() {
     >
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ spinning = false }) {
+  return (
+    <svg
+      className={spinning ? 'refresh-icon spinning' : 'refresh-icon'}
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 11a8.1 8.1 0 0 0-15.5-2" />
+      <path d="M4 5v4h4" />
+      <path d="M4 13a8.1 8.1 0 0 0 15.5 2" />
+      <path d="M20 19v-4h-4" />
     </svg>
   );
 }
@@ -190,11 +213,16 @@ export default function PackagesPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [addingPackage, setAddingPackage] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [packageStats, setPackageStats] = useState({});
   const [packagesLoading, setPackagesLoading] = useState(true);
 
-  async function loadPackages() {
+  async function loadPackages(showRefreshState = false) {
+    if (showRefreshState) {
+      setRefreshing(true);
+    }
+
     setPackagesLoading(true);
     setError('');
 
@@ -207,6 +235,7 @@ export default function PackagesPage() {
       setPackages([]);
       setPackageStats({});
       setPackagesLoading(false);
+      setRefreshing(false);
       setError('تعذّر تحميل الباقات');
       return;
     }
@@ -259,6 +288,7 @@ export default function PackagesPage() {
 
     setPackageStats(Object.fromEntries(statsEntries));
     setPackagesLoading(false);
+    setRefreshing(false);
   }
 
   useEffect(() => {
@@ -266,6 +296,10 @@ export default function PackagesPage() {
       loadPackages();
     }
   }, [profile]);
+
+  async function handleRefresh() {
+    await loadPackages(true);
+  }
 
   async function addPackage(e) {
     e.preventDefault();
@@ -399,7 +433,8 @@ export default function PackagesPage() {
       className="app"
       style={{
         background: '#f1f3f5',
-        minHeight: '100vh'
+        minHeight: '100vh',
+        direction: 'rtl'
       }}
     >
       <Sidebar
@@ -411,27 +446,35 @@ export default function PackagesPage() {
       <div
         className="main"
         style={{
-          paddingBottom: 40
+          paddingBottom: 40,
+          marginRight: 250,
+          minHeight: '100vh',
+          boxSizing: 'border-box'
         }}
       >
         {/* رأس الصفحة */}
         <div
+          className="page-header"
           style={{
             display: 'flex',
-            alignItems: 'flex-start',
+            alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 20,
+            gap: 18,
             marginBottom: 22,
             flexWrap: 'wrap'
           }}
         >
-          <div>
+          <div
+            style={{
+              minWidth: 0,
+              flex: 1
+            }}
+          >
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 11,
-                marginBottom: 7
+                gap: 11
               }}
             >
               <div
@@ -446,13 +489,18 @@ export default function PackagesPage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   boxShadow:
-                    '0 5px 14px rgba(96, 127, 158, 0.14)'
+                    '0 5px 14px rgba(96, 127, 158, 0.14)',
+                  flexShrink: 0
                 }}
               >
                 <PackageIcon />
               </div>
 
-              <div>
+              <div
+                style={{
+                  minWidth: 0
+                }}
+              >
                 <h1
                   style={{
                     margin: 0,
@@ -462,7 +510,7 @@ export default function PackagesPage() {
                     letterSpacing: '-0.3px'
                   }}
                 >
-                  إدارة الباقات
+                  إدارة الباقات والكروت
                 </h1>
 
                 <p
@@ -479,19 +527,63 @@ export default function PackagesPage() {
           </div>
 
           <div
+            className="header-actions"
             style={{
-              background: '#fafbfc',
-              border: '1px solid #dfe3e8',
-              borderRadius: 12,
-              padding: '9px 13px',
-              color: '#54636b',
-              fontSize: 13,
-              fontWeight: 700,
-              boxShadow:
-                '0 3px 10px rgba(38, 50, 56, 0.03)'
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexShrink: 0
             }}
           >
-            {packages.length} باقة
+            <div
+              style={{
+                background: '#fafbfc',
+                border: '1px solid #dfe3e8',
+                borderRadius: 12,
+                padding: '9px 13px',
+                color: '#54636b',
+                fontSize: 13,
+                fontWeight: 700,
+                boxShadow:
+                  '0 3px 10px rgba(38, 50, 56, 0.03)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {packages.length} باقة
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing || packagesLoading}
+              title="تحديث البيانات"
+              aria-label="تحديث البيانات"
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 11,
+                border: '1px solid #dfe3e8',
+                background: '#fafbfc',
+                color: '#607f9e',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor:
+                  refreshing || packagesLoading
+                    ? 'not-allowed'
+                    : 'pointer',
+                opacity:
+                  refreshing || packagesLoading ? 0.65 : 1,
+                boxShadow:
+                  '0 3px 10px rgba(38, 50, 56, 0.03)'
+              }}
+            >
+              <RefreshIcon spinning={refreshing} />
+            </button>
+
+            {profile?.id && (
+              <NotificationBell userId={profile.id} />
+            )}
           </div>
         </div>
 
@@ -646,10 +738,11 @@ export default function PackagesPage() {
 
         {/* الإحصائيات */}
         <div
+          className="stats-grid"
           style={{
             display: 'grid',
             gridTemplateColumns:
-              'repeat(auto-fit, minmax(170px, 1fr))',
+              'repeat(5, minmax(0, 1fr))',
             gap: 12,
             marginBottom: 18
           }}
@@ -840,6 +933,7 @@ export default function PackagesPage() {
               }}
             >
               <PlusIcon />
+
               {addingPackage
                 ? 'جاري الإضافة...'
                 : 'إضافة الباقة'}
@@ -952,6 +1046,7 @@ export default function PackagesPage() {
             </div>
           ) : (
             <div
+              className="packages-grid"
               style={{
                 display: 'grid',
                 gridTemplateColumns:
@@ -1098,6 +1193,41 @@ export default function PackagesPage() {
                         </div>
                       </div>
 
+                      {/* تسلسل حالة الكروت */}
+                      <div
+                        style={{
+                          marginTop: 12,
+                          padding: '9px 10px',
+                          borderRadius: 9,
+                          background: '#f4f6f8',
+                          border: '1px solid #e3e7ea',
+                          color: '#607078',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          lineHeight: 1.7
+                        }}
+                      >
+                        <span>الباقة</span>
+                        <span style={{ margin: '0 5px', color: '#a5afb4' }}>
+                          ←
+                        </span>
+                        <span style={{ color: '#5f8f70' }}>
+                          {stats.available} متاح
+                        </span>
+                        <span style={{ margin: '0 5px', color: '#a5afb4' }}>
+                          ←
+                        </span>
+                        <span style={{ color: '#9a7b45' }}>
+                          {stats.withDistributor} مع موزع
+                        </span>
+                        <span style={{ margin: '0 5px', color: '#a5afb4' }}>
+                          ←
+                        </span>
+                        <span style={{ color: '#ad6b6b' }}>
+                          {stats.sold} مباع
+                        </span>
+                      </div>
+
                       {/* تنبيه المخزون */}
                       {isLowStock && (
                         <div
@@ -1133,6 +1263,7 @@ export default function PackagesPage() {
 
                       {/* إحصائيات الباقة */}
                       <div
+                        className="package-stats"
                         style={{
                           display: 'grid',
                           gridTemplateColumns:
@@ -1323,6 +1454,40 @@ export default function PackagesPage() {
       </div>
 
       <style jsx>{`
+        .refresh-icon {
+          transition: transform 0.25s ease;
+        }
+
+        .refresh-icon.spinning {
+          animation: refresh-spin 0.8s linear infinite;
+        }
+
+        @keyframes refresh-spin {
+          from {
+            transform: rotate(0deg);
+          }
+
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @media (max-width: 1100px) {
+          .stats-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+          }
+        }
+
+        @media (max-width: 850px) {
+          .main {
+            margin-right: 0 !important;
+          }
+
+          .stats-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+        }
+
         @media (max-width: 700px) {
           .main {
             padding-left: 12px !important;
@@ -1332,11 +1497,36 @@ export default function PackagesPage() {
           form {
             grid-template-columns: 1fr !important;
           }
+
+          .page-header {
+            align-items: flex-start !important;
+          }
+
+          .header-actions {
+            width: 100%;
+            justify-content: flex-start;
+          }
+
+          .packages-grid {
+            grid-template-columns: 1fr !important;
+          }
         }
 
         @media (max-width: 520px) {
           h1 {
             font-size: 21px !important;
+          }
+
+          .stats-grid {
+            grid-template-columns: 1fr 1fr !important;
+          }
+
+          .package-stats {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          }
+
+          .page-header {
+            margin-bottom: 18px !important;
           }
         }
 
@@ -1344,6 +1534,14 @@ export default function PackagesPage() {
           .main {
             padding-left: 9px !important;
             padding-right: 9px !important;
+          }
+
+          .stats-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .header-actions {
+            flex-wrap: wrap;
           }
         }
       `}</style>
