@@ -412,11 +412,19 @@ export default function CardsPage() {
           background: #f4f7f6;
           color: #111827;
           direction: rtl;
+
+          /* تعديل وضع القائمة الجانبية على الكمبيوتر */
+          display: flex;
+          align-items: flex-start;
+          width: 100%;
+          min-width: 0;
         }
 
         .main {
           min-height: 100vh;
           padding: 28px;
+          flex: 1;
+          min-width: 0;
         }
 
         .page-header {
@@ -983,7 +991,13 @@ export default function CardsPage() {
         }
 
         @media (max-width: 768px) {
+          /* إعادة الوضع الطبيعي للهاتف */
+          .cards-page {
+            display: block;
+          }
+
           .main {
+            min-height: 100vh;
             padding: 15px;
           }
 
@@ -1466,10 +1480,32 @@ export default function CardsPage() {
             </div>
 
             <div className="filter-summary">
-              <span>النتائج الحالية: <strong>{filteredCards.length}</strong></span>
-              {searchCode && <span>بحث: <strong>{searchCode}</strong></span>}
+              <span>
+                النتائج الحالية:{' '}
+                <strong>
+                  {filteredCards.length}
+                </strong>
+              </span>
+
+              {searchCode && (
+                <span>
+                  بحث:{' '}
+                  <strong>
+                    {searchCode}
+                  </strong>
+                </span>
+              )}
+
               {previewStatus && (
-                <span>الحالة: <strong>{statusLabel[previewStatus]?.[0] || previewStatus}</strong></span>
+                <span>
+                  الحالة:{' '}
+                  <strong>
+                    {statusLabel[
+                      previewStatus
+                    ]?.[0] ||
+                      previewStatus}
+                  </strong>
+                </span>
               )}
             </div>
           </div>
@@ -1566,7 +1602,9 @@ export default function CardsPage() {
                             <button
                               className="copy-btn"
                               type="button"
-                              onClick={() => copyCode(c.code)}
+                              onClick={() =>
+                                copyCode(c.code)
+                              }
                               title="نسخ الكود"
                             >
                               📋 نسخ
@@ -1711,7 +1749,9 @@ export default function CardsPage() {
                         <button
                           className="mobile-copy"
                           type="button"
-                          onClick={() => copyCode(c.code)}
+                          onClick={() =>
+                            copyCode(c.code)
+                          }
                         >
                           📋 نسخ الكود
                         </button>
