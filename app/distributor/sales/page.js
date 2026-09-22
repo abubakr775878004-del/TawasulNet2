@@ -234,9 +234,11 @@ export default function DistributorSalesPage() {
       /*
        * سجل المبيعات التاريخي.
        *
-       * نستخدم * هنا حتى نستطيع الاستفادة من أي معلومات
-       * محفوظة أصلًا في sales_log مثل كود الكرت أو اسم العميل
-       * أو قيمة العمولة التاريخية، إن كانت موجودة.
+       * المصدر التاريخي هو sales_log فقط.
+       *
+       * نستخدم * حتى نستطيع الاستفادة من أي معلومات
+       * محفوظة أصلًا في السجل، مثل العمولة التاريخية
+       * إذا كانت موجودة في البيئة الحالية.
        *
        * لا يتم إنشاء أو تعديل أي عمود.
        */
@@ -295,6 +297,11 @@ export default function DistributorSalesPage() {
               ]
             );
 
+          const parsedHistoricalCommission =
+            historicalCommission !== ''
+              ? Number(historicalCommission)
+              : null;
+
           return {
             ...sale,
 
@@ -320,11 +327,20 @@ export default function DistributorSalesPage() {
                 ? String(customerName)
                 : '',
 
+            /*
+             * مهم:
+             * لا نستخدم commission_rate الحالية
+             * كبديل للعمولة التاريخية.
+             *
+             * إذا كانت العمولة غير محفوظة أصلًا،
+             * تبقى null.
+             */
             historical_commission:
-              historicalCommission !== ''
-                ? Number(
-                    historicalCommission
-                  )
+              historicalCommission !== '' &&
+              !Number.isNaN(
+                parsedHistoricalCommission
+              )
+                ? parsedHistoricalCommission
                 : null
           };
         });
@@ -535,6 +551,8 @@ export default function DistributorSalesPage() {
 
   /*
    * إجمالي المبيعات.
+   *
+   * هذا الإجمالي تاريخي ويعتمد على sales_log.
    */
   const salesTotal = useMemo(() => {
     return filteredSales.reduce(
@@ -545,19 +563,37 @@ export default function DistributorSalesPage() {
   }, [filteredSales]);
 
   /*
-   * عدد الكروت المباعة.
+   * عدد عمليات البيع.
    */
   const soldCardsCount =
     filteredSales.length;
 
   /*
-   * العمولة.
+   * عدد العمليات التي لا تحتوي على عمولة تاريخية محفوظة.
    *
-   * إذا كان السجل التاريخي يحتوي على قيمة العمولة،
-   * نستخدمها.
+   * لا نقوم بإعادة حسابها باستخدام نسبة العمولة الحالية.
+   */
+  const missingHistoricalCommissionCount =
+    useMemo(() => {
+      return filteredSales.filter(
+        (sale) =>
+          sale.historical_commission ===
+            null ||
+          Number.isNaN(
+            Number(
+              sale.historical_commission
+            )
+          )
+      ).length;
+    }, [filteredSales]);
+
+  /*
+   * العمولة التاريخية للموزع.
    *
-   * وإذا لم تكن محفوظة، نحافظ على طريقة الحساب الحالية
-   * باستخدام نسبة العمولة الحالية.
+   * نستخدم فقط العمولة المحفوظة فعلًا داخل سجل البيع.
+   *
+   * لا نستخدم commissionRate الحالية
+   * لإعادة حساب مبيعات قديمة.
    */
   const distributorCommission =
     useMemo(() => {
@@ -567,7 +603,9 @@ export default function DistributorSalesPage() {
             sale.historical_commission !==
               null &&
             !Number.isNaN(
-              sale.historical_commission
+              Number(
+                sale.historical_commission
+              )
             )
           ) {
             return (
@@ -578,18 +616,18 @@ export default function DistributorSalesPage() {
             );
           }
 
-          return (
-            sum +
-            Number(sale.price || 0) *
-              (commissionRate / 100)
-          );
+          return sum;
         },
         0
       );
-    }, [
-      filteredSales,
-      commissionRate
-    ]);
+    }, [filteredSales]);
+
+  /*
+   * هل توجد أي عمولة تاريخية محفوظة ضمن النتائج؟
+   */
+  const historicalCommissionCount =
+    filteredSales.length -
+    missingHistoricalCommissionCount;
 
   /*
    * متوسط قيمة الكرت.
@@ -916,8 +954,6 @@ export default function DistributorSalesPage() {
 
           </div>
 
-          {/* أنواع التقارير */}
-
           <div
             style={{
               display: 'grid',
@@ -990,8 +1026,6 @@ export default function DistributorSalesPage() {
             })}
 
           </div>
-
-          {/* اختصارات */}
 
           <div
             style={{
@@ -1089,8 +1123,6 @@ export default function DistributorSalesPage() {
 
           </div>
 
-          {/* اختيار اليوم */}
-
           {reportType === 'day' && (
             <input
               type="date"
@@ -1115,8 +1147,6 @@ export default function DistributorSalesPage() {
             />
           )}
 
-          {/* اختيار الشهر */}
-
           {reportType === 'month' && (
             <input
               type="month"
@@ -1140,8 +1170,6 @@ export default function DistributorSalesPage() {
               }}
             />
           )}
-
-          {/* اختيار السنة */}
 
           {reportType === 'year' && (
             <select
@@ -1188,8 +1216,6 @@ export default function DistributorSalesPage() {
               ))}
             </select>
           )}
-
-          {/* الفترة المخصصة */}
 
           {reportType === 'custom' && (
             <div
@@ -1432,7 +1458,7 @@ export default function DistributorSalesPage() {
                 fontWeight: 900
               }}
             >
-              عمولتي
+              عمولتي المسجلة تاريخيًا
             </div>
 
             <div
@@ -1443,18 +1469,22 @@ export default function DistributorSalesPage() {
                 marginTop: 6
               }}
             >
-              {formatNumber(
-                distributorCommission
-              )}
+              {historicalCommissionCount > 0
+                ? formatNumber(
+                    distributorCommission
+                  )
+                : 'غير محفوظة'}
 
-              <span
-                style={{
-                  fontSize: 10,
-                  marginRight: 5
-                }}
-              >
-                ر.ي
-              </span>
+              {historicalCommissionCount > 0 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    marginRight: 5
+                  }}
+                >
+                  ر.ي
+                </span>
+              )}
             </div>
 
             <div
@@ -1465,7 +1495,10 @@ export default function DistributorSalesPage() {
                 marginTop: 3
               }}
             >
-              بنسبة {commissionRate}%
+              {missingHistoricalCommissionCount >
+              0
+                ? `العمولة محفوظة لـ ${historicalCommissionCount} من ${filteredSales.length} عملية فقط`
+                : 'القيمة المعروضة مأخوذة من سجل المبيعات التاريخي'}
             </div>
           </div>
 
@@ -1526,6 +1559,33 @@ export default function DistributorSalesPage() {
           </div>
 
         </div>
+
+        {/* =========================
+            تنبيه البيانات التاريخية
+        ========================== */}
+
+        {!dataLoading &&
+          missingHistoricalCommissionCount >
+            0 && (
+            <div
+              style={{
+                background: '#FFFBEB',
+                border: '1px solid #FDE68A',
+                color: '#92400E',
+                borderRadius: 12,
+                padding: '10px 12px',
+                marginBottom: 16,
+                fontSize: 11,
+                fontWeight: 800,
+                lineHeight: 1.7
+              }}
+            >
+              بعض عمليات البيع في هذه الفترة لا تحتوي
+              على عمولة تاريخية محفوظة داخل سجل المبيعات.
+              لذلك لم يتم احتسابها باستخدام نسبة العمولة
+              الحالية، حتى لا تظهر قيمة تاريخية غير دقيقة.
+            </div>
+          )}
 
         {/* =========================
             مؤشرات إضافية
@@ -1597,7 +1657,7 @@ export default function DistributorSalesPage() {
                 fontWeight: 800
               }}
             >
-              نسبة العمولة
+              نسبة العمولة الحالية
             </div>
 
             <div
@@ -1609,6 +1669,17 @@ export default function DistributorSalesPage() {
               }}
             >
               {commissionRate}%
+            </div>
+
+            <div
+              style={{
+                fontSize: 9,
+                color: '#64748B',
+                fontWeight: 700,
+                marginTop: 3
+              }}
+            >
+              لا تُستخدم لإعادة حساب المبيعات التاريخية
             </div>
           </div>
 
@@ -2061,8 +2132,6 @@ export default function DistributorSalesPage() {
 
           </div>
 
-          {/* البحث */}
-
           <div
             style={{
               marginBottom: 13
@@ -2397,8 +2466,6 @@ export default function DistributorSalesPage() {
                 )}
 
               </div>
-
-              {/* Pagination */}
 
               {totalPages > 1 && (
                 <div
