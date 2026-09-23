@@ -252,23 +252,25 @@ export default function DistributorSalesPage() {
        *
        * المصدر المالي التاريخي هو sales_log فقط.
        *
+       * لا نقرأ sales_log مباشرة من المتصفح لأن
+       * RLS في sales_log تسمح بالقراءة للإدارة فقط.
+       *
+       * يتم استخدام RPC آمنة تعتمد على auth.uid()
+       * وتعيد مبيعات الموزع الحالي فقط.
+       *
        * لا نعتمد على cards.status='sold'
        * لأن الكروت القديمة قد يتم تنظيفها بعد 24 ساعة.
        */
       const {
         data: salesData,
         error: salesError
-      } = await supabase
-        .from('sales_log')
-        .select('*')
-        .eq('distributor_id', profile.id)
-        .order('sold_at', {
-          ascending: false
-        });
+      } = await supabase.rpc(
+        'get_my_sales_history'
+      );
 
       if (salesError) {
         console.error(
-          'Error loading sales log:',
+          'Error loading sales history RPC:',
           salesError
         );
       }
