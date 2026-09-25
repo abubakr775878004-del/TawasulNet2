@@ -224,6 +224,7 @@ export default function AdminPage() {
       });
 
       setSalesByPackage(pkgStats);
+
       setRecentSales(
         (soldList || []).slice(0, 7)
       );
@@ -549,7 +550,9 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              <WeeklyWinnerPanel />
+              <WeeklyWinnerPanel
+                isAdmin={profile?.role === 'admin'}
+              />
             </div>
           </div>
         </div>
