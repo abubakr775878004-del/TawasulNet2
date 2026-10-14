@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -1031,7 +1032,7 @@ export default function DistributorPage() {
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #0F766E;
+          color: #6d45c4;
           font-size: 12px;
           font-weight: 900;
           margin-bottom: 9px;
@@ -1041,8 +1042,8 @@ export default function DistributorPage() {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #14B8A6;
-          box-shadow: 0 0 0 4px #CCFBF1;
+          background: #8b5cf6;
+          box-shadow: 0 0 0 4px #ede9fe;
         }
 
         .dashboard-header h1 {
@@ -1117,8 +1118,8 @@ export default function DistributorPage() {
           margin-bottom: 20px;
           border-radius: 23px;
           color: white;
-          background: linear-gradient(120deg, #062E2B 0%, #0F766E 55%, #14B8A6 100%);
-          box-shadow: 0 14px 35px rgba(6, 46, 43, 0.25);
+          background: linear-gradient(120deg, #30206c 0%, #6d35bd 55%, #a83f91 100%);
+          box-shadow: 0 14px 35px rgba(83, 45, 151, 0.17);
         }
 
         .personal-card-decoration {
@@ -1151,7 +1152,7 @@ export default function DistributorPage() {
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #CDEBE6;
+          color: #e9ddff;
           font-size: 12px;
           font-weight: 800;
           margin-bottom: 11px;
@@ -1178,7 +1179,7 @@ export default function DistributorPage() {
         }
 
         .personal-card-content p {
-          color: #CDEBE6;
+          color: #e7dcff;
           font-size: 11px;
           margin: 7px 0 0;
         }
@@ -1227,7 +1228,7 @@ export default function DistributorPage() {
         }
 
         .balance-card-new {
-          background: linear-gradient(130deg, #0b4a42 0%, #0F766E 60%, #14B8A6 100%);
+          background: linear-gradient(130deg, #38216e 0%, #7040bd 60%, #8c4fc7 100%);
         }
 
         .balance-card-new::after {
@@ -1310,7 +1311,7 @@ export default function DistributorPage() {
           align-items: center;
           gap: 7px;
           font-size: 11px;
-          color: #CDEBE6;
+          color: #e9ddff;
         }
 
         .inventory-mini strong {
@@ -1328,7 +1329,7 @@ export default function DistributorPage() {
           gap: 6px;
           padding: 9px 13px;
           border-radius: 10px;
-          color: #0F766E;
+          color: #4c2889;
           background: #fff;
           text-decoration: none;
           white-space: nowrap;
@@ -1409,8 +1410,8 @@ export default function DistributorPage() {
         }
 
         .sales-icon {
-          color: #1D4ED8;
-          background: #DBEAFE;
+          color: #078363;
+          background: #e5f8f1;
         }
 
         .stat-value {
@@ -1425,7 +1426,7 @@ export default function DistributorPage() {
         }
 
         .green-text {
-          color: #1D4ED8;
+          color: #078363;
         }
 
         .stat-caption {
@@ -1495,8 +1496,8 @@ export default function DistributorPage() {
         }
 
         .green-panel-icon {
-          color: #1D4ED8;
-          background: #DBEAFE;
+          color: #078363;
+          background: #e4f8ef;
         }
 
         .note-panel-icon {
@@ -1511,10 +1512,10 @@ export default function DistributorPage() {
           gap: 7px;
           flex-shrink: 0;
           padding: 10px 13px;
-          border: 1px solid #9FE0D4;
+          border: 1px solid #e1d8f6;
           border-radius: 11px;
-          color: #0F766E;
-          background: #EFFCFA;
+          color: #6740b2;
+          background: #f7f4ff;
           font-family: inherit;
           font-size: 11px;
           font-weight: 900;
@@ -1523,7 +1524,7 @@ export default function DistributorPage() {
         }
 
         .refresh-button:hover:not(:disabled) {
-          background: #D9F7F0;
+          background: #eee7ff;
         }
 
         .refresh-button:disabled {
@@ -1696,8 +1697,8 @@ export default function DistributorPage() {
           border: none;
           border-radius: 12px;
           color: white;
-          background: linear-gradient(110deg, #0F766E, #14B8A6);
-          box-shadow: 0 5px 12px rgba(15,118,110,.18);
+          background: linear-gradient(110deg, #6240b2, #8254ce);
+          box-shadow: 0 5px 12px rgba(103,64,181,.15);
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
@@ -1707,7 +1708,7 @@ export default function DistributorPage() {
 
         .sell-button:hover {
           transform: translateY(-1px);
-          box-shadow: 0 8px 16px rgba(15,118,110,.25);
+          box-shadow: 0 8px 16px rgba(103,64,181,.22);
         }
 
         .sell-button span {
@@ -1757,7 +1758,7 @@ export default function DistributorPage() {
           padding: 10px 15px;
           border-radius: 11px;
           color: white;
-          background: #0F766E;
+          background: #7043bd;
           text-decoration: none;
           font-size: 11px;
           font-weight: 900;
@@ -1769,8 +1770,8 @@ export default function DistributorPage() {
           justify-content: center;
           padding: 9px 12px;
           border-radius: 10px;
-          color: #1D4ED8;
-          background: #DBEAFE;
+          color: #087b5b;
+          background: #e8f8f0;
           font-size: 11px;
           font-weight: 900;
           white-space: nowrap;
@@ -1833,8 +1834,8 @@ export default function DistributorPage() {
           max-width: 100%;
           padding: 5px 8px;
           border-radius: 7px;
-          color: #0F766E;
-          background: #CCFBF1;
+          color: #5b329c;
+          background: #f0eaff;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 11px;
           font-weight: 900;
@@ -1898,8 +1899,8 @@ export default function DistributorPage() {
         }
 
         .note-form textarea:focus {
-          border-color: #0D9488;
-          box-shadow: 0 0 0 3px rgba(13,148,136,.12);
+          border-color: #9b7bd7;
+          box-shadow: 0 0 0 3px rgba(125,83,194,.09);
         }
 
         .note-form textarea:disabled {
@@ -1942,7 +1943,7 @@ export default function DistributorPage() {
           border: none;
           border-radius: 12px;
           color: white;
-          background: linear-gradient(110deg, #0F766E, #14B8A6);
+          background: linear-gradient(110deg, #6240b2, #8254ce);
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
@@ -2003,7 +2004,7 @@ export default function DistributorPage() {
           height: 21px;
           border-radius: 7px;
           color: white;
-          background: #0F766E;
+          background: #7043bd;
           font-size: 11px;
           font-weight: 900;
         }
@@ -2056,7 +2057,7 @@ export default function DistributorPage() {
           padding: 27px 22px 24px;
           color: white;
           text-align: center;
-          background: linear-gradient(120deg, #062E2B, #0F766E 58%, #14B8A6);
+          background: linear-gradient(120deg, #39206f, #7040bd 58%, #a13f98);
         }
 
         .modal-close {
@@ -2108,7 +2109,7 @@ export default function DistributorPage() {
         .modal-eyebrow {
           display: block;
           margin-bottom: 7px;
-          color: #CDEBE6;
+          color: #e9ddff;
           font-size: 11px;
           font-weight: 800;
         }
@@ -2124,7 +2125,7 @@ export default function DistributorPage() {
         .modal-header p {
           max-width: 300px;
           margin: 9px auto 0;
-          color: #D8F0EB;
+          color: #eee6ff;
           font-size: 11px;
           line-height: 1.9;
         }
@@ -2193,8 +2194,8 @@ export default function DistributorPage() {
         }
 
         .modal-field input:focus {
-          border-color: #0D9488;
-          box-shadow: 0 0 0 3px rgba(13,148,136,.12);
+          border-color: #8f6acb;
+          box-shadow: 0 0 0 3px rgba(125,83,194,.09);
         }
 
         .modal-actions {
@@ -2223,7 +2224,7 @@ export default function DistributorPage() {
         .primary-modal-button {
           border: none;
           color: white;
-          background: linear-gradient(110deg, #0F766E, #14B8A6);
+          background: linear-gradient(110deg, #6240b2, #a33c98);
         }
 
         .primary-modal-button:disabled,
@@ -2234,9 +2235,9 @@ export default function DistributorPage() {
 
         .sold-code-box {
           padding: 17px 12px;
-          border: 1px dashed #9FE0D4;
+          border: 1px dashed #d7c8f3;
           border-radius: 15px;
-          background: #F0FDFA;
+          background: #faf8ff;
           text-align: center;
         }
 
@@ -2250,7 +2251,7 @@ export default function DistributorPage() {
 
         .sold-code {
           display: block;
-          color: #0b4a42;
+          color: #452779;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: clamp(23px, 6vw, 31px);
           font-weight: 900;
@@ -2282,9 +2283,9 @@ export default function DistributorPage() {
         }
 
         .copy-code-button {
-          border: 1px solid #9FE0D4;
-          color: #0F766E;
-          background: #F0FDFA;
+          border: 1px solid #ded2f4;
+          color: #6240a5;
+          background: #f3effc;
         }
 
         .whatsapp-button {
@@ -2305,8 +2306,8 @@ export default function DistributorPage() {
           padding: 11px;
           border: none;
           border-radius: 11px;
-          color: #0F766E;
-          background: #F0FDFA;
+          color: #60409d;
+          background: #f2edfb;
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
