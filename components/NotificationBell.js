@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
@@ -8,6 +9,9 @@ export default function NotificationBell({ userId }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [hiddenNotificationIds, setHiddenNotificationIds] = useState(
+    () => new Set()
+  );
 
   const containerRef = useRef(null);
 
@@ -49,6 +53,10 @@ export default function NotificationBell({ userId }) {
           (item) => !item.is_read
         ).length
       );
+
+      // إعادة إظهار الإشعارات المخفية مؤقتًا
+      // عند إعادة تحميل القائمة فقط.
+      setHiddenNotificationIds(new Set());
     } catch (error) {
       console.error(
         'Unexpected notifications error:',
@@ -60,7 +68,12 @@ export default function NotificationBell({ userId }) {
   }
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setHiddenNotificationIds(new Set());
+      return;
+    }
 
     loadNotifications();
   }, [userId]);
@@ -150,6 +163,15 @@ export default function NotificationBell({ userId }) {
     }
   }
 
+  function hideNotification(notificationId) {
+    // إخفاء محلي فقط، دون حذف من قاعدة البيانات.
+    setHiddenNotificationIds((current) => {
+      const next = new Set(current);
+      next.add(notificationId);
+      return next;
+    });
+  }
+
   function formatTime(createdAt) {
     if (!createdAt) return '';
 
@@ -169,6 +191,9 @@ export default function NotificationBell({ userId }) {
 
   function getIcon(type) {
     switch (type) {
+      case 'debt_payment':
+        return '💰';
+
       case 'card_request_created':
         return '🔔';
 
@@ -182,6 +207,11 @@ export default function NotificationBell({ userId }) {
         return '🔔';
     }
   }
+
+  const visibleNotifications = notifications.filter(
+    (notification) =>
+      !hiddenNotificationIds.has(notification.id)
+  );
 
   return (
     <div
@@ -271,8 +301,7 @@ export default function NotificationBell({ userId }) {
                 '1px solid #E2E8F0',
               display: 'flex',
               alignItems: 'center',
-              justifyContent:
-                'space-between',
+              justifyContent: 'space-between',
               gap: 10,
             }}
           >
@@ -307,6 +336,7 @@ export default function NotificationBell({ userId }) {
                   borderRadius: 9,
                   fontSize: 10,
                   fontWeight: '900',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {unreadCount} غير مقروء
@@ -331,7 +361,7 @@ export default function NotificationBell({ userId }) {
               >
                 جاري تحميل الإشعارات...
               </div>
-            ) : notifications.length === 0 ? (
+            ) : visibleNotifications.length === 0 ? (
               <div
                 style={{
                   padding: 30,
@@ -352,136 +382,187 @@ export default function NotificationBell({ userId }) {
                 لا توجد إشعارات حاليًا.
               </div>
             ) : (
-              notifications.map(
-                (notification) => (
-                  <button
-                    key={notification.id}
-                    type="button"
-                    onClick={() =>
-                      markAsRead(
-                        notification.id
-                      )
-                    }
-                    style={{
-                      width: '100%',
-                      textAlign: 'right',
-                      border: 'none',
-                      borderBottom:
-                        '1px solid #F1F5F9',
-                      background:
-                        notification.is_read
-                          ? '#fff'
-                          : '#F8FAFC',
-                      padding:
-                        '13px 15px',
-                      cursor:
-                        notification.is_read
-                          ? 'default'
-                          : 'pointer',
-                    }}
-                  >
+              visibleNotifications.map(
+                (notification) => {
+                  const isDebtPayment =
+                    notification.type === 'debt_payment';
+
+                  return (
                     <div
+                      key={notification.id}
                       style={{
-                        display: 'flex',
-                        gap: 10,
-                        alignItems:
-                          'flex-start',
+                        position: 'relative',
+                        borderBottom: '1px solid #F1F5F9',
+                        background: isDebtPayment
+                          ? notification.is_read
+                            ? '#FFFFFF'
+                            : '#F0FDF4'
+                          : notification.is_read
+                            ? '#FFFFFF'
+                            : '#F8FAFC',
                       }}
                     >
-                      <div
+                      <button
+                        type="button"
+                        onClick={() =>
+                          markAsRead(notification.id)
+                        }
+                        aria-label={`قراءة إشعار: ${notification.title}`}
                         style={{
-                          width: 35,
-                          height: 35,
-                          flexShrink: 0,
-                          borderRadius: 11,
-                          background:
-                            notification.is_read
-                              ? '#F1F5F9'
-                              : '#EDE9FE',
-                          display: 'flex',
-                          alignItems:
-                            'center',
-                          justifyContent:
-                            'center',
-                          fontSize: 16,
-                        }}
-                      >
-                        {getIcon(
-                          notification.type
-                        )}
-                      </div>
-
-                      <div
-                        style={{
-                          minWidth: 0,
-                          flex: 1,
+                          display: 'block',
+                          width: '100%',
+                          textAlign: 'right',
+                          border: 'none',
+                          background: 'transparent',
+                          padding: '14px 42px 13px 15px',
+                          cursor: notification.is_read
+                            ? 'default'
+                            : 'pointer',
                         }}
                       >
                         <div
                           style={{
                             display: 'flex',
-                            alignItems:
-                              'center',
-                            justifyContent:
-                              'space-between',
-                            gap: 8,
+                            gap: 10,
+                            alignItems: 'flex-start',
                           }}
                         >
                           <div
                             style={{
-                              fontSize: 12.5,
-                              fontWeight: '900',
-                              color: '#1E293B',
+                              width: 38,
+                              height: 38,
+                              flexShrink: 0,
+                              borderRadius: 12,
+                              background: isDebtPayment
+                                ? notification.is_read
+                                  ? '#DCFCE7'
+                                  : '#BBF7D0'
+                                : notification.is_read
+                                  ? '#F1F5F9'
+                                  : '#EDE9FE',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 18,
                             }}
                           >
-                            {
-                              notification.title
-                            }
+                            {getIcon(notification.type)}
                           </div>
 
-                          {!notification.is_read && (
-                            <span
+                          <div
+                            style={{
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
+                            <div
                               style={{
-                                width: 7,
-                                height: 7,
-                                flexShrink: 0,
-                                borderRadius:
-                                  '50%',
-                                background:
-                                  '#7C3AED',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
                               }}
-                            />
-                          )}
-                        </div>
+                            >
+                              <div
+                                style={{
+                                  fontSize: 12.5,
+                                  fontWeight: '900',
+                                  color: isDebtPayment
+                                    ? '#166534'
+                                    : '#1E293B',
+                                  lineHeight: 1.6,
+                                }}
+                              >
+                                {notification.title}
+                              </div>
 
-                        <div
-                          style={{
-                            marginTop: 5,
-                            fontSize: 11.5,
-                            lineHeight: 1.65,
-                            color: '#64748B',
-                          }}
-                        >
-                          {
-                            notification.message
-                          }
-                        </div>
+                              {!notification.is_read && (
+                                <span
+                                  style={{
+                                    width: 7,
+                                    height: 7,
+                                    flexShrink: 0,
+                                    borderRadius: '50%',
+                                    background: isDebtPayment
+                                      ? '#16A34A'
+                                      : '#7C3AED',
+                                  }}
+                                />
+                              )}
+                            </div>
 
-                        <div
-                          style={{
-                            marginTop: 5,
-                            fontSize: 9.5,
-                            color: '#94A3B8',
-                          }}
-                        >
-                          {formatTime(
-                            notification.created_at
-                          )}
+                            {isDebtPayment && (
+                              <div
+                                style={{
+                                  display: 'inline-flex',
+                                  marginTop: 5,
+                                  padding: '4px 8px',
+                                  borderRadius: 7,
+                                  background: '#DCFCE7',
+                                  color: '#166534',
+                                  fontSize: 10,
+                                  fontWeight: '900',
+                                }}
+                              >
+                                سداد دين
+                              </div>
+                            )}
+
+                            <div
+                              style={{
+                                marginTop: 5,
+                                fontSize: 11.5,
+                                lineHeight: 1.8,
+                                color: '#64748B',
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {notification.message}
+                            </div>
+
+                            <div
+                              style={{
+                                marginTop: 6,
+                                fontSize: 9.5,
+                                color: '#94A3B8',
+                              }}
+                            >
+                              {formatTime(notification.created_at)}
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        aria-label="إخفاء الإشعار"
+                        title="إخفاء الإشعار مؤقتًا"
+                        onClick={() =>
+                          hideNotification(notification.id)
+                        }
+                        style={{
+                          position: 'absolute',
+                          top: 9,
+                          right: 8,
+                          width: 25,
+                          height: 25,
+                          border: '1px solid #E2E8F0',
+                          borderRadius: 8,
+                          background: '#FFFFFF',
+                          color: '#64748B',
+                          fontSize: 17,
+                          lineHeight: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
-                  </button>
-                )
+                  );
+                }
               )
             )}
           </div>
