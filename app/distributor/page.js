@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -507,7 +506,6 @@ export default function DistributorPage() {
       />
 
       <main className="main distributor-main">
-        {/* رأس الصفحة */}
         <header className="dashboard-header">
           <div className="header-copy">
             <div className="eyebrow">
@@ -532,12 +530,10 @@ export default function DistributorPage() {
           </div>
         </header>
 
-        {/* الفائزون الأسبوعيون — محفوظ */}
         <section className="weekly-section">
           <WeeklyWinnerPanel />
         </section>
 
-        {/* الكرت الشخصي الثابت — محفوظ */}
         {profile.personal_card && (
           <section className="personal-card">
             <div className="personal-card-decoration decoration-one" />
@@ -566,7 +562,6 @@ export default function DistributorPage() {
           </section>
         )}
 
-        {/* الرصيد والدين */}
         <section className="finance-grid">
           <article className="finance-card balance-card-new">
             <div className="finance-card-top">
@@ -616,7 +611,6 @@ export default function DistributorPage() {
           </article>
         </section>
 
-        {/* الإحصائيات السريعة */}
         <section className="stats-grid">
           <article className="stat-card">
             <div className="stat-card-heading">
@@ -645,7 +639,6 @@ export default function DistributorPage() {
           </article>
         </section>
 
-        {/* مخزون الكروت */}
         <section className="content-panel inventory-panel">
           <div className="panel-heading">
             <div className="panel-heading-copy">
@@ -724,7 +717,6 @@ export default function DistributorPage() {
           )}
         </section>
 
-        {/* سجل المبيعات */}
         <section className="content-panel sales-panel">
           <div className="panel-heading">
             <div className="panel-heading-copy">
@@ -783,7 +775,6 @@ export default function DistributorPage() {
           )}
         </section>
 
-        {/* التواصل مع المدير */}
         <section className="content-panel notes-panel">
           <div className="panel-heading notes-heading">
             <div className="panel-heading-copy">
@@ -854,7 +845,6 @@ export default function DistributorPage() {
         </footer>
       </main>
 
-      {/* نافذة تأكيد البيع */}
       {pendingPackage && (
         <div className="modal-backdrop" onClick={cancelReveal}>
           <section
@@ -928,7 +918,6 @@ export default function DistributorPage() {
         </div>
       )}
 
-      {/* نافذة الكرت المباع */}
       {revealedCard && (
         <div className="modal-backdrop" onClick={closeModal}>
           <section
@@ -1000,11 +989,25 @@ export default function DistributorPage() {
       )}
 
       <style jsx global>{`
+        :root {
+          --dist-green: #087f63;
+          --dist-green-dark: #075b4b;
+          --dist-green-light: #e8f7f1;
+          --dist-teal: #12a89a;
+          --dist-navy: #16324f;
+          --dist-text: #243448;
+          --dist-muted: #78899a;
+          --dist-border: #e1ebe7;
+          --dist-surface: #ffffff;
+          --dist-bg: #f3f8f6;
+        }
+
         .distributor-page {
           min-height: 100vh;
-          background: #f5f7fc;
-          color: #172033;
+          background: var(--dist-bg);
+          color: var(--dist-text);
           font-family: inherit;
+          direction: rtl;
         }
 
         .distributor-main {
@@ -1031,8 +1034,8 @@ export default function DistributorPage() {
         .eyebrow {
           display: flex;
           align-items: center;
-          gap: 8px;
-          color: #6d45c4;
+          gap: 9px;
+          color: var(--dist-green);
           font-size: 12px;
           font-weight: 900;
           margin-bottom: 9px;
@@ -1042,23 +1045,23 @@ export default function DistributorPage() {
           width: 8px;
           height: 8px;
           border-radius: 50%;
-          background: #8b5cf6;
-          box-shadow: 0 0 0 4px #ede9fe;
+          background: var(--dist-teal);
+          box-shadow: 0 0 0 4px #d8f3eb;
         }
 
         .dashboard-header h1 {
-          color: #172033;
+          color: var(--dist-navy);
           font-size: clamp(22px, 2.2vw, 30px);
-          line-height: 1.4;
+          line-height: 1.5;
           font-weight: 900;
           margin: 0;
           overflow-wrap: anywhere;
         }
 
         .dashboard-header p {
-          color: #78849a;
+          color: var(--dist-muted);
           font-size: 13px;
-          line-height: 1.8;
+          line-height: 1.9;
           margin: 7px 0 0;
         }
 
@@ -1083,9 +1086,9 @@ export default function DistributorPage() {
         }
 
         .connection-status.online {
-          color: #047857;
-          background: #ecfdf5;
-          border-color: #bbf7d0;
+          color: #087451;
+          background: #e8f8f0;
+          border-color: #bce9d5;
         }
 
         .connection-status.offline {
@@ -1116,16 +1119,17 @@ export default function DistributorPage() {
           gap: 20px;
           padding: clamp(19px, 3vw, 28px);
           margin-bottom: 20px;
+          border: 1px solid rgba(255,255,255,.15);
           border-radius: 23px;
           color: white;
-          background: linear-gradient(120deg, #30206c 0%, #6d35bd 55%, #a83f91 100%);
-          box-shadow: 0 14px 35px rgba(83, 45, 151, 0.17);
+          background: linear-gradient(115deg, #075b4b 0%, #078a78 55%, #19b7a4 100%);
+          box-shadow: 0 14px 32px rgba(8, 127, 99, .16);
         }
 
         .personal-card-decoration {
           position: absolute;
           z-index: -1;
-          border: 1px solid rgba(255,255,255,.12);
+          border: 1px solid rgba(255,255,255,.16);
           border-radius: 50%;
           pointer-events: none;
         }
@@ -1152,7 +1156,7 @@ export default function DistributorPage() {
           display: flex;
           align-items: center;
           gap: 8px;
-          color: #e9ddff;
+          color: #d8fff4;
           font-size: 12px;
           font-weight: 800;
           margin-bottom: 11px;
@@ -1162,11 +1166,11 @@ export default function DistributorPage() {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 24px;
-          height: 24px;
+          width: 25px;
+          height: 25px;
           border-radius: 8px;
-          color: #fff3b0;
-          background: rgba(255,255,255,.14);
+          color: #fff4be;
+          background: rgba(255,255,255,.15);
         }
 
         .personal-code {
@@ -1179,7 +1183,7 @@ export default function DistributorPage() {
         }
 
         .personal-card-content p {
-          color: #e7dcff;
+          color: #d9fff5;
           font-size: 11px;
           margin: 7px 0 0;
         }
@@ -1189,9 +1193,9 @@ export default function DistributorPage() {
           position: relative;
           z-index: 1;
           padding: 12px 17px;
-          border: 1px solid rgba(255,255,255,.35);
+          border: 1px solid rgba(255,255,255,.4);
           border-radius: 12px;
-          background: rgba(255,255,255,.13);
+          background: rgba(255,255,255,.14);
           color: white;
           font-family: inherit;
           font-size: 12px;
@@ -1201,7 +1205,7 @@ export default function DistributorPage() {
         }
 
         .personal-copy-button:hover {
-          background: rgba(255,255,255,.23);
+          background: rgba(255,255,255,.25);
           transform: translateY(-1px);
         }
 
@@ -1224,11 +1228,11 @@ export default function DistributorPage() {
           padding: 22px;
           border-radius: 21px;
           color: #fff;
-          box-shadow: 0 10px 28px rgba(31, 41, 55, .09);
+          box-shadow: 0 10px 28px rgba(31, 65, 60, .09);
         }
 
         .balance-card-new {
-          background: linear-gradient(130deg, #38216e 0%, #7040bd 60%, #8c4fc7 100%);
+          background: linear-gradient(125deg, #075b4b 0%, #087f63 58%, #13a995 100%);
         }
 
         .balance-card-new::after {
@@ -1236,7 +1240,7 @@ export default function DistributorPage() {
           position: absolute;
           width: 190px;
           height: 190px;
-          border: 1px solid rgba(255,255,255,.1);
+          border: 1px solid rgba(255,255,255,.13);
           border-radius: 50%;
           left: -70px;
           bottom: -130px;
@@ -1244,11 +1248,11 @@ export default function DistributorPage() {
         }
 
         .debt-card.has-debt {
-          background: linear-gradient(130deg, #8d252f 0%, #c33b4a 100%);
+          background: linear-gradient(125deg, #8e3035 0%, #bf4a4d 100%);
         }
 
         .debt-card.no-debt {
-          background: linear-gradient(130deg, #09694e 0%, #0a9b75 100%);
+          background: linear-gradient(125deg, #075b4b 0%, #0a9875 100%);
         }
 
         .finance-card-top {
@@ -1273,7 +1277,7 @@ export default function DistributorPage() {
 
         .finance-label {
           font-size: 12px;
-          color: rgba(255,255,255,.87);
+          color: rgba(255,255,255,.9);
           font-weight: 800;
         }
 
@@ -1303,7 +1307,7 @@ export default function DistributorPage() {
           flex-wrap: wrap;
           gap: 12px;
           padding-top: 13px;
-          border-top: 1px solid rgba(255,255,255,.16);
+          border-top: 1px solid rgba(255,255,255,.18);
         }
 
         .inventory-mini {
@@ -1311,7 +1315,7 @@ export default function DistributorPage() {
           align-items: center;
           gap: 7px;
           font-size: 11px;
-          color: #e9ddff;
+          color: #dcfff5;
         }
 
         .inventory-mini strong {
@@ -1329,7 +1333,7 @@ export default function DistributorPage() {
           gap: 6px;
           padding: 9px 13px;
           border-radius: 10px;
-          color: #4c2889;
+          color: #075b4b;
           background: #fff;
           text-decoration: none;
           white-space: nowrap;
@@ -1354,7 +1358,7 @@ export default function DistributorPage() {
           padding-top: 13px;
           border-top: 1px solid rgba(255,255,255,.17);
           font-size: 11px;
-          color: rgba(255,255,255,.92);
+          color: rgba(255,255,255,.93);
         }
 
         .debt-status-icon {
@@ -1378,17 +1382,23 @@ export default function DistributorPage() {
         .stat-card {
           min-width: 0;
           padding: 19px 21px;
-          border: 1px solid #e7eaf1;
+          border: 1px solid var(--dist-border);
           border-radius: 18px;
-          background: #fff;
-          box-shadow: 0 4px 15px rgba(31,41,55,.025);
+          background: var(--dist-surface);
+          box-shadow: 0 4px 15px rgba(31,65,60,.025);
+          transition: border-color .2s, transform .2s;
+        }
+
+        .stat-card:hover {
+          border-color: #b8ddd1;
+          transform: translateY(-1px);
         }
 
         .stat-card-heading {
           display: flex;
           align-items: center;
           gap: 10px;
-          color: #667187;
+          color: #667b86;
           font-size: 12px;
           font-weight: 800;
         }
@@ -1405,13 +1415,13 @@ export default function DistributorPage() {
         }
 
         .stock-icon {
-          color: #6d42c0;
-          background: #f0eaff;
+          color: #087f63;
+          background: #e5f6ef;
         }
 
         .sales-icon {
-          color: #078363;
-          background: #e5f8f1;
+          color: #078c82;
+          background: #e1f7f5;
         }
 
         .stat-value {
@@ -1422,16 +1432,16 @@ export default function DistributorPage() {
         }
 
         .purple-text {
-          color: #6840b4;
+          color: var(--dist-green);
         }
 
         .green-text {
-          color: #078363;
+          color: #078c82;
         }
 
         .stat-caption {
           margin-top: 6px;
-          color: #9aa3b3;
+          color: #93a3ac;
           font-size: 11px;
         }
 
@@ -1439,10 +1449,10 @@ export default function DistributorPage() {
           min-width: 0;
           margin-bottom: 20px;
           padding: clamp(16px, 2vw, 24px);
-          border: 1px solid #e5e9f1;
+          border: 1px solid var(--dist-border);
           border-radius: 21px;
-          background: #fff;
-          box-shadow: 0 5px 20px rgba(31,41,55,.035);
+          background: var(--dist-surface);
+          box-shadow: 0 5px 20px rgba(31,65,60,.035);
         }
 
         .panel-heading {
@@ -1465,7 +1475,7 @@ export default function DistributorPage() {
 
         .panel-title-row h2 {
           margin: 0;
-          color: #20283a;
+          color: var(--dist-navy);
           font-size: 16px;
           font-weight: 900;
           line-height: 1.6;
@@ -1473,7 +1483,7 @@ export default function DistributorPage() {
 
         .panel-heading-copy > p {
           margin: 7px 0 0;
-          color: #8a94a6;
+          color: #8a9aa4;
           font-size: 11px;
           line-height: 1.8;
         }
@@ -1491,18 +1501,18 @@ export default function DistributorPage() {
         }
 
         .purple-panel-icon {
-          color: #7043bd;
-          background: #f0eaff;
+          color: #087f63;
+          background: #e6f6ef;
         }
 
         .green-panel-icon {
-          color: #078363;
-          background: #e4f8ef;
+          color: #078c82;
+          background: #e1f7f5;
         }
 
         .note-panel-icon {
-          color: #ad6a15;
-          background: #fff4e5;
+          color: #087f75;
+          background: #e3f7f4;
         }
 
         .refresh-button {
@@ -1512,10 +1522,10 @@ export default function DistributorPage() {
           gap: 7px;
           flex-shrink: 0;
           padding: 10px 13px;
-          border: 1px solid #e1d8f6;
+          border: 1px solid #bfe6d8;
           border-radius: 11px;
-          color: #6740b2;
-          background: #f7f4ff;
+          color: #087f63;
+          background: #effaf5;
           font-family: inherit;
           font-size: 11px;
           font-weight: 900;
@@ -1524,7 +1534,7 @@ export default function DistributorPage() {
         }
 
         .refresh-button:hover:not(:disabled) {
-          background: #eee7ff;
+          background: #e0f5eb;
         }
 
         .refresh-button:disabled {
@@ -1583,16 +1593,16 @@ export default function DistributorPage() {
           flex-direction: column;
           min-width: 0;
           padding: 17px;
-          border: 1px solid #e7e0f5;
+          border: 1px solid #dcece5;
           border-radius: 17px;
-          background: linear-gradient(145deg, #fff 0%, #fcfaff 100%);
+          background: linear-gradient(145deg, #fff 0%, #f7fcf9 100%);
           transition: transform .2s, box-shadow .2s, border-color .2s;
         }
 
         .package-card:hover {
           transform: translateY(-2px);
-          border-color: #d5c5f3;
-          box-shadow: 0 9px 23px rgba(93,53,163,.07);
+          border-color: #a8d9c7;
+          box-shadow: 0 9px 23px rgba(8,127,99,.08);
         }
 
         .package-card-top {
@@ -1617,14 +1627,14 @@ export default function DistributorPage() {
           width: 38px;
           height: 38px;
           border-radius: 12px;
-          color: #6e42ba;
-          background: #f0eaff;
+          color: #087f63;
+          background: #e5f6ef;
           font-size: 17px;
         }
 
         .package-name-wrap h3 {
           margin: 0;
-          color: #31264e;
+          color: var(--dist-navy);
           font-size: 13px;
           font-weight: 900;
           line-height: 1.6;
@@ -1633,7 +1643,7 @@ export default function DistributorPage() {
 
         .package-name-wrap p {
           margin: 3px 0 0;
-          color: #929bad;
+          color: #92a2aa;
           font-size: 10px;
         }
 
@@ -1648,8 +1658,8 @@ export default function DistributorPage() {
           padding: 4px;
           box-sizing: border-box;
           border-radius: 13px;
-          color: #6740b5;
-          background: #f0eaff;
+          color: #087f63;
+          background: #e5f6ef;
         }
 
         .package-count strong {
@@ -1669,13 +1679,13 @@ export default function DistributorPage() {
           gap: 8px;
           margin-top: 17px;
           padding-top: 13px;
-          border-top: 1px dashed #e5def2;
-          color: #8a94a6;
+          border-top: 1px dashed #dcece5;
+          color: #82959e;
           font-size: 11px;
         }
 
         .package-price strong {
-          color: #30384a;
+          color: var(--dist-navy);
           font-size: 13px;
           font-weight: 900;
         }
@@ -1697,8 +1707,8 @@ export default function DistributorPage() {
           border: none;
           border-radius: 12px;
           color: white;
-          background: linear-gradient(110deg, #6240b2, #8254ce);
-          box-shadow: 0 5px 12px rgba(103,64,181,.15);
+          background: linear-gradient(110deg, #087f63, #11a997);
+          box-shadow: 0 5px 12px rgba(8,127,99,.15);
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
@@ -1708,7 +1718,7 @@ export default function DistributorPage() {
 
         .sell-button:hover {
           transform: translateY(-1px);
-          box-shadow: 0 8px 16px rgba(103,64,181,.22);
+          box-shadow: 0 8px 16px rgba(8,127,99,.22);
         }
 
         .sell-button span {
@@ -1722,7 +1732,7 @@ export default function DistributorPage() {
           justify-content: center;
           padding: 32px 15px;
           text-align: center;
-          color: #78849a;
+          color: #788c96;
         }
 
         .empty-state-icon {
@@ -1733,13 +1743,13 @@ export default function DistributorPage() {
           height: 54px;
           margin-bottom: 13px;
           border-radius: 17px;
-          color: #7a54be;
-          background: #f1ebff;
+          color: #087f63;
+          background: #e6f6ef;
           font-size: 24px;
         }
 
         .empty-state strong {
-          color: #374151;
+          color: var(--dist-navy);
           font-size: 13px;
           font-weight: 900;
         }
@@ -1758,7 +1768,7 @@ export default function DistributorPage() {
           padding: 10px 15px;
           border-radius: 11px;
           color: white;
-          background: #7043bd;
+          background: var(--dist-green);
           text-decoration: none;
           font-size: 11px;
           font-weight: 900;
@@ -1789,9 +1799,9 @@ export default function DistributorPage() {
           gap: 12px;
           min-width: 0;
           padding: 13px;
-          border: 1px solid #edf0f5;
+          border: 1px solid #e6eee9;
           border-radius: 14px;
-          background: #fbfcfe;
+          background: #fbfdfc;
         }
 
         .sale-package-icon {
@@ -1802,7 +1812,7 @@ export default function DistributorPage() {
           width: 38px;
           height: 38px;
           border-radius: 12px;
-          color: #078363;
+          color: #087f63;
           background: #e3f7ef;
           font-size: 16px;
           font-weight: 900;
@@ -1818,14 +1828,14 @@ export default function DistributorPage() {
         }
 
         .sale-details > strong {
-          color: #283246;
+          color: var(--dist-navy);
           font-size: 12px;
           font-weight: 900;
           overflow-wrap: anywhere;
         }
 
         .sale-customer {
-          color: #818ca0;
+          color: #81939c;
           font-size: 10px;
           overflow-wrap: anywhere;
         }
@@ -1834,8 +1844,8 @@ export default function DistributorPage() {
           max-width: 100%;
           padding: 5px 8px;
           border-radius: 7px;
-          color: #5b329c;
-          background: #f0eaff;
+          color: #08765e;
+          background: #e6f6ef;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 11px;
           font-weight: 900;
@@ -1849,13 +1859,13 @@ export default function DistributorPage() {
           align-items: flex-end;
           gap: 5px;
           flex-shrink: 0;
-          color: #9aa3b3;
+          color: #95a4ac;
           font-size: 10px;
           white-space: nowrap;
         }
 
         .sale-time strong {
-          color: #5e687b;
+          color: #596e7b;
           font-size: 11px;
           font-weight: 800;
         }
@@ -1875,7 +1885,7 @@ export default function DistributorPage() {
         }
 
         .note-form label {
-          color: #4c5568;
+          color: #4c6270;
           font-size: 12px;
           font-weight: 900;
         }
@@ -1886,11 +1896,11 @@ export default function DistributorPage() {
           width: 100%;
           min-height: 115px;
           padding: 13px 14px;
-          border: 1px solid #dfe4ed;
+          border: 1px solid #dce8e3;
           border-radius: 13px;
           outline: none;
-          color: #253047;
-          background: #fcfdff;
+          color: var(--dist-text);
+          background: #fbfdfc;
           font-family: inherit;
           font-size: 13px;
           line-height: 1.9;
@@ -1899,8 +1909,8 @@ export default function DistributorPage() {
         }
 
         .note-form textarea:focus {
-          border-color: #9b7bd7;
-          box-shadow: 0 0 0 3px rgba(125,83,194,.09);
+          border-color: #72c8ae;
+          box-shadow: 0 0 0 3px rgba(8,127,99,.09);
         }
 
         .note-form textarea:disabled {
@@ -1909,7 +1919,7 @@ export default function DistributorPage() {
         }
 
         .note-form textarea::placeholder {
-          color: #a3abba;
+          color: #a0afb5;
         }
 
         .note-form-footer {
@@ -1925,7 +1935,7 @@ export default function DistributorPage() {
           display: flex;
           align-items: center;
           gap: 7px;
-          color: #8b95a7;
+          color: #8799a2;
           font-size: 10px;
         }
 
@@ -1943,7 +1953,7 @@ export default function DistributorPage() {
           border: none;
           border-radius: 12px;
           color: white;
-          background: linear-gradient(110deg, #6240b2, #8254ce);
+          background: linear-gradient(110deg, #087f63, #11a997);
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
@@ -1992,7 +2002,7 @@ export default function DistributorPage() {
           justify-content: center;
           gap: 8px;
           padding: 10px 0 2px;
-          color: #9aa3b3;
+          color: #8fa1a8;
           font-size: 10px;
         }
 
@@ -2004,13 +2014,13 @@ export default function DistributorPage() {
           height: 21px;
           border-radius: 7px;
           color: white;
-          background: #7043bd;
+          background: var(--dist-green);
           font-size: 11px;
           font-weight: 900;
         }
 
         .footer-separator {
-          color: #c5cad4;
+          color: #c5d4ce;
         }
 
         /* النوافذ المنبثقة */
@@ -2024,7 +2034,7 @@ export default function DistributorPage() {
           box-sizing: border-box;
           padding: 18px;
           overflow-y: auto;
-          background: rgba(17, 24, 39, .65);
+          background: rgba(14, 35, 48, .65);
           backdrop-filter: blur(6px);
           -webkit-backdrop-filter: blur(6px);
         }
@@ -2034,7 +2044,7 @@ export default function DistributorPage() {
           max-width: 420px;
           max-height: calc(100dvh - 36px);
           overflow-y: auto;
-          border: 1px solid rgba(255,255,255,.55);
+          border: 1px solid rgba(255,255,255,.65);
           border-radius: 23px;
           background: #fff;
           box-shadow: 0 26px 90px rgba(0,0,0,.28);
@@ -2057,7 +2067,7 @@ export default function DistributorPage() {
           padding: 27px 22px 24px;
           color: white;
           text-align: center;
-          background: linear-gradient(120deg, #39206f, #7040bd 58%, #a13f98);
+          background: linear-gradient(120deg, #075b4b, #087f63 58%, #12a89a);
         }
 
         .modal-close {
@@ -2069,7 +2079,7 @@ export default function DistributorPage() {
           justify-content: center;
           width: 32px;
           height: 32px;
-          border: 1px solid rgba(255,255,255,.2);
+          border: 1px solid rgba(255,255,255,.25);
           border-radius: 10px;
           color: white;
           background: rgba(255,255,255,.13);
@@ -2109,7 +2119,7 @@ export default function DistributorPage() {
         .modal-eyebrow {
           display: block;
           margin-bottom: 7px;
-          color: #e9ddff;
+          color: #d8fff4;
           font-size: 11px;
           font-weight: 800;
         }
@@ -2125,7 +2135,7 @@ export default function DistributorPage() {
         .modal-header p {
           max-width: 300px;
           margin: 9px auto 0;
-          color: #eee6ff;
+          color: #e8fff8;
           font-size: 11px;
           line-height: 1.9;
         }
@@ -2140,9 +2150,9 @@ export default function DistributorPage() {
           gap: 11px;
           margin-bottom: 19px;
           padding: 13px;
-          border: 1px solid #e5e7eb;
+          border: 1px solid #dcebe5;
           border-radius: 13px;
-          background: #f8fafc;
+          background: #f5faf7;
         }
 
         .security-notice > span {
@@ -2150,14 +2160,14 @@ export default function DistributorPage() {
         }
 
         .security-notice strong {
-          color: #374151;
+          color: var(--dist-navy);
           font-size: 11px;
           font-weight: 900;
         }
 
         .security-notice p {
           margin: 5px 0 0;
-          color: #7b8495;
+          color: #7b8f97;
           font-size: 10px;
           line-height: 1.8;
         }
@@ -2169,13 +2179,13 @@ export default function DistributorPage() {
         .modal-field label {
           display: block;
           margin-bottom: 8px;
-          color: #374151;
+          color: #374d5a;
           font-size: 12px;
           font-weight: 900;
         }
 
         .modal-field label span {
-          color: #9aa3b3;
+          color: #95a4aa;
           font-size: 10px;
           font-weight: 500;
         }
@@ -2184,18 +2194,18 @@ export default function DistributorPage() {
           box-sizing: border-box;
           width: 100%;
           padding: 12px;
-          border: 1px solid #dfe4ed;
+          border: 1px solid #dce8e3;
           border-radius: 11px;
           outline: none;
-          color: #253047;
+          color: var(--dist-text);
           background: white;
           font-family: inherit;
           font-size: 13px;
         }
 
         .modal-field input:focus {
-          border-color: #8f6acb;
-          box-shadow: 0 0 0 3px rgba(125,83,194,.09);
+          border-color: #72c8ae;
+          box-shadow: 0 0 0 3px rgba(8,127,99,.09);
         }
 
         .modal-actions {
@@ -2216,15 +2226,15 @@ export default function DistributorPage() {
         }
 
         .secondary-modal-button {
-          border: 1px solid #dfe4ed;
-          color: #586174;
+          border: 1px solid #dce8e3;
+          color: #526873;
           background: white;
         }
 
         .primary-modal-button {
           border: none;
           color: white;
-          background: linear-gradient(110deg, #6240b2, #a33c98);
+          background: linear-gradient(110deg, #087f63, #11a997);
         }
 
         .primary-modal-button:disabled,
@@ -2235,23 +2245,23 @@ export default function DistributorPage() {
 
         .sold-code-box {
           padding: 17px 12px;
-          border: 1px dashed #d7c8f3;
+          border: 1px dashed #9ed9c5;
           border-radius: 15px;
-          background: #faf8ff;
+          background: #f1faf5;
           text-align: center;
         }
 
         .sold-code-box > span {
           display: block;
           margin-bottom: 10px;
-          color: #7b8495;
+          color: #7b8f97;
           font-size: 11px;
           font-weight: 800;
         }
 
         .sold-code {
           display: block;
-          color: #452779;
+          color: #075b4b;
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: clamp(23px, 6vw, 31px);
           font-weight: 900;
@@ -2283,9 +2293,9 @@ export default function DistributorPage() {
         }
 
         .copy-code-button {
-          border: 1px solid #ded2f4;
-          color: #6240a5;
-          background: #f3effc;
+          border: 1px solid #bce4d5;
+          color: #08765e;
+          background: #eff9f4;
         }
 
         .whatsapp-button {
@@ -2306,15 +2316,21 @@ export default function DistributorPage() {
           padding: 11px;
           border: none;
           border-radius: 11px;
-          color: #60409d;
-          background: #f2edfb;
+          color: #08765e;
+          background: #eaf7f1;
           font-family: inherit;
           font-size: 12px;
           font-weight: 900;
           cursor: pointer;
         }
 
-        /* تكيّف الأجهزة اللوحية */
+        button:focus-visible,
+        a:focus-visible {
+          outline: 3px solid rgba(18,168,154,.4);
+          outline-offset: 3px;
+        }
+
+        /* الأجهزة اللوحية */
         @media (max-width: 900px) {
           .distributor-main {
             padding: 23px 18px;
@@ -2333,7 +2349,7 @@ export default function DistributorPage() {
           }
         }
 
-        /* تكيّف الهواتف */
+        /* الهواتف */
         @media (max-width: 600px) {
           .distributor-main {
             padding: 16px 12px 20px;
