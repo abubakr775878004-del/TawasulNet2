@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -8,30 +9,36 @@ import { useEffect, useRef } from 'react';
  * =========================================================
  *
  * مزود الإعلان:
- * HilltopAds
+ * Adsterra
  *
- * نوع المنطقة:
- * MultiTag 300x250
- *
- * يستخدم في:
+ * أماكن العرض:
  * - لوحة المدير
  * - لوحة الموزع
  *
  * لا توجد أي صلاحيات خاصة داخل هذا الملف.
- * هذا الملف لا يعدل قاعدة البيانات ولا RLS.
+ * لا يتم تعديل قاعدة البيانات أو RLS.
  * =========================================================
  */
 
 /*
  * =========================================================
- * HilltopAds
+ * إعدادات Adsterra
  * =========================================================
  */
 
-const HILLTOP_AD_SRC =
-  '//quarrelsomebitter.com/b_XqVrsed.G/ly0HY/W_ca/de/mm9JuFZvUQl/kMPgTQcPz/OKTEEp3pMFjKkLtCN/zkM/5qMQTNcDzhM/wv';
+const ADSTERRA_AD_SRC =
+  'https://bauval.org/21/a6f283f58e36528c1b39b2284d1efec6';
 
-function HilltopAd({ compact = false }) {
+const ADSTERRA_CONTAINER_ID =
+  'container-a6f283f58e36528c1b39b2284d1efec6';
+
+/*
+ * =========================================================
+ * مكوّن الإعلان المركزي
+ * =========================================================
+ */
+
+function AdsterraAd({ compact = false }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -41,10 +48,7 @@ function HilltopAd({ compact = false }) {
       return;
     }
 
-    /*
-     * منع تحميل نفس الإعلان أكثر من مرة داخل
-     * نفس المكوّن.
-     */
+    // منع تحميل الإعلان أكثر من مرة داخل المكوّن.
     if (container.dataset.loaded === 'true') {
       return;
     }
@@ -53,30 +57,30 @@ function HilltopAd({ compact = false }) {
 
     const script = document.createElement('script');
 
-    script.settings = {};
-
-    script.src = HILLTOP_AD_SRC;
     script.async = true;
-    script.referrerPolicy = 'no-referrer-when-downgrade';
+    script.setAttribute('data-cfasync', 'false');
+    script.src = ADSTERRA_AD_SRC;
 
+    // إنشاء الحاوية التي يستخدمها Adsterra.
+    const adContainer = document.createElement('div');
+
+    adContainer.id = ADSTERRA_CONTAINER_ID;
+    adContainer.style.width = '100%';
+
+    // ترتيب عناصر كود Adsterra الأصلي.
     container.appendChild(script);
+    container.appendChild(adContainer);
 
     return () => {
-      /*
-       * إزالة السكربت عند مغادرة الصفحة.
-       * هذا يمنع تراكم نسخ متعددة منه أثناء
-       * التنقل داخل التطبيق.
-       */
+      // إزالة الإعلان عند مغادرة الصفحة.
       try {
         script.remove();
+        adContainer.remove();
       } catch {
-        // تجاهل خطأ الإزالة إن لم يعد العنصر موجودًا.
+        // تجاهل أخطاء الإزالة.
       }
 
-      if (container) {
-        container.dataset.loaded = 'false';
-        container.innerHTML = '';
-      }
+      container.dataset.loaded = 'false';
     };
   }, []);
 
@@ -86,13 +90,13 @@ function HilltopAd({ compact = false }) {
       aria-label="إعلان"
       style={{
         width: '100%',
-        minHeight: compact ? 100 : 250,
+        minHeight: 250,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        overflow: 'hidden',
         borderRadius: 16,
         background: 'var(--surface-2)',
+        overflow: 'visible',
       }}
     />
   );
@@ -144,7 +148,7 @@ function AdContent({
           margin: '0 auto',
         }}
       >
-        <HilltopAd compact={compact} />
+        <AdsterraAd compact={compact} />
       </div>
     </div>
   );
@@ -158,7 +162,7 @@ function AdContent({
  * يستخدم داخل:
  * app/admin/page.js
  *
- * لا يحتاج إلى أي تعديل في صفحة المدير.
+ * لا يحتاج إلى تعديل طريقة استدعائه.
  * =========================================================
  */
 
@@ -194,7 +198,7 @@ export function AdSlotAdmin() {
           margin: '0 auto',
         }}
       >
-        <HilltopAd />
+        <AdsterraAd />
       </div>
     </div>
   );
@@ -208,7 +212,7 @@ export function AdSlotAdmin() {
  * يستخدم داخل:
  * app/distributor/page.js
  *
- * لا يحتاج إلى أي تعديل في صفحة الموزع.
+ * لا يحتاج إلى تعديل طريقة استدعائه.
  * =========================================================
  */
 
@@ -274,7 +278,7 @@ export function AdSlotBar() {
           margin: '0 auto',
         }}
       >
-        <HilltopAd compact />
+        <AdsterraAd compact />
       </div>
     </div>
   );
