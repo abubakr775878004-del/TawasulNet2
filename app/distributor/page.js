@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -5,6 +6,7 @@ import Link from 'next/link';
 import Sidebar from '../../components/Sidebar';
 import WeeklyWinnerPanel from '../../components/WeeklyWinnerPanel';
 import NotificationBell from '../../components/NotificationBell';
+import { AdSlotBar } from '../../components/AdSlot';
 import { useProfile } from '../../lib/useProfile';
 import { supabase } from '../../lib/supabase';
 
@@ -533,6 +535,9 @@ export default function DistributorPage() {
         <section className="weekly-section">
           <WeeklyWinnerPanel />
         </section>
+
+        {/* إعلان Adsterra للموزع */}
+        <AdSlotBar />
 
         {profile.personal_card && (
           <section className="personal-card">
