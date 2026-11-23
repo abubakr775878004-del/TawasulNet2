@@ -4,8 +4,13 @@ import PWARegister from '../components/PWARegister';
 
 export const metadata = {
   title: 'تواصل | نظام إدارة وتوزيع الكروت',
-  description: 'نظام تواصل لإدارة مخزون الكروت وتوزيعها على الموزعين',
+
+  description:
+    'نظام تواصل لإدارة مخزون الكروت وتوزيعها على الموزعين',
+
   applicationName: 'شبكة تواصل',
+
+  manifest: '/manifest.webmanifest',
 
   icons: {
     icon: [
@@ -24,8 +29,15 @@ export const metadata = {
         sizes: '512x512',
         type: 'image/png',
       },
+      {
+        url: '/icons/icon-maskable-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+      },
     ],
+
     shortcut: '/icons/favicon-32.png',
+
     apple: [
       {
         url: '/icons/apple-touch-icon.png',
@@ -39,7 +51,7 @@ export const metadata = {
 export const viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#0F766E',
+  themeColor: '#16A34A',
 };
 
 export default function RootLayout({ children }) {
