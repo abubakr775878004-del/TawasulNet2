@@ -1,5 +1,6 @@
 
 import '../styles/globals.css';
+import PWARegister from '../components/PWARegister';
 
 export const metadata = {
   title: 'تواصل | نظام إدارة وتوزيع الكروت',
@@ -45,6 +46,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ar" dir="rtl">
       <body>
+        <PWARegister />
         {children}
       </body>
     </html>
