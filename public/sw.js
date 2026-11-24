@@ -27,11 +27,13 @@ const STATIC_PATHS = [
   '/icons/',
 ];
 
-// ملفات الأيقونات الموجودة في public
+// ملفات الأيقونات الموجودة في public/icons
 const ICON_FILES = [
-  '/favicon.ico',
-  '/icon.png',
-  '/apple-touch-icon.png',
+  '/icons/favicon-32.png',
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-512.png',
 ];
 
 // أنواع الملفات الثابتة المسموح بتخزينها
