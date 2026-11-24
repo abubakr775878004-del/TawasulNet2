@@ -30,7 +30,7 @@ export default function OfflinePage() {
         <div className="brand">
           <div className="brand-icon">
             <img
-              src="/icons/icon-192x192.png"
+              src="/icons/icon-192.png"
               alt="أيقونة شبكة تواصل"
               className="app-logo"
             />
